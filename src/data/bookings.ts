@@ -1,0 +1,18 @@
+import type { Booking } from "@/types";
+
+export const SEED_BOOKINGS: Booking[] = [
+  { id:"TSH-1001", tripId:"TRP-001", clientName:"أحمد محمد العمري", clientPhone:"0501234567", roomType:"غرف خاصة", persons:2, total:450, status:"new", paymentStatus:"none", seats:[3,4], createdAt:"2025-07-01 10:30", staff:"—", sentDate:"—",
+    pilgrims:[{name:"أحمد محمد العمري",idNumber:"1234567890",nationality:"سعودي",gender:"male",birthDate:"1985-03-15",phone:"0501234567"},{name:"فاطمة أحمد العمري",idNumber:"2345678901",nationality:"سعودية",gender:"female",birthDate:"1988-07-22",phone:"0501234568"}] },
+  { id:"TSH-1002", tripId:"TRP-001", clientName:"سارة عبدالله القحطاني", clientPhone:"0555550012", roomType:"سكن مشترك", persons:1, total:150, status:"confirmed", paymentStatus:"verified", payMethod:"تحويل بنكي", txnNo:"TRF-889201", payDate:"2025-06-30", seats:[7], createdAt:"2025-06-28 09:12", staff:"عادل محمد", sentDate:"2025-06-29",
+    pilgrims:[{name:"سارة عبدالله القحطاني",idNumber:"1098765432",nationality:"سعودية",gender:"female",birthDate:"1990-01-10",phone:"0555550012"}] },
+  { id:"TSH-1003", tripId:"TRP-003", clientName:"عبدالله سعد المطيري", clientPhone:"0533221100", roomType:"غرف خاصة", persons:2, total:700, status:"awaiting_payment", paymentStatus:"sent", payMethod:"تابي", txnNo:"—", payDate:"—", seats:[1,2], createdAt:"2025-06-30 14:45", staff:"عادل محمد", sentDate:"2025-07-01",
+    pilgrims:[{name:"عبدالله سعد المطيري",idNumber:"1122334455",nationality:"سعودي",gender:"male",birthDate:"1979-11-02",phone:"0533221100"},{name:"منيرة سعد المطيري",idNumber:"5544332211",nationality:"سعودية",gender:"female",birthDate:"1982-05-19",phone:"0533221101"}] },
+  { id:"TSH-1004", tripId:"TRP-004", clientName:"نورة خالد الدوسري", clientPhone:"0566778899", roomType:"غرف خاصة", persons:3, total:1450, status:"reviewing", paymentStatus:"none", seats:[], createdAt:"2025-07-02 08:05", staff:"عادل محمد", sentDate:"—",
+    pilgrims:[{name:"نورة خالد الدوسري",idNumber:"2211334455",nationality:"سعودية",gender:"female",birthDate:"1986-09-30",phone:"0566778899"},{name:"خالد نورة الدوسري",idNumber:"2211334456",nationality:"سعودي",gender:"male",birthDate:"2010-05-10",phone:""},{name:"ريم نورة الدوسري",idNumber:"2211334457",nationality:"سعودية",gender:"female",birthDate:"2014-12-20",phone:""}] },
+  { id:"TSH-1005", tripId:"TRP-001", clientName:"محمد سعيد الغامدي", clientPhone:"0599001122", roomType:"غرف خاصة", persons:1, total:300, status:"accepted", paymentStatus:"none", seats:[12], createdAt:"2025-07-02 16:20", staff:"عادل محمد", sentDate:"—",
+    pilgrims:[{name:"محمد سعيد الغامدي",idNumber:"3322114455",nationality:"سعودي",gender:"male",birthDate:"1975-02-14",phone:"0599001122"}] },
+  { id:"TSH-1006", tripId:"TRP-003", clientName:"خالد عمر الشهري", clientPhone:"0561239988", roomType:"غرف خاصة", persons:2, total:700, status:"confirmed", paymentStatus:"verified", payMethod:"تمارا", txnNo:"TMR-552310", payDate:"2025-07-03", seats:[20,21], createdAt:"2025-07-01 12:00", staff:"يوسف علي", sentDate:"2025-07-02",
+    pilgrims:[{name:"خالد عمر الشهري",idNumber:"1077882299",nationality:"سعودي",gender:"male",birthDate:"1983-04-11",phone:"0561239988"},{name:"ريم خالد الشهري",idNumber:"1077882300",nationality:"سعودية",gender:"female",birthDate:"2015-08-01",phone:""}] },
+  { id:"TSH-1007", tripId:"TRP-004", clientName:"ماجد فيصل العتيبي", clientPhone:"0501119977", roomType:"غرف خاصة", persons:1, total:480, status:"awaiting_payment", paymentStatus:"failed", payMethod:"مدى", txnNo:"—", payDate:"—", seats:[], createdAt:"2025-07-03 09:30", staff:"يوسف علي", sentDate:"2025-07-03",
+    pilgrims:[{name:"ماجد فيصل العتيبي",idNumber:"1055667788",nationality:"سعودي",gender:"male",birthDate:"1991-12-05",phone:"0501119977"}] },
+];

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div class="inv-sheet" style="background:#fff;width:100%;max-width:720px;margin:0 auto;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:#12100F;border:1px solid #E7E1D8;border-radius:16px;overflow:hidden;position:relative">
+  <sc-if value="{{ info.preliminary }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0"><span style="font-size:90px;font-weight:800;color:rgba(180,83,12,.07);transform:rotate(-24deg);white-space:nowrap;font-family:'Noto Kufi Arabic',serif">فاتورة أولية</span></div>
+  </sc-if>
+
+  <div style="position:relative;z-index:1;background:#12100F;padding:22px 26px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+    <div style="position:absolute;top:0;right:0;left:0;height:4px;background:linear-gradient(90deg,#C0862C,#E7C271,#C0862C)"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:46px;height:46px;border-radius:12px;background:#1c1917;border:1px solid #C0862C;display:flex;align-items:center;justify-content:center"><span style="color:#C0862C;font-weight:800;font-size:22px;font-family:'Noto Kufi Arabic',serif">ت</span></div>
+      <div><div style="color:#fff;font-weight:800;font-size:17px;font-family:'Noto Kufi Arabic',serif">تساهيل العمرة</div><div style="color:#8a8178;font-size:11px;letter-spacing:2px">TASAHEEL ALUMRAH</div></div>
+    </div>
+    <div style="text-align:left">
+      <div style="color:#C0862C;font-weight:800;font-size:15px">{{ info.docTitle }}</div>
+      <div style="color:#fff;font-size:13px;font-weight:700;font-family:'IBM Plex Mono',monospace;margin-top:3px">{{ info.invoiceNo }}</div>
+      <div style="margin-top:8px"><dc-import name="StatusBadge" status="{{ info.payStatusKey }}" label="{{ info.payStatusLabel }}" hint-size="100px,26px"></dc-import></div>
+    </div>
+  </div>
+
+  <div style="position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #EDE7DD">
+    <div style="padding:18px 26px;border-inline-end:1px solid #EDE7DD">
+      <div style="font-size:11px;color:#A79E92;font-weight:700;margin-bottom:8px">فاتورة إلى</div>
+      <div style="font-size:15px;font-weight:800">{{ info.clientName }}</div>
+      <div style="font-size:12px;color:#6b6259;font-family:'IBM Plex Mono',monospace;margin-top:3px">{{ info.clientPhone }}</div>
+    </div>
+    <div style="padding:18px 26px;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;align-content:start">
+      <span style="color:#A79E92;font-weight:700">رقم الطلب</span><span style="font-weight:700;text-align:left;font-family:'IBM Plex Mono',monospace">{{ info.orderNo }}</span>
+      <span style="color:#A79E92;font-weight:700">طريقة الدفع</span><span style="font-weight:700;text-align:left">{{ info.payMethod }}</span>
+      <span style="color:#A79E92;font-weight:700">رقم العملية</span><span style="font-weight:700;text-align:left;font-family:'IBM Plex Mono',monospace">{{ info.txnNo }}</span>
+      <span style="color:#A79E92;font-weight:700">تاريخ الدفع</span><span style="font-weight:700;text-align:left">{{ info.payDate }}</span>
+    </div>
+  </div>
+
+  <div style="position:relative;z-index:1;padding:16px 26px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;border-bottom:1px solid #EDE7DD">
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">الباقة</div><div style="font-size:13px;font-weight:700;margin-top:3px">{{ info.packageName }}</div></div>
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">رقم الرحلة</div><div style="font-size:13px;font-weight:700;margin-top:3px;font-family:'IBM Plex Mono',monospace">{{ info.tripNo }}</div></div>
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">تاريخ الرحلة</div><div style="font-size:13px;font-weight:700;margin-top:3px">{{ info.tripDate }}</div></div>
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">عدد المعتمرين</div><div style="font-size:13px;font-weight:700;margin-top:3px">{{ info.persons }}</div></div>
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">نوع الغرفة</div><div style="font-size:13px;font-weight:700;margin-top:3px">{{ info.roomType }}</div></div>
+    <div><div style="font-size:11px;color:#A79E92;font-weight:700">المقاعد</div><div style="font-size:13px;font-weight:700;margin-top:3px">{{ info.seatsLabel }}</div></div>
+  </div>
+
+  <div style="position:relative;z-index:1;padding:18px 26px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#FAFBE6;color:#7a7168;font-size:11px;text-align:right"><th style="padding:10px 12px;font-weight:700;border-radius:8px 0 0 8px">البند</th><th style="padding:10px;font-weight:700;text-align:center">الكمية</th><th style="padding:10px;font-weight:700;text-align:center">السعر</th><th style="padding:10px 12px;font-weight:700;text-align:left;border-radius:0 8px 8px 0">الإجمالي</th></tr></thead>
+      <tbody><sc-for list="{{ info.items }}" as="it" hint-placeholder-count="1"><tr style="border-bottom:1px solid #F0EDE8">
+        <td style="padding:12px;font-weight:700">{{ it.desc }}</td>
+        <td style="padding:12px;text-align:center">{{ it.qty }}</td>
+        <td style="padding:12px;text-align:center;font-family:'IBM Plex Mono',monospace">{{ it.price }}</td>
+        <td style="padding:12px;text-align:left;font-weight:800;font-family:'IBM Plex Mono',monospace">{{ it.total }}</td>
+      </tr></sc-for></tbody>
+    </table>
+  </div>
+
+  <div style="position:relative;z-index:1;padding:0 26px 20px;display:flex;justify-content:flex-start">
+    <div style="width:280px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#6b6259">الإجمالي</span><span style="font-weight:700;font-family:'IBM Plex Mono',monospace">{{ info.grandTotal }}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#6b6259">المدفوع</span><span style="font-weight:700;color:#1E7A44;font-family:'IBM Plex Mono',monospace">{{ info.paidLabel }}</span></div>
+      <div style="display:flex;justify-content:space-between;background:#12100F;color:#fff;border-radius:10px;padding:11px 14px"><span style="font-size:13px;font-weight:700">المتبقي</span><span style="font-size:16px;font-weight:800;color:#C0862C;font-family:'IBM Plex Mono',monospace">{{ info.remainingLabel }}</span></div>
+    </div>
+  </div>
+
+  <div style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:16px;padding:18px 26px;border-top:1px dashed #D8D0C4;background:#FBFAF6">
+    <button onClick="{{ verify }}" title="فتح صفحة التحقق من الفاتورة" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:16px" data-print-hide="true">
+      <div style="width:96px;height:96px;background:#fff;border:1px solid #E7E1D8;border-radius:10px;padding:6px;display:grid;grid-template-columns:repeat({{ info.qr.n }},1fr);gap:0" data-om-raster="true">
+        <sc-for list="{{ qrCells }}" as="cell" hint-placeholder-count="60"><span style="width:100%;padding-bottom:100%;background:{{ cell.bg }}"></span></sc-for>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;font-weight:800;color:#12100F;margin-bottom:4px">امسح باركود التحقق</div>
+        <div style="font-size:11px;color:#6b6259;line-height:1.7;max-width:230px">ينقلك إلى صفحة التحقق الرسمية لعرض معلومات الفاتورة والطلب.</div>
+        <div style="font-size:11px;color:#C0862C;font-weight:700;font-family:'IBM Plex Mono',monospace;margin-top:6px;direction:ltr;text-align:right">{{ verifyUrl }}</div>
+      </div>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:720,&quot;height&quot;:760},&quot;info&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;any&quot;}}">
+class Component extends DCLogic {
+  renderVals(){
+    const info = this.props.info || {};
+    const qr = info.qr || { n:15, cells:[] };
+    const shortId = (info.orderNo || "TSH-0000").replace(/^TSH-?/, "");
+    return {
+      preliminary: !info.final,
+      qrCells: (qr.cells||[]).map(v=>({ bg: v? "#12100F" : "transparent" })),
+      verifyUrl: "tasaheel.sa/inv/INV-" + shortId + "/verify",
+      verify: () => { if (typeof info.onVerify === "function") info.onVerify(); },
+    };
+  }
+}
+</script>
+</body>
+</html>

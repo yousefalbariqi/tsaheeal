@@ -1,0 +1,11 @@
+import type { Payment } from "@/types";
+
+export const SEED_PAYMENTS: Payment[] = [
+  { id:"INV-1001", bookingId:"TSH-1001", clientName:"أحمد محمد العمري",      clientPhone:"0501234567", packageName:"عمرة مكة 3 أيام",         tripDate:"2025-07-10", total:450,  payMethod:"—",         payStatus:"none",     txnNo:"—",          payDate:"—",          createdAt:"2025-07-01", roomType:"غرف خاصة" },
+  { id:"INV-1002", bookingId:"TSH-1002", clientName:"سارة عبدالله القحطاني", clientPhone:"0555550012", packageName:"عمرة مكة 3 أيام",         tripDate:"2025-07-10", total:150,  payMethod:"تحويل بنكي",payStatus:"verified", txnNo:"TRF-889201",  payDate:"2025-06-30",  createdAt:"2025-06-28", roomType:"سكن مشترك" },
+  { id:"INV-1003", bookingId:"TSH-1003", clientName:"عبدالله سعد المطيري",   clientPhone:"0533221100", packageName:"مكة والمدينة 5 أيام",      tripDate:"2025-07-13", total:700,  payMethod:"تابي",      payStatus:"sent",     txnNo:"—",          payDate:"—",          createdAt:"2025-06-30", roomType:"غرف خاصة" },
+  { id:"INV-1004", bookingId:"TSH-1004", clientName:"نورة خالد الدوسري",     clientPhone:"0566778899", packageName:"VIP مكة 4 أيام",           tripDate:"2025-07-20", total:1450, payMethod:"—",         payStatus:"none",     txnNo:"—",          payDate:"—",          createdAt:"2025-07-02", roomType:"غرف خاصة" },
+  { id:"INV-1005", bookingId:"TSH-1005", clientName:"محمد سعيد الغامدي",     clientPhone:"0599001122", packageName:"عمرة مكة 3 أيام",         tripDate:"2025-07-10", total:300,  payMethod:"—",         payStatus:"none",     txnNo:"—",          payDate:"—",          createdAt:"2025-07-02", roomType:"غرف خاصة" },
+  { id:"INV-1006", bookingId:"TSH-1006", clientName:"خالد عمر الشهري",       clientPhone:"0561239988", packageName:"مكة والمدينة 5 أيام",      tripDate:"2025-07-13", total:700,  payMethod:"تمارا",     payStatus:"verified", txnNo:"TMR-552310",  payDate:"2025-07-03",  createdAt:"2025-07-01", roomType:"غرف خاصة" },
+  { id:"INV-1007", bookingId:"TSH-1007", clientName:"ماجد فيصل العتيبي",     clientPhone:"0501119977", packageName:"VIP مكة 4 أيام",           tripDate:"2025-07-20", total:480,  payMethod:"مدى",       payStatus:"failed",   txnNo:"—",          payDate:"—",          createdAt:"2025-07-03", roomType:"غرف خاصة" },
+];

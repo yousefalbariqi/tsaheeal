@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="border:1px solid {{ cardBorder }};border-radius:14px;background:#fff;overflow:hidden;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:{{ headBg }};border-bottom:1px solid #E7E1D8">
+    <div style="width:30px;height:30px;border-radius:8px;background:#12100F;color:#C0862C;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px">{{ num }}</div>
+    <div style="font-weight:800;color:#12100F;font-size:15px">{{ data.name }}</div>
+    <span style="margin-inline-start:auto;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:{{ stBg }};color:{{ stFg }}">{{ stLabel }}</span>
+    <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:{{ gBg }};color:{{ gFg }}">{{ gLabel }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#F0EDE8">
+    <div style="background:#fff;padding:10px 16px"><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:2px">رقم الهوية / الجواز</div><div style="font-size:14px;color:#12100F;font-weight:700;letter-spacing:.5px">{{ data.idNumber }}</div></div>
+    <div style="background:#fff;padding:10px 16px"><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:2px">تاريخ الميلاد</div><div style="font-size:14px;color:#12100F;font-weight:700">{{ data.birthDate }}</div></div>
+    <div style="background:#fff;padding:10px 16px"><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:2px">الجنسية</div><div style="font-size:14px;color:#12100F;font-weight:700">{{ data.nationality }}</div></div>
+    <div style="background:#fff;padding:10px 16px"><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:2px">الجوال</div><div style="font-size:14px;color:#12100F;font-weight:700;letter-spacing:.5px">{{ data.phone }}</div></div>
+  </div>
+  <sc-if value="{{ showNote }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:9px 16px;background:#FCEBDD;border-top:1px solid #F6D6BB;font-size:12px;color:#B4530C;font-weight:700">ملاحظة: {{ noteText }}</div>
+  </sc-if>
+  <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #EDE7DD">
+    <button onClick="{{ onVerify }}" style="flex:1;padding:9px;border-radius:9px;border:1px solid {{ vBr }};background:{{ vBg }};color:{{ vFg }};font-family:inherit;font-weight:800;font-size:13px;cursor:pointer">تم التحقق</button>
+    <button onClick="{{ openBox }}" style="flex:1;padding:9px;border-radius:9px;border:1px solid {{ eBr }};background:{{ eBg }};color:{{ eFg }};font-family:inherit;font-weight:800;font-size:13px;cursor:pointer">يوجد خطأ</button>
+  </div>
+  <sc-if value="{{ boxOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:12px 16px 16px;border-top:1px solid #EDE7DD;background:#FBFAF6">
+      <div style="font-size:12px;font-weight:800;color:#7a7168;margin-bottom:8px">اختر الملاحظة</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <sc-for list="{{ presets }}" as="p" hint-placeholder-count="6">
+          <button onClick="{{ p.pick }}" style="padding:7px 13px;border-radius:999px;border:1px solid {{ p.br }};background:{{ p.bg }};color:{{ p.fg }};font-family:inherit;font-weight:700;font-size:12px;cursor:pointer">{{ p.t }}</button>
+        </sc-for>
+      </div>
+      <textarea onInput="{{ setDraft }}" value="{{ draft }}" rows="2" placeholder="أو اكتب ملاحظة أخرى..." style="width:100%;box-sizing:border-box;border:1px solid #E2DBCE;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:13px;resize:vertical;margin-bottom:10px"></textarea>
+      <div style="display:flex;gap:8px">
+        <button onClick="{{ confirmErr }}" disabled="{{ confirmDisabled }}" style="background:{{ confBg }};color:{{ confFg }};border:none;padding:9px 18px;border-radius:9px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer">حفظ الملاحظة</button>
+        <button onClick="{{ closeBox }}" style="background:#EFEBE2;color:#6b6259;border:none;padding:9px 18px;border-radius:9px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer">إلغاء</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:420,&quot;height&quot;:260},&quot;data&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;index&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;tsType&quot;:&quot;number&quot;},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;pending&quot;,&quot;verified&quot;,&quot;error&quot;],&quot;default&quot;:&quot;pending&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;note&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;onVerify&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;function&quot;},&quot;onError&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;function&quot;}}">
+class Component extends DCLogic {
+  state = { boxOpen:false, draft:"" };
+  renderVals() {
+    const d = this.props.data || {};
+    const male = d.gender === "male";
+    const status = this.props.status || "pending";
+    const note = this.props.note || "";
+    const presetList = ["رقم الهوية غير واضح","الاسم ناقص","الجوال خطأ","تاريخ الميلاد غير صحيح","الجنسية غير صحيحة","صورة الهوية/الجواز مفقودة","الهوية/الجواز منتهي","تكرار في الأسماء"];
+    const pick = (t)=> this.setState({ draft:t });
+    const presets = presetList.map(t=>{
+      const on = this.state.draft===t;
+      return { t, pick:()=>pick(t), bg:on?"#12100F":"#fff", fg:on?"#F0E6CC":"#6b6259", br:on?"#12100F":"#E2DBCE" };
+    });
+    const verified = status==="verified";
+    const errored = status==="error";
+    return {
+      num: (this.props.index ?? 0) + 1,
+      gLabel: male ? "ذكر" : "أنثى",
+      gBg: male ? "#EAF1FE" : "#F1E9FA",
+      gFg: male ? "#1E52C7" : "#7226BE",
+      cardBorder: verified?"#C4E4CE":(errored?"#F6D6BB":"#E7E1D8"),
+      headBg: verified?"#F1F8F0":(errored?"#FDF3EC":"#FAFBE6"),
+      stLabel: verified?"تم التحقق":(errored?"يوجد خطأ":"بانتظار التحقق"),
+      stBg: verified?"#E3F3E8":(errored?"#FCEBDD":"#F3EFE7"),
+      stFg: verified?"#1E7A44":(errored?"#B4530C":"#8a8178"),
+      showNote: errored && !!note,
+      noteText: note,
+      vBg: verified?"#1E7A44":"#fff", vFg: verified?"#fff":"#1E7A44", vBr: verified?"#1E7A44":"#C4E4CE",
+      eBg: errored?"#B4530C":"#fff", eFg: errored?"#fff":"#B4530C", eBr: errored?"#B4530C":"#F6D6BB",
+      onVerify: ()=>{ this.setState({boxOpen:false}); if(this.props.onVerify) this.props.onVerify(); },
+      openBox: ()=>this.setState({ boxOpen:true, draft: note || "" }),
+      closeBox: ()=>this.setState({ boxOpen:false }),
+      boxOpen: this.state.boxOpen,
+      draft: this.state.draft,
+      setDraft: (e)=>this.setState({ draft: e.target.value }),
+      presets,
+      confirmErr: ()=>{ const t=this.state.draft; if(!t) return; this.setState({boxOpen:false}); if(this.props.onError) this.props.onError(t); },
+      confirmDisabled: !this.state.draft,
+      confBg: this.state.draft?"#B4530C":"#E4DED3", confFg: this.state.draft?"#fff":"#A79E92",
+    };
+  }
+}
+</script>
+</body>
+</html>

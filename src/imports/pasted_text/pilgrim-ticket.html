@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="max-width:640px;margin:0 auto;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif">
+
+  <!-- GATE: ticket not available until paid + confirmed -->
+  <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#fff;border:1px solid #E7E1D8;border-radius:22px;padding:44px 32px;text-align:center;box-shadow:0 24px 60px -28px rgba(18,16,15,.4)">
+      <div style="width:64px;height:64px;border-radius:16px;background:#FCEBDD;color:#B4530C;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">🔒</div>
+      <div style="font-size:19px;font-weight:800;color:#12100F;font-family:'Noto Kufi Arabic',serif;margin-bottom:8px">التذكرة غير متاحة بعد</div>
+      <div style="font-size:14px;color:#6b6259;line-height:1.8;max-width:380px;margin:0 auto">لا تُصدر التذكرة الرقمية إلا بعد <b style="color:#12100F">اكتمال الدفع</b> و<b style="color:#12100F">تأكيد الطلب</b>. الحالة الحالية: {{ statusLabel }}.</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
+  <div style="background:#fff;border-radius:22px;overflow:hidden;box-shadow:0 24px 60px -28px rgba(18,16,15,.4);border:1px solid #E7E1D8">
+    <div style="background:#12100F;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;position:relative">
+      <div style="position:absolute;top:0;right:0;left:0;height:5px;background:linear-gradient(90deg,#C0862C,#E7C271,#C0862C)"></div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:52px;height:52px;border-radius:12px;background:#1c1917;border:1px solid #3a3128;display:flex;align-items:center;justify-content:center;position:relative">
+          <div style="position:absolute;top:0;right:0;left:0;height:6px;background:#C0862C;border-radius:12px 12px 0 0"></div>
+          <span style="font-family:'Noto Kufi Arabic',serif;color:#F0E6CC;font-size:15px;font-weight:800;margin-top:5px">تساهيل</span>
+        </div>
+        <div>
+          <div style="color:#fff;font-weight:800;font-size:20px;font-family:'Noto Kufi Arabic',serif">تذكرة معتمر</div>
+          <div style="color:#C0862C;font-size:12px;font-weight:600;letter-spacing:1px">TASAHEEL ALUMRAH · PILGRIM TICKET</div>
+        </div>
+      </div>
+      <div style="text-align:left;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div><div style="color:#8a8178;font-size:11px">رقم التذكرة</div><div style="color:#C0862C;font-weight:800;font-size:18px;letter-spacing:1px">{{ ticketNo }}</div></div>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#123b22;border:1px solid #1E7A44;color:#7FDBA0;font-size:11px;font-weight:800;padding:4px 12px;border-radius:999px">● حالة التذكرة: صالحة</span>
+      </div>
+    </div>
+
+    <!-- Primary trip facts -->
+    <div style="padding:24px 28px 8px;display:grid;grid-template-columns:1.5fr auto;gap:26px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 20px">
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">صاحب الطلب</div><div style="font-size:15px;color:#12100F;font-weight:800">{{ b.clientName }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">الباقة</div><div style="font-size:15px;color:#12100F;font-weight:800">{{ b.packageName }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">رقم الرحلة</div><div style="font-size:15px;color:#12100F;font-weight:800;font-family:'IBM Plex Mono',monospace">{{ tripNo }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">تاريخ الانطلاق</div><div style="font-size:15px;color:#12100F;font-weight:800">{{ b.date }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">وقت الانطلاق</div><div style="font-size:15px;color:#12100F;font-weight:800;font-family:'IBM Plex Mono',monospace">{{ departureTime }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">نوع الغرفة</div><div style="font-size:15px;color:#12100F;font-weight:800">{{ b.roomType }}</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+        <button onClick="{{ verify }}" title="فتح صفحة التحقق" style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px">
+          <div style="width:112px;height:112px;border-radius:12px;border:1px solid #E7E1D8;padding:8px;background:#fff">
+            <div style="width:100%;height:100%;border-radius:6px;background-color:#12100F;background-image:repeating-linear-gradient(90deg,#12100F 0 6px,#fff 6px 12px),repeating-linear-gradient(0deg,transparent 0 6px,rgba(255,255,255,.85) 6px 12px);background-blend-mode:screen"></div>
+          </div>
+          <div style="font-size:11px;color:#C0862C;font-weight:700">امسح للتحقق ←</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Transport & logistics -->
+    <div style="padding:6px 28px 4px">
+      <div style="background:#FAFBE6;border:1px solid #EDE4CF;border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">وسيلة النقل</div><div style="font-size:13px;color:#12100F;font-weight:700">{{ transportMode }} · {{ transportName }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">رقم الباص / اللوحة</div><div style="font-size:13px;color:#12100F;font-weight:700;font-family:'IBM Plex Mono',monospace">{{ vehicleId }} · {{ plate }}</div></div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">تاريخ الإصدار</div><div style="font-size:13px;color:#12100F;font-weight:700;font-family:'IBM Plex Mono',monospace">{{ issueDate }}</div></div>
+        <div style="grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #EDE4CF;padding-top:12px">
+          <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">نقطة التجمّع / الانطلاق</div><div style="font-size:13px;color:#12100F;font-weight:700">📍 {{ departurePoint }}</div></div>
+          <a href="{{ mapsUrl }}" target="_blank" style="flex:0 0 auto;background:#12100F;color:#F0E6CC;text-decoration:none;font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px">فتح الخريطة ↗</a>
+        </div>
+        <div><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">المشرف / السائق</div><div style="font-size:13px;color:#12100F;font-weight:700">{{ supervisor }} · {{ driver }}</div></div>
+        <div style="grid-column:2/-1"><div style="font-size:11px;color:#A79E92;font-weight:600;margin-bottom:3px">تواصل الطوارئ</div><div style="font-size:13px;color:#B4530C;font-weight:800;font-family:'IBM Plex Mono',monospace">{{ emergencyPhone }}</div></div>
+      </div>
+    </div>
+
+    <div style="position:relative;height:34px;margin:6px 0">
+      <div style="position:absolute;top:50%;right:20px;left:20px;border-top:2px dashed #E0D9CF"></div>
+      <div style="position:absolute;top:50%;right:-14px;width:28px;height:28px;border-radius:50%;background:#FAFBE6;transform:translateY(-50%);border:1px solid #E7E1D8"></div>
+      <div style="position:absolute;top:50%;left:-14px;width:28px;height:28px;border-radius:50%;background:#FAFBE6;transform:translateY(-50%);border:1px solid #E7E1D8"></div>
+    </div>
+
+    <!-- Pilgrims with seat numbers -->
+    <div style="padding:6px 28px 20px">
+      <div style="font-size:12px;color:#A79E92;font-weight:700;margin-bottom:10px">المعتمرون ورقم المقعد ({{ count }})</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ pilgrimRows }}" as="row" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#FAFBE6;border:1px solid #EDE4CF;padding:10px 14px;border-radius:11px">
+            <span style="font-size:14px;font-weight:700;color:#12100F">{{ row.name }}</span>
+            <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#12100F;background:#fff;border:1px solid #E7E1D8;border-radius:8px;padding:5px 12px">💺 مقعد {{ row.seat }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- Brief conditions -->
+      <div style="margin-top:16px;background:#FBFAF6;border:1px dashed #D8D0C4;border-radius:12px;padding:12px 16px">
+        <div style="font-size:11px;color:#7a7168;font-weight:800;margin-bottom:8px">شروط مختصرة</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#6b6259">
+          <div>• الحضور قبل الموعد بـ ٣٠ دقيقة على الأقل في نقطة التجمّع.</div>
+          <div>• إحضار الهوية الوطنية أو الجواز الأصلي.</div>
+          <div>• إبراز هذه التذكرة (رقمياً أو مطبوعة) عند الاستقبال.</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;background:#12100F;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:10px;color:#8a8178;font-weight:600;letter-spacing:1px">كود التحقق النصي</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:#C0862C;font-size:15px;font-weight:700;letter-spacing:1px">{{ verifyCode }}</div>
+        </div>
+        <div style="color:#F0E6CC;font-size:11px;font-weight:600;text-align:left;max-width:150px">امسح رمز التحقق لعرض صفحة التذكرة الكاملة</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:center;gap:12px;margin-top:18px" data-print-hide="true">
+    <button onClick="{{ print }}" style="background:#C0862C;color:#12100F;border:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px">
+      <span style="font-size:16px">⎙</span> طباعة / تحميل التذكرة
+    </button>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:680,&quot;height&quot;:680},&quot;booking&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const b = this.props.booking || {};
+    const STATUS_LABELS = { new:"طلب جديد", reviewing:"قيد المراجعة", needs_edit:"يحتاج تعديل", accepted:"مقبول", awaiting_payment:"بانتظار الدفع", paid:"مدفوع", verifying:"جارٍ التحقق", verified:"تم التحقق من الدفع", confirmed:"مؤكدة", rejected:"مرفوض", cancelled:"ملغى" };
+    const ready = b.status === "confirmed";
+    const pilgrims = (b.pilgrims && b.pilgrims.length) ? b.pilgrims : (b.pilgrimNames || [b.clientName].filter(Boolean)).map(n=>({name:n}));
+    const seats = Array.isArray(b.seats) ? b.seats : [];
+    const pilgrimRows = pilgrims.map((p,i)=>({ name: (typeof p==="string"?p:p.name)||"—", seat: (seats[i]!=null? seats[i] : "—") }));
+    const shortId = (b.id || "TSH-0000").replace(/^TSH-?/, "");
+    return {
+      b,
+      ready, locked: !ready,
+      statusLabel: STATUS_LABELS[b.status] || "غير مؤكدة",
+      ticketNo: "TK-" + shortId,
+      pilgrimRows,
+      count: pilgrimRows.length,
+      tripNo: b.tripId || "—",
+      departureTime: b.tripDepartureTime || "—",
+      transportName: b.transportName || "—",
+      transportMode: b.transportModeLabel || "حافلة",
+      plate: b.plate || "—",
+      vehicleId: b.vehicleId || "—",
+      supervisor: b.supervisor || "—",
+      driver: b.driver || "—",
+      departurePoint: b.departurePoint || "نقطة تجمّع تساهيل",
+      mapsUrl: b.mapsUrl || "https://www.google.com/maps",
+      emergencyPhone: b.emergencyPhone || "—",
+      issueDate: b.issueDate || (new Date().toISOString().slice(0,10)),
+      verifyCode: (b.id || "TSH-0000") + "-VERIFY",
+      verify: () => { if (typeof b.onVerify === "function") b.onVerify(); },
+      print: () => { try { window.print(); } catch(e){} },
+    };
+  }
+}
+</script>
+</body>
+</html>
