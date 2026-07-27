@@ -61,12 +61,20 @@ export interface TripSettings {
 }
 export interface Trip {
   id:string; packageId:string; transportId:string; hotelId:string;
+  branchId:string;                       // نقطة الانطلاق من الفروع (اختياري القيمة)
+  busPlate:string; busCode:string;       // رقم لوحة الباص + الرقم التعريفي الداخلي
   departureDate:string; returnDate:string; departureTime:string;
   departurePoint:string; departureMapUrl:string;
   seats:number; bookedSeats:number; waitingSeats:number;
   status:TripStatus; price:number;
   drivers:TripDriver[];
   settings:TripSettings;
+}
+
+export interface Branch {
+  id:string; name:string; city:string; address:string;
+  gmapUrl:string; phone:string; managerId:string;
+  isActive:boolean; createdAt?:string; updatedAt?:string;
 }
 
 export interface Beneficiary {
@@ -91,7 +99,7 @@ export interface Pilgrim { name:string; idNumber:string; nationality:string; gen
 export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"|"awaiting_payment"|"awaiting_trip"|"paid"|"verifying"|"verified"|"confirmed"|"cancelled";
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
 export interface Booking {
-  id:string; tripId:string;
+  id:string; tripId:string; packageId?:string;
   clientName:string; clientPhone:string;
   roomType:string; persons:number;
   total:number; status:BookingStatus;
@@ -99,6 +107,9 @@ export interface Booking {
   payMethod?:string; txnNo?:string; payDate?:string;
   seats:number[];
   createdAt:string; staff:string; sentDate:string;
+  createdBy?:string;              // id المستخدم المنشئ (حجز داخلي)
+  branchId?:string;               // فرع الطلب
+  source?:string;                 // public | internal
   pilgrims:Pilgrim[];
 }
 

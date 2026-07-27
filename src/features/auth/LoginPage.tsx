@@ -37,18 +37,18 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3 }}>البريد الإلكتروني</label>
+            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3, textAlign: "right", direction: "rtl" }}>البريد الإلكتروني</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
               placeholder="you@example.com" autoFocus
               className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-              style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "left", fontFamily: "'IBM Plex Mono',monospace" }} />
+              style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "right", fontFamily: "'IBM Plex Mono',monospace" }} />
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3 }}>كلمة المرور</label>
+            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3, textAlign: "right", direction: "rtl" }}>كلمة المرور</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
               placeholder="••••••••"
               className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-              style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "left" }} />
+              style={{ borderColor: B.border, color: B.black, direction: "rtl", textAlign: "right" }} />
           </div>
 
           {error && <div className="text-xs font-bold rounded-lg px-3 py-2" style={{ background: "#FBE6E6", color: "#BE2626", border: "1px solid #F3C9C9" }}>{error}</div>}

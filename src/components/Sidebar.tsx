@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Building2, LayoutDashboard, Package, Plane, Bus, BookOpen,
+  Building2, Building, LayoutDashboard, Package, Plane, Bus, BookOpen,
   Users, CreditCard, Ticket, Settings, Wrench, LogOut, X,
 } from "lucide-react";
 import { B } from "@/lib/theme";
@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
   { view:"dashboard",     label:"الرئيسية",       Icon:LayoutDashboard },
   { view:"packages",      label:"الباقات",         Icon:Package },
   { view:"trips",         label:"الرحلات",         Icon:Plane },
+  { view:"branches",      label:"الفروع",          Icon:Building },
   { view:"transport",     label:"المواصلات",       Icon:Bus },
   { view:"hotels",        label:"الفنادق",         Icon:Building2 },
   { view:"bookings",      label:"الطلبات",         Icon:BookOpen },

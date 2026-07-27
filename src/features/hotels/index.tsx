@@ -11,6 +11,7 @@ import { uid, formatKmValue, parseKmToMeters, distanceLabel } from "@/lib/utils"
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { AppSelect } from "@/components/AppSelect";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
 
@@ -194,9 +195,9 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                 <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند" onChange={e=>set("name",e.target.value)}/></div>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المدينة</label>
-                  <select className={inp} style={ist} value={form.city} onChange={e=>set("city",e.target.value as Hotel["city"])}><option value="مكة">🕋 مكة</option><option value="المدينة">🕌 المدينة</option></select></div>
+                  <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/></div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>التصنيف</label>
-                  <select className={inp} style={ist} value={form.stars} onChange={e=>set("stars",Number(e.target.value) as Hotel["stars"])}><option value={5}>★★★★★</option><option value={4}>★★★★☆</option><option value={3}>★★★☆☆</option><option value={2}>★★☆☆☆</option></select></div>
+                  <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/></div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المسافة (كيلومتر)</label>
                   <input type="text" inputMode="decimal" className={inp} style={ist} value={distanceKmInput} placeholder="0.5" onChange={e=>handleDistanceChange(e.target.value)} onBlur={handleDistanceBlur}/></div>
               </div>

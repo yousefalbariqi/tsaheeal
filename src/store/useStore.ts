@@ -6,7 +6,7 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import type {
   Hotel, Transport, Pkg, Trip, Booking, Payment,
-  TicketEntry, Beneficiary, SystemUser, SupportReq,
+  TicketEntry, Beneficiary, SystemUser, SupportReq, Branch,
 } from "@/types";
 import { SEED_HOTELS } from "@/data/hotels";
 import { SEED_TRANSPORTS } from "@/data/transports";
@@ -18,6 +18,7 @@ import { SEED_TICKETS } from "@/data/tickets";
 import { SEED_BENEFICIARIES } from "@/data/beneficiaries";
 import { SEED_USERS } from "@/data/users";
 import { SEED_SUPPORT } from "@/data/support";
+import { SEED_BRANCHES } from "@/data/branches";
 import { repo, type Repo } from "@/data/repository";
 import { supabase, isSupabaseEnabled } from "@/supabase/client";
 
@@ -52,13 +53,14 @@ interface StoreState {
   beneficiaries: Beneficiary[];  setBeneficiaries: (u: Updater<Beneficiary>) => void;
   users: SystemUser[];           setUsers: (u: Updater<SystemUser>) => void;
   support: SupportReq[];         setSupport: (u: Updater<SupportReq>) => void;
+  branches: Branch[];            setBranches: (u: Updater<Branch>) => void;
 
   loaded: boolean;
   hydrate: () => Promise<void>;
 
   // الجلسة والمصادقة
   session: Session | null;
-  currentUser: { id: string; name: string; role: string } | null;
+  currentUser: { id: string; name: string; role: string; branch?: string } | null;
   authReady: boolean;
   initAuth: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
@@ -77,35 +79,19 @@ export const useStore = create<StoreState>((set, get) => ({
   beneficiaries: SEED_BENEFICIARIES, setBeneficiaries: (u) => set((s) => { const n = apply(s.beneficiaries, u); syncDiff(repo.beneficiaries, "id", s.beneficiaries, n); return { beneficiaries: n }; }),
   users: SEED_USERS,                 setUsers: (u) => set((s) => { const n = apply(s.users, u); syncDiff(repo.users, "id", s.users, n); return { users: n }; }),
   support: SEED_SUPPORT,             setSupport: (u) => set((s) => { const n = apply(s.support, u); syncDiff(repo.support, "id", s.support, n); return { support: n }; }),
+  branches: SEED_BRANCHES,           setBranches: (u) => set((s) => { const n = apply(s.branches, u); syncDiff(repo.branches, "id", s.branches, n); return { branches: n }; }),
 
   loaded: false,
   hydrate: async () => {
     if (!isSupabaseEnabled) { set({ loaded: true }); return; }
-    const [hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support] =
+    // يعرض ما في قاعدة البيانات فقط (بلا تعبئة تلقائية) — البيانات الحقيقية تُدار من الواجهة.
+    const [hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches] =
       await Promise.all([
         repo.hotels.list(), repo.transports.list(), repo.packages.list(), repo.trips.list(),
         repo.bookings.list(), repo.payments.list(), repo.tickets.list(), repo.beneficiaries.list(),
-        repo.users.list(), repo.support.list(),
+        repo.users.list(), repo.support.list(), repo.branches.list(),
       ]);
-    const allEmpty = [hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support].every((a) => a.length === 0);
-    if (allEmpty) {
-      // أول اتصال: تعبئة تلقائية من seed مرة واحدة
-      await Promise.all([
-        ...SEED_HOTELS.map((r) => repo.hotels.create(r)),
-        ...SEED_TRANSPORTS.map((r) => repo.transports.create(r)),
-        ...SEED_PACKAGES.map((r) => repo.packages.create(r)),
-        ...SEED_TRIPS.map((r) => repo.trips.create(r)),
-        ...SEED_BOOKINGS.map((r) => repo.bookings.create(r)),
-        ...SEED_PAYMENTS.map((r) => repo.payments.create(r)),
-        ...SEED_TICKETS.map((r) => repo.tickets.create(r)),
-        ...SEED_BENEFICIARIES.map((r) => repo.beneficiaries.create(r)),
-        ...SEED_USERS.map((r) => repo.users.create(r)),
-        ...SEED_SUPPORT.map((r) => repo.support.create(r)),
-      ]).catch((e) => console.error("[seed] فشلت التعبئة الأولية:", e));
-      set({ loaded: true });
-      return;
-    }
-    set({ hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, loaded: true });
+    set({ hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches, loaded: true });
   },
 
   session: null,
@@ -133,9 +119,9 @@ export const useStore = create<StoreState>((set, get) => ({
     const sess = get().session;
     if (!sess || !supabase) return;
     const uid = sess.user.id;
-    const { data } = await supabase.from("profiles").select("id,name,role").eq("id", uid).single();
+    const { data } = await supabase.from("profiles").select("id,name,role,branch_id").eq("id", uid).single();
     set({ currentUser: data
-      ? { id: data.id, name: data.name, role: data.role }
+      ? { id: data.id, name: data.name, role: data.role, branch: data.branch_id ?? undefined }
       : { id: uid, name: sess.user.email ?? "مستخدم", role: "موظف" } });
   },
 }));

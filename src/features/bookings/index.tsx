@@ -1,14 +1,133 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Copy as CopyIcon } from "lucide-react";
+import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Plus, Copy as CopyIcon } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, Payment, Pilgrim, BookingStatus, Booking } from "@/types";
 import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph } from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
 import { PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
+
+const PAY_METHODS_INTERNAL = ["كاش","تحويل بنكي","آجل للموظف"];
+const validPhone = (p:string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
+
+/* ════════ إضافة طلب جديد (حجز داخلي للموظف) ════════ */
+function NewOrderModal({packages,trips,onCreate,onClose}:{
+  packages:Pkg[];trips:Trip[];
+  onCreate:(d:{clientName:string;clientPhone:string;tripId:string;persons:number;payMethod:string})=>string|null;
+  onClose:()=>void;
+}) {
+  const [clientName,setClientName]=useState("");
+  const [clientPhone,setClientPhone]=useState("");
+  const [packageId,setPackageId]=useState("");
+  const [tripId,setTripId]=useState("");
+  const [persons,setPersons]=useState(1);
+  const [payMethod,setPayMethod]=useState(PAY_METHODS_INTERNAL[0]);
+  const [errors,setErrors]=useState<{[k:string]:string}>({});
+  const [busy,setBusy]=useState(false);
+  const [done,setDone]=useState<string|null>(null);
+  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
+  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
+  const req=<span style={{color:B.gold}}>*</span>;
+
+  const availTrips = trips.filter(t=>t.packageId===packageId && t.status==="open" && (t.seats-t.bookedSeats)>0);
+  const selTrip = trips.find(t=>t.id===tripId);
+  const maxSeats = selTrip ? Math.max(1,selTrip.seats-selTrip.bookedSeats) : 1;
+  const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
+
+  function validate(){
+    const e:{[k:string]:string}={};
+    if(!clientName.trim()) e.name="اسم العميل مطلوب";
+    if(!validPhone(clientPhone)) e.phone="رقم جوال غير صحيح";
+    if(!packageId) e.pkg="اختر الباقة";
+    if(!tripId) e.trip="اختر الرحلة";
+    if(persons<1) e.persons="عدد المقاعد على الأقل 1";
+    else if(selTrip && persons>maxSeats) e.persons=`المتبقي ${maxSeats} مقاعد فقط`;
+    setErrors(e); return Object.keys(e).length===0;
+  }
+  function submit(){
+    if(busy) return;
+    if(!validate()) return;
+    setBusy(true);
+    const err=onCreate({clientName:clientName.trim(),clientPhone:clientPhone.replace(/\s/g,""),tripId,persons,payMethod});
+    if(err){ setErrors(x=>({...x,seats:err})); setBusy(false); return; }
+    setDone(`تم إنشاء الطلب بحالة «مؤكد».`);
+  }
+
+  return (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
+      style={{background:"rgba(21,76,72,.6)"}} onClick={onClose}>
+      <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
+        className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
+        <div className="relative px-6 py-5" style={{background:B.primary}}>
+          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
+          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"'Noto Kufi Arabic',serif"}}>إضافة طلب جديد</h3>
+          <button onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+        </div>
+
+        {done ? (
+          <div className="p-8 flex flex-col items-center text-center gap-3">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{background:"#E3F3E8"}}><Check size={32} style={{color:"#1E7A44"}}/></div>
+            <div className="font-extrabold text-lg" style={{color:B.black}}>تمت الإضافة بنجاح</div>
+            <div className="text-sm" style={{color:B.text2}}>{done}</div>
+            <button onClick={onClose} className="mt-2 px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>تم</button>
+          </div>
+        ) : (
+        <>
+        <div className="p-6 grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم العميل {req}</label>
+            <input value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="الاسم الكامل" className={inp} style={ist}/>
+            <Err k="name"/>
+          </div>
+          <div>
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم الجوال {req}</label>
+            <input value={clientPhone} onChange={e=>setClientPhone(e.target.value)} placeholder="05xxxxxxxx" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Err k="phone"/>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الباقة {req}</label>
+            <AppSelect value={packageId} placeholder="اختر الباقة" onChange={v=>{setPackageId(v);setTripId("");}}
+              options={packages.map(p=>({value:p.id,label:p.name}))}/>
+            <Err k="pkg"/>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الرحلة {req}</label>
+            <AppSelect value={tripId} placeholder={packageId?"اختر الرحلة المتاحة":"اختر الباقة أولاً"}
+              disabled={!packageId} onChange={setTripId}
+              options={availTrips.map(t=>({value:t.id,label:`${t.departureDate} · ${packages.find(p=>p.id===t.packageId)?.name??t.id} · المتبقي ${t.seats-t.bookedSeats}`}))}/>
+            {packageId&&availTrips.length===0&&<div className="text-xs mt-1" style={{color:B.muted}}>لا توجد رحلات متاحة لهذه الباقة.</div>}
+            <Err k="trip"/>
+          </div>
+          <div>
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عدد المقاعد {req}</label>
+            <input type="number" min={1} max={maxSeats} value={persons} onChange={e=>setPersons(Math.max(1,Number(e.target.value)||1))} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Err k="persons"/>
+          </div>
+          <div>
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>طريقة الدفع {req}</label>
+            <AppSelect value={payMethod} onChange={setPayMethod} options={PAY_METHODS_INTERNAL.map(m=>({value:m,label:m}))}/>
+          </div>
+          {errors.seats&&<div className="col-span-2 rounded-xl px-4 py-3 text-xs font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{errors.seats}</div>}
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={submit} disabled={busy} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-extrabold text-sm"
+            style={{background:busy?"#d6cfc6":B.gold,color:busy?"#a09688":B.black,border:"none",cursor:busy?"not-allowed":"pointer"}}>
+            {busy&&<motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}} style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:B.black,borderRadius:"50%",display:"inline-block"}}/>}
+            {busy?"جارٍ الحفظ…":"تأكيد الحجز"}
+          </button>
+          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+        </div>
+        </>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
 
 const BOOKING_TIMELINE: {status:BookingStatus;label:string}[] = [
   {status:"new",label:"جديد"},{status:"reviewing",label:"مراجعة"},{status:"accepted",label:"مقبول"},
@@ -339,11 +458,8 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>طريقة الدفع</label>
-                  <select value={payMethodSel} onChange={e=>setPayMethodSel(e.target.value)}
-                    className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none cursor-pointer"
-                    style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}>
-                    {["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=><option key={m}>{m}</option>)}
-                  </select>
+                  <AppSelect value={payMethodSel} onChange={setPayMethodSel}
+                    options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
                 </div>
                 <label className="flex items-end gap-2.5 cursor-pointer pb-1.5">
                   <span onClick={()=>setPayReceived(v=>!v)} className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:payReceived?"#1E7A44":"#fff",border:`1.5px solid ${payReceived?"#1E7A44":B.border}`}}>
@@ -467,8 +583,8 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنسية</div>
                         <input className={einp} style={eist} value={draft.nationality} onChange={e=>setD("nationality",e.target.value)}/></div>
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنس</div>
-                        <select className={einp} style={eist} value={draft.gender} onChange={e=>setD("gender",e.target.value as Pilgrim["gender"])}>
-                          <option value="male">ذكر</option><option value="female">أنثى</option></select></div>
+                        <AppSelect value={draft.gender} onChange={v=>setD("gender",v as Pilgrim["gender"])}
+                          options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/></div>
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>تاريخ الميلاد</div>
                         <input type="date" className={einp} style={{...eist,direction:"ltr"}} value={draft.birthDate} onChange={e=>setD("birthDate",e.target.value)}/></div>
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
@@ -541,11 +657,33 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
 
 export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:Trip[];onMenuOpen?:()=>void}) {
   const bookings=useStore(s=>s.bookings); const setBookings=useStore(s=>s.setBookings);
+  const setTrips=useStore(s=>s.setTrips);
+  const currentUser=useStore(s=>s.currentUser);
   const [search,setSearch]=useState("");
   const [statusFilter,setStatusFilter]=useState<"all"|BookingStatus>("all");
   const [detailId,setDetailId]=useState<string|null>(null);
+  const [showNew,setShowNew]=useState(false);
 
   function changeStatus(id:string,s:BookingStatus){setBookings(p=>p.map(b=>b.id===id?{...b,status:s}:b));}
+
+  // إنشاء حجز داخلي — إعادة التحقق من المقاعد وخصمها وإسناد الموظف/الفرع
+  function createInternalOrder(d:{clientName:string;clientPhone:string;tripId:string;persons:number;payMethod:string}):string|null {
+    const trip=useStore.getState().trips.find(t=>t.id===d.tripId);
+    if(!trip) return "الرحلة غير متاحة";
+    const avail=Math.max(0,trip.seats-trip.bookedSeats);
+    if(d.persons>avail) return `عذراً، المقاعد المتبقية ${avail} فقط.`;
+    const id=`TSH-${String(Date.now()).slice(-4)}`;
+    const booking:Booking={
+      id, tripId:trip.id, packageId:trip.packageId,
+      clientName:d.clientName, clientPhone:d.clientPhone, roomType:"", persons:d.persons,
+      total:trip.price*d.persons, status:"confirmed", paymentStatus:"none",
+      payMethod:d.payMethod, seats:[], createdAt:new Date().toISOString().slice(0,10),
+      staff:currentUser?.name??"—", createdBy:currentUser?.id, branchId:currentUser?.branch, source:"internal", sentDate:"", pilgrims:[],
+    };
+    setBookings(p=>[booking,...p]);
+    setTrips(p=>p.map(t=>t.id===trip.id?{...t,bookedSeats:t.bookedSeats+d.persons}:t));
+    return null;
+  }
   function updatePilgrims(id:string,pilgrims:Pilgrim[]){setBookings(p=>p.map(b=>b.id===id?{...b,pilgrims}:b));}
   function updateSeats(id:string,seats:number[]){setBookings(p=>p.map(b=>b.id===id?{...b,seats}:b));}
 
@@ -595,6 +733,10 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                 <button key={v} style={fb(statusFilter===v)} onClick={()=>setStatusFilter(v as "all"|BookingStatus)}>{l}</button>
               ))}
               <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{filtered.length} / {bookings.length}</span>
+              <button onClick={()=>setShowNew(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+                style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
+                <Plus size={14}/>إضافة طلب جديد
+              </button>
             </div>
             <div className="mt-5" style={{height:1,background:B.border}}/>
           </div>
@@ -676,6 +818,9 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
           </main>
         </>
       )}
+      <AnimatePresence>
+        {showNew&&<NewOrderModal packages={packages} trips={trips} onCreate={createInternalOrder} onClose={()=>setShowNew(false)}/>}
+      </AnimatePresence>
     </div>
   );
 }

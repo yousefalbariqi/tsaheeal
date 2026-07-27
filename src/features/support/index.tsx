@@ -3,6 +3,7 @@ import { X, ImagePlus } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { SupportPriority, SupportStatus, SupportReq } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
+import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
 
 const SUPPORT_CATS = ["عام","تقني — أخطاء في النظام","مالي — فواتير وتحصيل","محتوى — تعديل النصوص","باقات ورحلات","حجوزات وتذاكر","طلب ميزة جديدة"];
@@ -76,10 +77,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>القسم</label>
-                <select value={category} onChange={e=>setCategory(e.target.value)}
-                  className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit",color:B.black,background:"#fff"}}>
-                  {SUPPORT_CATS.map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
+                <AppSelect value={category} onChange={setCategory} options={SUPPORT_CATS.map(c=>({value:c,label:c}))}/>
               </div>
               <div>
                 <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عنوان المشكلة</label>

@@ -1,68 +1,15 @@
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import {
-  Building2, MapPin, Star, Plus, Pencil, Trash2, X, Check,
-  Wifi, UtensilsCrossed, ParkingCircle, Waves, Wind, Dumbbell, Coffee,
-  ShieldCheck, BellRing, LayoutDashboard, Package, Plane, Bus, BookOpen,
-  Users, CreditCard, Ticket, Settings, Wrench, Search, LogOut, ChevronRight,
-  ImagePlus, UserCircle, Car, Armchair, Calendar, Hash,
-  ChevronUp, ChevronDown, Copy, ArrowRight, Repeat, CalendarDays, ListChecks,
-  Phone, Menu, User, Film, Archive, ArchiveRestore, Printer, Link2, Copy as CopyIcon,
-} from "lucide-react";
+import { useState } from "react";
+import { Routes, Route, Navigate, useParams } from "react-router";
+import { motion } from "motion/react";
+import { X, Check, ShieldCheck } from "lucide-react";
 import { B } from "@/lib/theme";
-import type {
-  VehicleMode, VehicleStatus, RoomKind, MediaKind,
-  HotelFeature, HotelReview, HotelMedia, RoomType, Hotel,
-  TransportFeature, TransportReview, Transport,
-  PkgStatus, PkgDest, ProgramStage, RoomPrice, PkgReview, PkgFeature, Pkg,
-  TripDriver, TripStatus, TripSettings, Trip,
-  Beneficiary, Payment,
-  Pilgrim, BookingStatus, PaymentStatus, Booking,
-  TicketEntry, UserRole, SystemUser,
-  SupportPriority, SupportStatus, SupportReq,
-} from "@/types";
-import { uid, money, formatKmValue, parseKmToMeters, distanceLabel, minPrice, waNormalize, openWhatsApp, copyText, payLinkFor, invVerifyUrl, parseYMD, ymd, tripDayColor, firstTwo, genderGlyph } from "@/lib/utils";
-import { DEFAULT_TRIP_SETTINGS } from "@/data/trips";
-import { StatusBadge, STATUS_MAP } from "@/components/StatusBadge";
-import { TasaheelMark } from "@/components/TasaheelMark";
-import { Sidebar, NAV_ITEMS } from "@/components/Sidebar";
-import { StatCard } from "@/components/StatCard";
-import { PageHeader } from "@/components/PageHeader";
-import { DeleteDialog } from "@/components/DeleteDialog";
-import { QRBlock } from "@/components/QRBlock";
 import { useStore } from "@/store/useStore";
-import { HotelsPage } from "@/features/hotels";
-import { TransportPage } from "@/features/transport";
-import { UsersPage } from "@/features/users";
-import { SupportPage } from "@/features/support";
-import { TicketCard, TicketsPage } from "@/features/tickets";
-import { PaymentsPage, PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
-import { BeneficiariesPage } from "@/features/beneficiaries";
-import { PackagesPage } from "@/features/packages";
-import { TripsPage } from "@/features/trips";
-import { BookingsPage } from "@/features/bookings";
-import { LoginPage } from "@/features/auth/LoginPage";
 import { isSupabaseEnabled, supabase } from "@/supabase/client";
-
-function ComingSoonPage({view}:{view:string}) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5" style={{color:B.muted}}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primary,border:`1px solid ${B.border2}`}}>
-        <Package size={32} style={{color:B.gold,opacity:0.5}}/>
-      </div>
-      <div className="text-center">
-        <p className="font-bold mb-1" style={{color:B.text3}}>صفحة "{view}" قيد البناء</p>
-        <p className="text-sm" style={{color:B.muted}}>سيتم إضافتها قريباً</p>
-      </div>
-    </div>
-  );
-}
+import AdminApp from "./AdminApp";
+import { CustomerApp } from "@/features/customer/CustomerApp";
 
 /* ════════════════════════════════════════════════════════════
-   ROOT APP
-════════════════════════════════════════════════════════════ */
-/* ════════════════════════════════════════════════════════════
-   PUBLIC PAYMENT CHECKOUT  — صفحة الدفع للعميل (/pay/:id)
+   PUBLIC PAYMENT CHECKOUT — صفحة الدفع للعميل (/pay/:id)
 ════════════════════════════════════════════════════════════ */
 const PAY_METHODS = [
   {id:"mada",label:"مدى",emoji:"💳",card:true},
@@ -86,12 +33,10 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
     <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
       style={{fontFamily:"'IBM Plex Sans Arabic',system-ui,sans-serif",background:`linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 55%,${B.black} 100%)`}}>
       <div className="w-full my-6" style={{maxWidth:440}}>
-        {/* Brand */}
         <div className="text-center mb-5">
           <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
           <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TASAHEEL AL-UMRAH · SECURE PAYMENT</div>
         </div>
-
         {!pay ? (
           <div className="rounded-2xl p-8 text-center" style={{background:"#fff"}}>
             <X size={40} style={{color:"#BE2626",margin:"0 auto 12px"}}/>
@@ -120,7 +65,6 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
           </motion.div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
-            {/* Order summary */}
             <div className="px-6 py-5" style={{borderBottom:`1px solid ${B.border}`}}>
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -133,7 +77,6 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
                 </div>
               </div>
             </div>
-            {/* Methods */}
             <div className="px-6 py-5">
               <div className="text-sm font-extrabold mb-3" style={{color:"#000"}}>اختر طريقة الدفع</div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -148,7 +91,6 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
                   );
                 })}
               </div>
-              {/* Card form */}
               {sel?.card&&(
                 <div className="mt-4 flex flex-col gap-2.5">
                   <div>
@@ -168,7 +110,6 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
                 </div>
               )}
             </div>
-            {/* Pay button */}
             <div className="px-6 pb-6">
               <button onClick={doPay} disabled={!canPay||stage==="processing"}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm"
@@ -188,69 +129,18 @@ function PayCheckoutPage({bookingId}:{bookingId:string}) {
   );
 }
 
-function Splash() {
-  return (
-    <div dir="rtl" className="min-h-screen flex flex-col items-center justify-center gap-4"
-      style={{fontFamily:"'IBM Plex Sans Arabic',system-ui,sans-serif",background:`linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 60%,${B.black} 100%)`}}>
-      <TasaheelMark size={56}/>
-      <motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}}
-        style={{width:22,height:22,border:"2.5px solid rgba(231,194,113,0.35)",borderTopColor:B.gold,borderRadius:"50%",display:"inline-block"}}/>
-      <div className="text-xs" style={{color:B.gold,letterSpacing:2}}>جارٍ التحميل…</div>
-    </div>
-  );
+function PayRoute() {
+  const { id } = useParams();
+  return <PayCheckoutPage bookingId={decodeURIComponent(id ?? "")} />;
 }
 
 export default function App() {
-  const payMatch = typeof window!=="undefined" ? window.location.pathname.match(/^\/pay\/([^/]+)/) : null;
-  const [activeView,setActiveView]=useState("bookings");
-  const [navNonce,setNavNonce]=useState(0);
-  const nav=(v:string)=>{setActiveView(v);setNavNonce(n=>n+1);};
-  const transports = useStore(s=>s.transports);
-  const hotels     = useStore(s=>s.hotels);
-  const packages   = useStore(s=>s.packages);
-  const trips      = useStore(s=>s.trips);
-  const bookings   = useStore(s=>s.bookings);
-  const authReady  = useStore(s=>s.authReady);
-  const session    = useStore(s=>s.session);
-  const loaded     = useStore(s=>s.loaded);
-  const currentUser= useStore(s=>s.currentUser);
-  const signOut    = useStore(s=>s.signOut);
-  const [mobileSidebar,setMobileSidebar]=useState(false);
-
-  const knownViews = ["hotels","transport","packages","trips","bookings","beneficiaries","payments","tickets","users","support"];
-
-  // تهيئة الجلسة مرة واحدة
-  useEffect(()=>{ useStore.getState().initAuth(); },[]);
-  // جلب البيانات بعد توفّر جلسة صالحة (أو فوراً في وضع seed)
-  useEffect(()=>{ if(isSupabaseEnabled && session) useStore.getState().hydrate(); },[session]);
-
-  if(payMatch) return <PayCheckoutPage bookingId={decodeURIComponent(payMatch[1])}/>;
-
-  // بوابة الدخول (فقط عند تفعيل Supabase)
-  if(isSupabaseEnabled){
-    if(!authReady) return <Splash/>;
-    if(!session)   return <LoginPage/>;
-    if(!loaded)    return <Splash/>;
-  }
-
   return (
-    <div dir="rtl" lang="ar" className="flex min-h-screen"
-      style={{fontFamily:"'IBM Plex Sans Arabic',system-ui,sans-serif",background:B.bg}}>
-      <Sidebar active={activeView} onNav={nav} mobileOpen={mobileSidebar} onMobileClose={()=>setMobileSidebar(false)}
-        currentUser={currentUser} onSignOut={signOut}/>
-      <div className="flex-1 min-w-0" key={navNonce}>
-        {activeView==="hotels"   && <HotelsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="transport"&& <TransportPage onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="packages" && <PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="trips"    && <TripsPage packages={packages} transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="bookings"       && <BookingsPage packages={packages} trips={trips} onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="beneficiaries"  && <BeneficiariesPage bookings={bookings} onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="payments"       && <PaymentsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="tickets"        && <TicketsPage  onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="users"          && <UsersPage    onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="support"        && <SupportPage  onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {!knownViews.includes(activeView)&&<ComingSoonPage view={NAV_ITEMS.find(n=>n.view===activeView)?.label??""}/>}
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<CustomerApp/>}/>
+      <Route path="/admin/*" element={<AdminApp/>}/>
+      <Route path="/pay/:id" element={<PayRoute/>}/>
+      <Route path="*" element={<Navigate to="/" replace/>}/>
+    </Routes>
   );
 }

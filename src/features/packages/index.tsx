@@ -7,6 +7,7 @@ import { uid, distanceLabel } from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
 
 /* شعارات مميزات الباقة — قائمة يختار منها المستخدم */
@@ -97,8 +98,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
           <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم الباقة <span style={{color:B.gold}}>*</span></label>
             <input className={inp} style={ist} value={form.name} placeholder="مثال: عمرة مكة 3 أيام" onChange={e=>set("name",e.target.value)}/></div>
           <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الوجهة</label>
-            <select className={inp} style={ist} value={form.destination} onChange={e=>set("destination",e.target.value as PkgDest)}>
-              {DEST_OPTS.map(o=><option key={o}>{o}</option>)}</select>
+            <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/>
             <p className="text-xs mt-1.5" style={{color:B.muted}}>نوع المنتج يُحدَّد تلقائياً من المواصلة المرتبطة في تفاصيل الباقة.</p></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الأيام</label>
@@ -118,8 +118,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
           </div>
           <div className="rounded-xl p-4" style={{background:B.bg,border:`1px solid ${B.border}`}}>
             <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>أيام التشغيل المقترحة</label>
-            <select className={inp} style={ist} value={form.recurDay} onChange={e=>set("recurDay",e.target.value)}>
-              {RECUR_DAYS.map(d=><option key={d}>{d}</option>)}</select>
+            <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
             <p className="text-xs mt-2 flex items-center gap-1.5" style={{color:B.muted}}><CalendarDays size={12} style={{color:B.gold}}/>اقتراح فقط — تُحدَّد تواريخ الانطلاق الفعلية عند إطلاق الرحلات.</p>
           </div>
         </div>
@@ -352,11 +351,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   <input className={inp} style={ist} value={form.name} onChange={e=>set("name",e.target.value)}/></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>نوع المنتج</label>
-                    <select className={inp} style={ist} value={form.productType} onChange={e=>set("productType",e.target.value)}>
-                      {PRODUCT_TYPE_OPTS.map(o=><option key={o}>{o}</option>)}</select></div>
+                    <AppSelect value={form.productType} onChange={v=>set("productType",v)} options={PRODUCT_TYPE_OPTS.map(o=>({value:o,label:o}))}/></div>
                   <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الوجهة</label>
-                    <select className={inp} style={ist} value={form.destination} onChange={e=>set("destination",e.target.value as PkgDest)}>
-                      {DEST_OPTS.map(o=><option key={o}>{o}</option>)}</select></div>
+                    <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/></div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الأيام</label>
@@ -366,18 +363,15 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   
                 </div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحالة</label>
-                  <select className={inp} style={ist} value={form.status} onChange={e=>set("status",e.target.value as PkgStatus)}>
-                    <option value="active">نشطة</option><option value="draft">مسودة</option>
-                    <option value="hidden">مخفية</option><option value="suspended">موقوفة</option>
-                  </select></div>
+                  <AppSelect value={form.status} onChange={v=>set("status",v as PkgStatus)}
+                    options={[{value:"active",label:"نشطة"},{value:"draft",label:"مسودة"},{value:"hidden",label:"مخفية"},{value:"suspended",label:"موقوفة"}]}/></div>
               </div>
               {/* Suggested operating days */}
               <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <div><div className="text-sm font-bold" style={{color:B.black}}>أيام التشغيل المقترحة</div>
                   <div className="text-xs mt-0.5" style={{color:B.muted}}>اليوم الأسبوعي المقترح لتشغيل الباقة · التواريخ الفعلية تُحدد في الرحلات</div></div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اليوم المقترح</label>
-                  <select className={inp} style={ist} value={form.recurDay} onChange={e=>set("recurDay",e.target.value)}>
-                    {RECUR_DAYS.map(d=><option key={d}>{d}</option>)}</select></div>
+                  <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/></div>
               </div>
             </div>
             {/* RIGHT */}
@@ -385,13 +379,10 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               {/* Transport link */}
               <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <h3 className="text-sm font-bold" style={{color:B.black,margin:0}}>المواصلة المرتبطة</h3>
-                <select className={inp} style={ist} value={form.transportId} onChange={e=>{
-                  const t=transports.find(x=>x.id===e.target.value);
-                  setForm(f=>({...f,transportId:e.target.value,productType:t?(t.mode==="flight"?"طيران":t.vehicleType.includes("VIP")?"رحلة VIP":"حافلة"):f.productType}));
-                }}>
-                  <option value="">— اختر مواصلة —</option>
-                  {transports.map(t=><option key={t.id} value={t.id}>{t.name} · {t.vehicleType} · {t.seats} مقعد</option>)}
-                </select>
+                <AppSelect value={form.transportId} placeholder="اختر مواصلة" onChange={v=>{
+                  const t=transports.find(x=>x.id===v);
+                  setForm(f=>({...f,transportId:v,productType:t?(t.mode==="flight"?"طيران":t.vehicleType.includes("VIP")?"رحلة VIP":"حافلة"):f.productType}));
+                }} options={transports.map(t=>({value:t.id,label:`${t.name} · ${t.vehicleType} · ${t.seats} مقعد`}))}/>
                 {selTransport && (()=>{ const cover=selTransport.media?.find(m=>m.primary&&m.kind==="image")?.url||selTransport.media?.find(m=>m.kind==="image")?.url; return (
                   <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:`linear-gradient(135deg,${B.primary},${B.primaryDeep})`,border:"1px solid rgba(192,134,44,0.2)"}}>
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"rgba(255,255,255,0.08)"}}>
@@ -407,10 +398,8 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               {/* Hotel link */}
               <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <h3 className="text-sm font-bold" style={{color:B.black,margin:0}}>الفندق المرتبط</h3>
-                <select className={inp} style={ist} value={form.hotelId} onChange={e=>set("hotelId",e.target.value)}>
-                  <option value="">— اختر فندقاً —</option>
-                  {hotels.map(h=><option key={h.id} value={h.id}>{h.name} · {h.city} · {h.stars}★</option>)}
-                </select>
+                <AppSelect value={form.hotelId} placeholder="اختر فندقاً" onChange={v=>set("hotelId",v)}
+                  options={hotels.map(h=>({value:h.id,label:`${h.name} · ${h.city} · ${h.stars}★`}))}/>
                 {selHotel && (()=>{ const cover=selHotel.media?.find(m=>m.primary&&m.kind==="image")?.url||selHotel.media?.find(m=>m.kind==="image")?.url; return (
                   <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:B.bg,border:`1px solid ${B.border}`}}>
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"#fff",border:`1px solid ${B.border}`}}>

@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&amp;display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body { font-family: 'IBM Plex Sans Arabic', sans-serif; background: #F5F3EE; color: #16201b; }
+  .ta-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .ta-scroll { scrollbar-width: none; }
+  .msym { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1; letter-spacing: normal; text-transform: none; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; }
+  @keyframes taFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes taPop { 0% { transform: scale(.7); opacity: 0; } 60% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes taPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes taSheen { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
+  @keyframes taRing { 0% { transform: scale(.4); opacity: .55; } 100% { transform: scale(1.9); opacity: 0; } }
+  .ta-stage {
+    min-height: 100svh;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 0;
+    background: #F5F3EE;
+    overflow: hidden;
+  }
+  .ta-device-scene {
+    position: relative;
+    width: 100%;
+    min-height: 100svh;
+    background: #F5F3EE;
+  }
+  .ta-device-scene::before,
+  .ta-device-scene::after { content: none; }
+  .ta-phone {
+    position: relative;
+    width: 100%;
+    min-height: 100svh;
+    background: #F5F3EE;
+  }
+  .ta-phone::before,
+  .ta-phone::after { content: none; }
+  .ta-screen-shell {
+    position: relative;
+    width: 100%;
+    min-height: 100svh;
+    background: #F5F3EE;
+    border-radius: 0;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: none;
+  }
+  .ta-screen {
+    position: relative;
+    width: 100%;
+    min-height: 100svh;
+    max-width: 1180px;
+    margin: 0 auto;
+    background: #F5F3EE;
+    border-radius: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 0 1px rgba(6,56,42,.04);
+  }
+  @media (max-width: 720px) {
+    .ta-stage,
+    .ta-device-scene,
+    .ta-phone,
+    .ta-screen-shell,
+    .ta-screen { min-height: 100svh; }
+  }
+  @media (max-width: 430px) {
+    .ta-screen { width: 100%; box-shadow: none; }
+  }
+  @media (min-width: 1100px) {
+    .ta-stage {
+      padding: 0 clamp(24px, 4vw, 56px);
+      background: linear-gradient(180deg, #FBFAF6 0%, #F5F3EE 42%, #EFEAE0 100%);
+    }
+    .ta-screen {
+      min-height: 100svh;
+    }
+  }
+</style>
+</helmet>
+
+<div class="ta-stage">
+  <div class="ta-device-scene">
+
+    <div class="ta-phone">
+      <div class="ta-screen-shell">
+      <div class="ta-screen">
+
+        <!-- screens -->
+        <div style="position: relative; flex: 1; overflow: hidden;">
+
+          <!-- ============ SPLASH ============ -->
+          <sc-if value="{{ isSplash }}" hint-placeholder-val="{{ true }}">
+            <div style="position: absolute; inset: 0; background: linear-gradient(170deg, #0B5A41 0%, #073A2B 55%, #052017 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; overflow: hidden;">
+              <div style="position: absolute; inset: 0; background-image: url(assets/haram-gate.png); background-size: cover; background-position: center; opacity: .14; mix-blend-mode: luminosity;"></div>
+              <div style="position: absolute; top: -80px; left: -80px; width: 260px; height: 260px; border: 1px solid rgba(190,154,78,.25); border-radius: 50%;"></div>
+              <div style="position: absolute; bottom: -120px; right: -100px; width: 320px; height: 320px; border: 1px solid rgba(190,154,78,.18); border-radius: 50%;"></div>
+
+              <div style="position: relative; animation: taPop .8s cubic-bezier(.2,.7,.2,1) both; display: flex; flex-direction: column; align-items: center; gap: 22px;">
+                <div style="position: relative; width: 96px; height: 96px; border-radius: 18px; background: linear-gradient(150deg, #0d6b4d, #062a1f); border: 1px solid rgba(190,154,78,.55); display: flex; align-items: center; justify-content: center; box-shadow: 0 18px 40px -12px rgba(0,0,0,.6);">
+                  <div style="width: 40px; height: 40px; background: #0a0c0b; border-radius: 4px; box-shadow: inset 0 6px 0 -4px #BE9A4E;"></div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 38px; font-weight: 700; color: #fff; letter-spacing: -.5px;">تساهيل العمرة</div>
+                  <div style="margin-top: 8px; font-family: 'IBM Plex Sans'; font-size: 13px; font-weight: 500; letter-spacing: 6px; color: #BE9A4E;">TASAHEEL&nbsp;&nbsp;ALUMRAH</div>
+                </div>
+              </div>
+
+              <div style="position: absolute; bottom: 46px; left: 28px; right: 28px; display: flex; flex-direction: column; gap: 13px; animation: taFade 1s .4s both;">
+                <div style="text-align: center; font-size: 14.5px; color: rgba(255,255,255,.74);">{{ welcomeTagline }}</div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 7px; color: rgba(255,255,255,.5); font-size: 12px; margin: 4px 0 2px;">
+                  <span class="msym" style="font-size: 16px;">language</span>اختر لغة التطبيق · Choose your language
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <sc-for list="{{ langs }}" as="l" hint-placeholder-count="4">
+                    <div onClick="{{ l.pick }}" style="height: 54px; border-radius: 13px; background: {{ l.bg }}; border: {{ l.border }}; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; transition: all .15s;">
+                      <span style="font-size: 16.5px; font-weight: 700; color: {{ l.color }};">{{ l.label }}</span>
+                      <sc-if value="{{ l.active }}" hint-placeholder-val="{{ false }}"><span class="msym" style="font-size: 18px; color: #2a210b; font-variation-settings: 'FILL' 1;">check_circle</span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+                <div onClick="{{ startApp }}" style="height: 56px; border-radius: 13px; background: #fff; display: flex; align-items: center; justify-content: center; gap: 9px; color: #06382A; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; box-shadow: 0 14px 32px -12px rgba(0,0,0,.55);">
+                  {{ startLabel }}<span class="msym" style="font-size: 20px;">arrow_back</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ HOME ============ -->
+          <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+            <div class="ta-scroll" style="position: absolute; inset: 0; overflow-y: auto; background: #F5F3EE; padding-bottom: 96px;">
+
+              <!-- hero -->
+              <div style="position: relative; height: 340px; overflow: hidden;">
+                <div style="position: absolute; inset: 0; background-image: url(assets/kaaba.png); background-size: cover; background-position: center 38%;"></div>
+                <div style="position: absolute; inset: 0; background: linear-gradient(180deg, #0f0c08e2, rgba(7,58,43,.20) 30%, rgba(7,40,31,.55) 72%, #F5F3EE 100%)"></div>
+
+                <div style="position: relative; padding: 64px 22px 0; display: flex; align-items: center; justify-content: space-between;">
+                  
+                  <div onClick="{{ goProfile }}" style="width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,.16); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                    <span class="msym" style="font-size: 22px; color: #fff;">person</span>
+                  </div><div style="display: flex; align-items: center; gap: 11px;">
+                    
+                    <div>
+                      <div style="font-size: 22px; font-weight: 700; color: #d0bb8f; line-height: 1.1; text-align: center">تساهيل العمرة</div>
+                      <div style="font-family: 'IBM Plex Sans'; font-size: 8px; letter-spacing: 3px; color: rgba(190,154,78,.95);">TASAHEEL ALUMRAH</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="position: relative; padding: 26px 22px 0;">
+                  
+                  <div style="font-size: 30px; font-weight: 700; color: #bf9b52; line-height: 1.25; letter-spacing: -.5px; text-shadow: 0 2px 12px rgba(0,0,0,.3); text-align: center">لبيك اللهم عمرة</div>
+                  <div style="font-size: 15px; color: #fafafad9; margin-top: 8px; text-align: center">اختر رحلتك واحجز في أقل من ٣ خطوات</div>
+                </div>
+              </div>
+
+              <!-- trust row -->
+              <div style="margin: -8px 16px 0; background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; padding: 14px 8px; display: flex; box-shadow: 0 10px 26px -16px rgba(6,56,42,.32); position: relative; z-index: 2;">
+                <sc-for list="{{ trustItems }}" as="t" hint-placeholder-count="3">
+                  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; border-left: 1px solid #F0ECE3;">
+                    <span class="msym" style="font-size: 23px; color: #0B5A41;">{{ t.icon }}</span>
+                    <div style="font-size: 11.5px; font-weight: 600; color: #2a322e;">{{ t.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <!-- section header -->
+              <div style="display: flex; align-items: flex-end; justify-content: space-between; padding: 26px 20px 14px; flex-direction: row-reverse">
+                <div>
+                  <div style="font-size: 20px; font-weight: 700; color: #16201b;">الرحلات المتاحة</div>
+                  <div style="font-family: 'IBM Plex Sans'; font-size: 10px; letter-spacing: 3px; color: #BE9A4E; margin-top: 3px;">AVAILABLE TRIPS</div>
+                </div>
+                
+              </div>
+
+              <!-- trip cards -->
+              <div style="display: flex; flex-direction: column; gap: 18px; padding: 0 16px;">
+                <!-- بطاقة الرحلة الأولى -->
+                <div onClick="{{ tripA.open }}" style="background: #fff; border: 1px solid #ECE8DF; border-radius: 16px; overflow: hidden; box-shadow: 0 14px 30px -20px rgba(6,56,42,.4); cursor: pointer;">
+                  <div style="position: relative; height: 158px; overflow: hidden;">
+                    <div style="position: absolute; inset: 0; background-image: url({{ tripA.img }}); background-size: cover; background-position: center;"></div>
+                    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,40,31,.05) 30%, rgba(5,32,23,.78) 100%);"></div>
+                    <div style="position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 6px; background: rgba(190,154,78,.95); color: #2a210b; font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 6px;">
+                      <span class="msym" style="font-size: 14px;">event_repeat</span>{{ tripA.departDay }}
+                    </div>
+                    <div style="position: absolute; bottom: 12px; right: 14px; left: 14px;">
+                      <div style="font-size: 21px; font-weight: 700; color: #fff; text-align: center;">رحلة مكة</div>
+                      <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2.5px; color: rgba(190,154,78,.95); margin-top: 2px; text-align: center;">{{ tripA.cityEn }}</div>
+                    </div>
+                  </div>
+                  <div style="padding: 14px 16px 16px;">
+                    <div style="display: flex; gap: 16px; margin-bottom: 14px; flex-direction: row-reverse;">
+                      <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">schedule</span>{{ tripA.durLabel }}</div>
+                      <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">apartment</span>{{ tripA.hotelShort }}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 13px; border-top: 1px solid #F0ECE3;">
+                      <div>
+                        <div style="font-size: 10.5px; color: #8a948e;">تبدأ من</div>
+                        <div style="display: flex; align-items: baseline; gap: 4px;"><span style="font-size: 22px; font-weight: 700; color: #0B5A41;">{{ tripA.fromAr }}</span><span style="font-size: 12px; color: #0B5A41; font-weight: 600;">ر.س</span><span style="font-size: 11px; color: #9aa49d;">/ للفرد</span></div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 7px; background: #0B5A41; color: #fff; font-size: 14px; font-weight: 600; padding: 12px 18px; border-radius: 9px;">
+                        احجز الآن<span class="msym" style="font-size: 17px;">arrow_back</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- بطاقة الرحلة الثانية -->
+                <div onClick="{{ tripB.open }}" style="background: #fff; border: 1px solid #ECE8DF; border-radius: 16px; overflow: hidden; box-shadow: 0 14px 30px -20px rgba(6,56,42,.4); cursor: pointer;">
+                  <div style="position: relative; height: 158px; overflow: hidden;">
+                    <div style="position: absolute; inset: 0; background-image: url({{ tripB.img }}); background-size: cover; background-position: center;"></div>
+                    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,40,31,.05) 30%, rgba(5,32,23,.78) 100%);"></div>
+                    <div style="position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 6px; background: rgba(190,154,78,.95); color: #2a210b; font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 6px;">
+                      <span class="msym" style="font-size: 14px;">event_repeat</span>{{ tripB.departDay }}
+                    </div>
+                    <div style="position: absolute; bottom: 12px; right: 14px; left: 14px;">
+                      <div style="font-size: 21px; font-weight: 700; color: #fff; text-align: center;">رحلة مكة والمدينة</div>
+                      <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2.5px; color: rgba(190,154,78,.95); margin-top: 2px; text-align: center;">{{ tripB.cityEn }}</div>
+                    </div>
+                  </div>
+                  <div style="padding: 14px 16px 16px;">
+                    <div style="display: flex; gap: 16px; margin-bottom: 14px; flex-direction: row-reverse;">
+                      <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">schedule</span>{{ tripB.durLabel }}</div>
+                      <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">apartment</span>{{ tripB.hotelShort }}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 13px; border-top: 1px solid #F0ECE3;">
+                      <div>
+                        <div style="font-size: 10.5px; color: #8a948e;">تبدأ من</div>
+                        <div style="display: flex; align-items: baseline; gap: 4px;"><span style="font-size: 22px; font-weight: 700; color: #0B5A41;">{{ tripB.fromAr }}</span><span style="font-size: 12px; color: #0B5A41; font-weight: 600;">ر.س</span><span style="font-size: 11px; color: #9aa49d;">/ للفرد</span></div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 7px; background: #0B5A41; color: #fff; font-size: 14px; font-weight: 600; padding: 12px 18px; border-radius: 9px;">
+                        احجز الآن<span class="msym" style="font-size: 17px;">arrow_back</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="text-align: center; padding: 26px 20px 10px; color: #b3afa3; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <span class="msym" style="font-size: 15px;">verified_user</span>رحلة آمنة · إشراف وتنظيم على مدار الرحلة
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ TRIP DETAILS ============ -->
+          <sc-if value="{{ isTripDetails }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto;">
+
+                <div style="position: relative; height: 286px; overflow: hidden;">
+                  <div style="position: absolute; inset: 0; background-image: url({{ detTrip.heroImg }}); background-size: cover; background-position: center;"></div>
+                  <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,32,23,.5) 0%, rgba(5,32,23,.06) 34%, rgba(5,32,23,.72) 100%);"></div>
+                  <div style="position: absolute; top: 60px; right: 18px; left: 18px; display: flex; justify-content: space-between; flex-direction: row-reverse">
+                    <div onClick="{{ backToHome }}" style="width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,.18); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,.3); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                      <span class="msym" style="font-size: 23px; color: #fff;">arrow_forward</span>
+                    </div>
+                    
+                  </div>
+                  <div style="position: absolute; bottom: 18px; right: 20px; left: 20px;">
+                    <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(190,154,78,.95); color: #2a210b; font-size: 11.5px; font-weight: 700; padding: 5px 11px; border-radius: 6px; margin-bottom: 10px; text-align: center">
+                      <span class="msym" style="font-size: 14px;">event_repeat</span>{{ detTrip.departDay }}
+                    </div>
+                    <div style="font-size: 30px; font-weight: 700; color: #b8964d; line-height: 1.2; text-align: center; font-family: IBM Plex Sans Arabic">{{ detTrip.title }}</div>
+                    <div style="font-family: 'IBM Plex Sans'; font-size: 10px; letter-spacing: 3px; color: rgba(190,154,78,.95); margin-top: 4px; text-align: center">{{ detTrip.cityEn }}</div>
+                  </div>
+                </div>
+
+                <div style="padding: 18px 18px 20px;">
+                  <!-- meta chips -->
+                  <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+                    <div style="flex: 1; background: #fff; border: 1px solid #ECE8DF; border-radius: 12px; padding: 13px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <span class="msym" style="font-size: 21px; color: #0B5A41;">calendar_month</span>
+                      <div style="font-size: 13px; font-weight: 600; color: #1f2a24;">{{ detTrip.durLabel }}</div>
+                    </div>
+                    <div style="flex: 1; background: #fff; border: 1px solid #ECE8DF; border-radius: 12px; padding: 13px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <span class="msym" style="font-size: 21px; color: #0B5A41;">apartment</span>
+                      <div style="font-size: 13px; font-weight: 600; color: #1f2a24;">{{ detTrip.hotelShort }}</div>
+                    </div>
+                    <div style="flex: 1; background: #fff; border: 1px solid #ECE8DF; border-radius: 12px; padding: 13px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <span class="msym" style="font-size: 21px; color: #0B5A41;">directions_bus</span>
+                      <div style="font-size: 13px; font-weight: 600; color: #1f2a24;">من الدمام</div>
+                    </div>
+                  </div>
+
+                  <!-- itinerary -->
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-direction: row-reverse">
+                    <span class="msym" style="font-size: 21px; color: #BE9A4E;">route</span>
+                    <div style="font-size: 18px; font-weight: 700; color: #16201b;">برنامج الرحلة اليومي</div>
+                  </div>
+                  <div style="margin-bottom: 26px;">
+                    <sc-for list="{{ detItinerary }}" as="it" hint-placeholder-count="4">
+                      <div style="display: flex; gap: 14px; flex-direction: row-reverse">
+                        <div style="display: flex; flex-direction: column; align-items: center;">
+                          <div style="width: 40px; height: 40px; border-radius: 11px; background: #E8F0EC; border: 1px solid #D2E2D9; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <span class="msym" style="font-size: 21px; color: #0B5A41;">{{ it.icon }}</span>
+                          </div>
+                          <sc-if value="{{ it.notLast }}" hint-placeholder-val="{{ true }}">
+                            <div style="width: 2px; flex: 1; min-height: 26px; background: linear-gradient(#CFE0D7, #E8E4DB); margin: 4px 0;"></div>
+                          </sc-if>
+                        </div>
+                        <div style="flex: 1; padding-bottom: 18px;">
+                          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-direction: row-reverse">
+                            <span style="font-size: 14px; font-weight: 700; color: #0B5A41;">{{ it.day }}</span>
+                            <sc-if value="{{ it.hasTime }}" hint-placeholder-val="{{ true }}">
+                              <span style="font-size: 11px; color: #8a948e; background: #F0ECE3; padding: 2px 8px; border-radius: 5px; text-align: right">{{ it.time }}</span>
+                            </sc-if>
+                          </div>
+                          <div style="font-size: 15px; font-weight: 600; color: #1f2a24; margin-bottom: 2px; text-align: right">{{ it.title }}</div>
+                          <div style="font-size: 13px; color: #6b756e; line-height: 1.5; text-align: right">{{ it.desc }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+
+                  <!-- hotel -->
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+                    <span class="msym" style="font-size: 21px; color: #BE9A4E;">hotel</span>
+                    <div style="font-size: 18px; font-weight: 700; color: #16201b;">الإقامة</div>
+                  </div>
+                  <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; overflow: hidden; margin-bottom: 26px; box-shadow: 0 12px 28px -22px rgba(6,56,42,.4);">
+                    <!-- building banner -->
+                    <div style="position: relative; height: 176px; overflow: hidden;">
+                      <div style="position: absolute; inset: 0; background-image: url({{ detHotelBuilding }}); background-size: cover; background-position: center 28%;"></div>
+                      <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,32,23,.05) 40%, rgba(5,32,23,.82) 100%);"></div>
+                      <div style="position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 5px; background: rgba(190,154,78,.96); color: #2a210b; font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 7px;">
+                        <span class="msym" style="font-size: 14px; font-variation-settings: 'FILL' 1;">star</span>٤ نجوم
+                      </div>
+                      <div style="position: absolute; bottom: 13px; right: 16px; left: 16px; display: flex; align-items: flex-end; justify-content: space-between">
+                        <div style="display: flex; gap: 2px;">
+                          <sc-for list="{{ detStars }}" as="s" hint-placeholder-count="4">
+                            <span class="msym" style="font-size: 15px; color: #E7C97A; font-variation-settings: 'FILL' 1;">star</span>
+                          </sc-for>
+                        </div><div>
+                          <div style="font-size: 18px; font-weight: 700; color: #fff; text-align: center">{{ detTrip.hotel.name }}</div>
+                          <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2.5px; color: rgba(190,154,78,.95); margin-top: 3px;">{{ detTrip.hotel.nameEn }} · HOTEL</div>
+                        </div>
+                        
+                      </div>
+                    </div>
+
+                    <div style="padding: 14px 16px 16px;">
+                      <div style="display: flex; align-items: center; gap: 6px; color: #6b756e; font-size: 13px; margin-bottom: 14px;">
+                        <span class="msym" style="font-size: 17px; color: #0B5A41;">location_on</span>{{ detTrip.hotel.dist }}
+                      </div>
+
+                      <!-- photo gallery -->
+                      <div class="ta-scroll" style="display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px 16px; padding: 2px 16px 4px;">
+                        <sc-for list="{{ detHotelPhotos }}" as="ph" hint-placeholder-count="4">
+                          <div style="position: relative; width: 152px; height: 110px; border-radius: 11px; overflow: hidden; flex-shrink: 0; border: 1px solid #ECE8DF;">
+                            <div style="position: absolute; inset: 0; background-image: url({{ ph.img }}); background-size: cover; background-position: center;"></div>
+                            <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 50%, rgba(5,32,23,.7));"></div>
+                            <div style="position: absolute; bottom: 8px; right: 10px; font-size: 11.5px; font-weight: 600; color: #fff;">{{ ph.cap }}</div>
+                          </div>
+                        </sc-for>
+                      </div>
+
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <sc-for list="{{ detAmen }}" as="a" hint-placeholder-count="4">
+                          <div style="display: flex; align-items: center; gap: 8px; background: #F7F5F0; border-radius: 8px; padding: 9px 11px; flex-direction: column">
+                            <span class="msym" style="font-size: 18px; color: #0B5A41;">{{ a.icon }}</span>
+                            <span style="font-size: 12.5px; color: #3a443e; font-weight: 500; text-align: right">{{ a.label }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- features -->
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-direction: row-reverse">
+                    <span class="msym" style="font-size: 21px; color: #BE9A4E;">verified</span>
+                    <div style="font-size: 18px; font-weight: 700; color: #16201b;">مميزات الرحلة</div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 11px;">
+                    <sc-for list="{{ detFeatures }}" as="f" hint-placeholder-count="4">
+                      <div style="display: flex; align-items: center; gap: 11px; flex-direction: row-reverse">
+                        <span class="msym" style="font-size: 21px; color: #0B5A41; font-variation-settings: 'FILL' 1;">check_circle</span>
+                        <span style="font-size: 14px; color: #2a342e;">{{ f }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <!-- footer -->
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; display: flex; align-items: center; gap: 14px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3);">
+                <div style="flex-shrink: 0;">
+                  <div style="font-size: 10.5px; color: #8a948e;">تبدأ من</div>
+                  <div style="display: flex; align-items: baseline; gap: 3px;"><span style="font-size: 23px; font-weight: 700; color: #0B5A41;">{{ detFromAr }}</span><span style="font-size: 12px; color: #0B5A41; font-weight: 600;">ر.س</span></div>
+                </div>
+                <div onClick="{{ goRoomSel }}" style="flex: 1; height: 54px; background: #0B5A41; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 22px -10px rgba(11,90,65,.6);">
+                  اختر نوع الغرفة<span class="msym" style="font-size: 19px;">arrow_back</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ BOOKING REVIEW ============ -->
+          <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div style="padding: 60px 18px 14px; display: flex; align-items: center; gap: 12px;">
+                <div onClick="{{ backToPax }}" style="width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid #E9E5DB; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #16201b;">arrow_forward</span>
+                </div>
+                <div>
+                  <div style="font-size: 18px; font-weight: 700; color: #16201b;">مراجعة الحجز</div>
+                  <div style="font-size: 12px; color: #8a948e;">الخطوة ٣ من ٣</div>
+                </div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 6px 18px 18px;">
+                <!-- trip -->
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+                  <div style="display: flex; gap: 13px; padding: 13px;">
+                    <div style="width: 76px; height: 76px; border-radius: 11px; background-image: url({{ revTrip.img }}); background-size: cover; background-position: center; flex-shrink: 0;"></div>
+                    <div style="flex: 1;">
+                      <div style="font-size: 16px; font-weight: 700; color: #16201b;">{{ revTrip.title }}</div>
+                      <div style="display: flex; align-items: center; gap: 6px; color: #6b756e; font-size: 12.5px; margin-top: 6px;"><span class="msym" style="font-size: 16px; color: #0B5A41;">event_repeat</span>{{ revDepartDay }}</div>
+                      <div style="display: flex; align-items: center; gap: 6px; color: #6b756e; font-size: 12.5px; margin-top: 4px;"><span class="msym" style="font-size: 16px; color: #0B5A41;">schedule</span>{{ revDur }}</div>
+                    </div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-top: 1px solid #F0ECE3; background: #FBFAF6;">
+                    <span class="msym" style="font-size: 18px; color: #0B5A41;">king_bed</span>
+                    <span style="font-size: 13.5px; color: #3a443e; font-weight: 600;">{{ revRoom.name }}</span>
+                  </div>
+                </div>
+
+                <!-- passengers -->
+                <div style="display: flex; align-items: center; gap: 7px; margin: 18px 2px 12px;">
+                  <span class="msym" style="font-size: 19px; color: #BE9A4E;">groups</span>
+                  <div style="font-size: 15px; font-weight: 700; color: #16201b;">المعتمرون ({{ revPaxCountAr }})</div>
+                </div>
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; padding: 4px 14px;">
+                  <sc-for list="{{ revPax }}" as="p" hint-placeholder-count="1">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F4F1EA;">
+                      <div style="font-size: 14.5px; font-weight: 600; color: #1f2a24;">{{ p.name }}</div>
+                      <div style="font-size: 12px; color: #0B5A41; background: #E8F0EC; padding: 3px 10px; border-radius: 6px;">{{ p.relation }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <!-- price -->
+                <div style="display: flex; align-items: center; gap: 7px; margin: 18px 2px 12px;">
+                  <span class="msym" style="font-size: 19px; color: #BE9A4E;">receipt_long</span>
+                  <div style="font-size: 15px; font-weight: 700; color: #16201b;">ملخص التكلفة</div>
+                </div>
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; padding: 16px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 11px;">
+                    <span style="font-size: 13.5px; color: #6b756e;">سعر الفرد ({{ revRoom.name }})</span>
+                    <span style="font-size: 14px; font-weight: 600; color: #1f2a24;">{{ revPerAr }} ر.س</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 11px;">
+                    <span style="font-size: 13.5px; color: #6b756e;">عدد المعتمرين</span>
+                    <span style="font-size: 14px; font-weight: 600; color: #1f2a24;">× {{ revPaxCountAr }}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 13px; border-top: 1px dashed #E2DDD1;">
+                    <span style="font-size: 15px; font-weight: 700; color: #16201b;">الإجمالي</span>
+                    <div style="display: flex; align-items: baseline; gap: 4px;"><span style="font-size: 24px; font-weight: 700; color: #0B5A41;">{{ revTotalAr }}</span><span style="font-size: 13px; font-weight: 600; color: #0B5A41;">ر.س</span></div>
+                  </div>
+                  <div style="font-size: 11.5px; color: #9aa49d; text-align: left; margin-top: 4px;">شامل ضريبة القيمة المضافة</div>
+                </div>
+
+                <!-- terms -->
+                <div onClick="{{ toggleAgree }}" style="display: flex; align-items: flex-start; gap: 11px; margin: 18px 2px 4px; cursor: pointer;">
+                  <div style="width: 24px; height: 24px; border-radius: 7px; border: {{ agreeBorder }}; background: {{ agreeBg }}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;">
+                    <sc-if value="{{ agree }}" hint-placeholder-val="{{ false }}"><span class="msym" style="font-size: 18px; color: #fff;">check</span></sc-if>
+                  </div>
+                  <div style="font-size: 13px; color: #5a655d; line-height: 1.6;">أوافق على <span style="color: #0B5A41; font-weight: 600;">الشروط والأحكام</span> وسياسة الإلغاء الخاصة بتساهيل العمرة.</div>
+                </div>
+              </div>
+
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; display: flex; align-items: center; gap: 14px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3);">
+                <div style="flex-shrink: 0;">
+                  <div style="font-size: 11px; color: #8a948e;">الإجمالي</div>
+                  <div style="display: flex; align-items: baseline; gap: 3px;"><span style="font-size: 21px; font-weight: 700; color: #0B5A41;">{{ revTotalAr }}</span><span style="font-size: 12px; font-weight: 600; color: #0B5A41;">ر.س</span></div>
+                </div>
+                <div onClick="{{ submitBooking }}" style="flex: 1; height: 54px; background: {{ submitBg }}; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;">
+                  تأكيد وإرسال الطلب<span class="msym" style="font-size: 19px;">send</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ BOOKING SUBMITTED ============ -->
+          <sc-if value="{{ isSubmitted }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; background: linear-gradient(180deg, #0B5A41 0%, #073A2B 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; overflow: hidden;">
+              <div style="position: absolute; inset: 0; background-image: url(assets/tawaf.png); background-size: cover; background-position: center; opacity: .1; mix-blend-mode: luminosity;"></div>
+
+              <div style="position: relative; width: 118px; height: 118px; display: flex; align-items: center; justify-content: center; margin-bottom: 30px;">
+                <div style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(190,154,78,.6); animation: taRing 2s infinite;"></div>
+                <div style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(190,154,78,.4); animation: taRing 2s .6s infinite;"></div>
+                <div style="width: 96px; height: 96px; border-radius: 50%; background: linear-gradient(150deg, #16A06E, #0B5A41); display: flex; align-items: center; justify-content: center; box-shadow: 0 16px 40px -10px rgba(0,0,0,.5); animation: taPop .7s cubic-bezier(.2,.7,.2,1) both;">
+                  <span class="msym" style="font-size: 56px; color: #fff;">check</span>
+                </div>
+              </div>
+
+              <div style="position: relative; text-align: center; animation: taFade .8s .2s both;">
+                <div style="font-size: 25px; font-weight: 700; color: #fff;">تم إرسال طلبك بنجاح</div>
+                <div style="font-size: 14.5px; color: rgba(255,255,255,.78); margin-top: 10px; line-height: 1.6; max-width: 290px;">سيقوم فريق تساهيل العمرة بمراجعة طلبك والتواصل معك لتأكيد الحجز.</div>
+              </div>
+
+              <div style="position: relative; width: 100%; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(8px); border-radius: 16px; padding: 18px; margin: 26px 0 14px; animation: taFade .8s .35s both;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div>
+                    <div style="font-size: 11.5px; color: rgba(255,255,255,.6);">رقم الحجز</div>
+                    <div style="font-family: 'IBM Plex Sans'; font-size: 21px; font-weight: 700; color: #fff; letter-spacing: 1px; margin-top: 3px;">{{ bookingNo }}</div>
+                  </div>
+                  <div style="width: 44px; height: 44px; border-radius: 11px; background: rgba(190,154,78,.95); display: flex; align-items: center; justify-content: center;"><span class="msym" style="font-size: 22px; color: #2a210b;">content_copy</span></div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.14);">
+                  <span class="msym" style="font-size: 19px; color: #BE9A4E;">schedule</span>
+                  <span style="font-size: 13px; color: rgba(255,255,255,.85);">وقت الرد المتوقع: خلال ٢٤ ساعة</span>
+                </div>
+              </div>
+
+              <div style="position: relative; width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 12px; animation: taFade .8s .5s both;">
+                <div onClick="{{ goTrack }}" style="height: 54px; background: #fff; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #0B5A41; font-size: 16px; font-weight: 700; cursor: pointer;">
+                  <span class="msym" style="font-size: 20px;">timeline</span>تتبّع حالة الحجز
+                </div>
+                <div onClick="{{ goBackHome }}" style="height: 50px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.8); font-size: 14.5px; font-weight: 500; cursor: pointer;">العودة للرئيسية</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ PASSENGER LIST ============ -->
+          <sc-if value="{{ isPaxList }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div style="padding: 60px 18px 14px; display: flex; align-items: center; gap: 12px;">
+                <div onClick="{{ backToRoom }}" style="width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid #E9E5DB; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #16201b;">arrow_forward</span>
+                </div>
+                <div>
+                  <div style="font-size: 18px; font-weight: 700; color: #16201b;">بيانات المعتمرين</div>
+                  <div style="font-size: 12px; color: #8a948e;">الخطوة ٢ من ٣</div>
+                </div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 6px 18px 18px;">
+                <div style="display: flex; align-items: center; gap: 10px; background: #E8F0EC; border: 1px solid #D5E4DC; border-radius: 12px; padding: 13px 14px; margin-bottom: 18px;">
+                  <span class="msym" style="font-size: 21px; color: #0B5A41;">family_restroom</span>
+                  <div style="font-size: 13px; color: #2a443a; line-height: 1.5;">يمكنك الحجز لنفسك أو إضافة أفراد عائلتك في نفس الحجز.</div>
+                </div>
+
+                <sc-if value="{{ hasPax }}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+                    <sc-for list="{{ paxList }}" as="p" hint-placeholder-count="1">
+                      <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; padding: 14px; box-shadow: 0 8px 20px -16px rgba(6,56,42,.3);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                          <div style="width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(150deg, #0d6b4d, #062a1f); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <span style="font-size: 20px; font-weight: 700; color: #fff;">{{ p.initials }}</span>
+                          </div>
+                          <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <div style="font-size: 15.5px; font-weight: 700; color: #16201b;">{{ p.name }}</div>
+                              <div style="font-size: 11px; font-weight: 600; color: #0B5A41; background: #E8F0EC; padding: 2px 8px; border-radius: 5px;">{{ p.relation }}</div>
+                            </div>
+                            <div style="font-size: 12.5px; color: #8a948e; margin-top: 4px;">الهوية {{ p.idAr }}</div>
+                          </div>
+                          <div style="display: flex; gap: 6px;">
+                            <div onClick="{{ p.edit }}" style="width: 38px; height: 38px; border-radius: 10px; background: #F4F1EA; display: flex; align-items: center; justify-content: center; cursor: pointer;"><span class="msym" style="font-size: 19px; color: #5a655d;">edit</span></div>
+                            <div onClick="{{ p.del }}" style="width: 38px; height: 38px; border-radius: 10px; background: #FBEFEE; display: flex; align-items: center; justify-content: center; cursor: pointer;"><span class="msym" style="font-size: 19px; color: #B23B3B;">delete</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ hasPax }}" hint-placeholder-val="{{ false }}">
+                  <div></div>
+                </sc-if>
+
+                <div onClick="{{ addPax }}" style="border: 1.5px dashed #BBC6BD; border-radius: 14px; padding: 16px; display: flex; align-items: center; justify-content: center; gap: 9px; cursor: pointer; color: #0B5A41; background: #FBFAF6;">
+                  <span class="msym" style="font-size: 22px;">person_add</span>
+                  <span style="font-size: 15px; font-weight: 600;">إضافة معتمر</span>
+                </div>
+              </div>
+
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; display: flex; align-items: center; gap: 14px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3);">
+                <div style="flex-shrink: 0;">
+                  <div style="font-size: 11px; color: #8a948e;">عدد المعتمرين</div>
+                  <div style="font-size: 17px; font-weight: 700; color: #16201b;">{{ paxCountAr }} أشخاص</div>
+                </div>
+                <div onClick="{{ goReview }}" style="flex: 1; height: 54px; background: #0B5A41; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 22px -10px rgba(11,90,65,.6);">
+                  مراجعة الحجز<span class="msym" style="font-size: 19px;">arrow_back</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ PASSENGER FORM ============ -->
+          <sc-if value="{{ isPaxForm }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div style="padding: 60px 18px 14px; display: flex; align-items: center; gap: 12px;">
+                <div onClick="{{ cancelForm }}" style="width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid #E9E5DB; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #16201b;">close</span>
+                </div>
+                <div style="font-size: 18px; font-weight: 700; color: #16201b;">بيانات المعتمر</div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 8px 18px 18px;">
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 9px;">صلة القرابة</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px;">
+                  <sc-for list="{{ relChips }}" as="c" hint-placeholder-count="6">
+                    <div onClick="{{ c.pick }}" style="padding: 9px 16px; border-radius: 9px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: {{ c.border }}; background: {{ c.bg }}; color: {{ c.color }};">{{ c.label }}</div>
+                  </sc-for>
+                </div>
+
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 8px;">الاسم الكامل</div>
+                <input value="{{ draftVals.name }}" onChange="{{ onName }}" placeholder="الاسم كما في الهوية" style="width: 100%; height: 52px; border: 1px solid #DDD8CC; border-radius: 10px; background: #fff; padding: 0 14px; font-size: 15px; font-family: inherit; color: #16201b; outline: none; margin-bottom: 18px;" style-focus="border:1px solid #0B5A41; box-shadow:0 0 0 3px rgba(11,90,65,.1);">
+
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 8px;">رقم الجوال</div>
+                <input value="{{ draftVals.mobile }}" onChange="{{ onMobile }}" inputmode="tel" placeholder="05XXXXXXXX" style="width: 100%; height: 52px; border: 1px solid #DDD8CC; border-radius: 10px; background: #fff; padding: 0 14px; font-size: 15px; font-family: inherit; color: #16201b; outline: none; margin-bottom: 18px; direction: ltr; text-align: right;" style-focus="border:1px solid #0B5A41; box-shadow:0 0 0 3px rgba(11,90,65,.1);">
+
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 8px;">البريد الإلكتروني</div>
+                <input value="{{ draftVals.email }}" onChange="{{ onEmail }}" inputmode="email" placeholder="example@email.com" style="width: 100%; height: 52px; border: 1px solid #DDD8CC; border-radius: 10px; background: #fff; padding: 0 14px; font-size: 15px; font-family: inherit; color: #16201b; outline: none; margin-bottom: 18px; direction: ltr; text-align: right;" style-focus="border:1px solid #0B5A41; box-shadow:0 0 0 3px rgba(11,90,65,.1);" />
+
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 8px;">رقم الهوية / الإقامة</div>
+                <input value="{{ draftVals.idn }}" onChange="{{ onIdn }}" inputmode="numeric" placeholder="١٠XXXXXXXX" style="width: 100%; height: 52px; border: 1px solid #DDD8CC; border-radius: 10px; background: #fff; padding: 0 14px; font-size: 15px; font-family: inherit; color: #16201b; outline: none; margin-bottom: 18px; direction: ltr; text-align: right;" style-focus="border:1px solid #0B5A41; box-shadow:0 0 0 3px rgba(11,90,65,.1);">
+
+                <div style="font-size: 13px; font-weight: 600; color: #3a443e; margin-bottom: 8px;">تاريخ الميلاد</div>
+                <div style="position: relative; margin-bottom: 8px;">
+                  <input value="{{ draftVals.birth }}" onChange="{{ onBirth }}" placeholder="السنة / الشهر / اليوم" style="width: 100%; height: 52px; border: 1px solid #DDD8CC; border-radius: 10px; background: #fff; padding: 0 44px 0 14px; font-size: 15px; font-family: inherit; color: #16201b; outline: none;" style-focus="border:1px solid #0B5A41; box-shadow:0 0 0 3px rgba(11,90,65,.1);">
+                  <span class="msym" style="position: absolute; left: 14px; top: 15px; font-size: 22px; color: #9aa49d;">calendar_month</span>
+                </div>
+              </div>
+
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3);">
+                <div onClick="{{ savePax }}" style="height: 54px; background: {{ saveBg }}; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;">
+                  <span class="msym" style="font-size: 20px;">check</span>حفظ البيانات
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ ROOM SELECTION ============ -->
+          <sc-if value="{{ isRoom }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div style="padding: 60px 18px 14px; display: flex; align-items: center; gap: 12px; background: #F5F3EE;">
+                <div onClick="{{ backToDetails }}" style="width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid #E9E5DB; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #16201b;">arrow_forward</span>
+                </div>
+                <div>
+                  <div style="font-size: 18px; font-weight: 700; color: #16201b;">اختر نوع الغرفة</div>
+                  <div style="font-size: 12px; color: #8a948e;">الخطوة ١ من ٣</div>
+                </div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 10px 18px 18px;">
+                <div style="font-size: 13.5px; color: #6b756e; margin-bottom: 18px; line-height: 1.6;">السعر لكل فرد · يشمل المواصلات والإقامة والتنظيم خلال الرحلة.</div>
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  <sc-for list="{{ roomCards }}" as="r" hint-placeholder-count="2">
+                    <div onClick="{{ r.pick }}" style="position: relative; background: {{ r.cardBg }}; border: {{ r.border }}; border-radius: 16px; overflow: hidden; cursor: pointer; transition: all .15s; box-shadow: {{ r.shadow }};">
+                      <!-- photo banner -->
+                      <div style="position: relative; height: 138px; overflow: hidden;">
+                        <div style="position: absolute; inset: 0; background-image: url({{ r.photo }}); background-size: cover; background-position: center;"></div>
+                        <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,32,23,.18) 0%, rgba(5,32,23,.05) 38%, rgba(5,32,23,.78) 100%);"></div>
+                        <sc-if value="{{ r.tagShow }}" hint-placeholder-val="{{ false }}">
+                          <div style="position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 5px; background: #BE9A4E; color: #2a210b; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 6px;"><span class="msym" style="font-size: 13px; font-variation-settings: 'FILL' 1;">local_fire_department</span>{{ r.tag }}</div>
+                        </sc-if>
+                        <div style="position: absolute; top: 12px; left: 12px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.92); border: {{ r.radio }}; display: flex; align-items: center; justify-content: center;">
+                          <sc-if value="{{ r.active }}" hint-placeholder-val="{{ false }}"><div style="width: 14px; height: 14px; border-radius: 50%; background: #0B5A41;"></div></sc-if>
+                        </div>
+                        <div style="position: absolute; bottom: 11px; right: 14px; left: 14px; display: flex; align-items: flex-end; justify-content: space-between;">
+                          <div>
+                            <div style="font-size: 18px; font-weight: 700; color: #fff;">{{ r.name }}</div>
+                            <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2px; color: rgba(190,154,78,.95); margin-top: 2px;">{{ r.nameEn }}</div>
+                          </div>
+                          <span class="msym" style="font-size: 22px; color: rgba(255,255,255,.9);">{{ r.icon }}</span>
+                        </div>
+                      </div>
+                      <!-- content -->
+                      <div style="padding: 13px 16px 15px;">
+                        <div style="font-size: 13px; color: #6b756e; line-height: 1.5; margin-bottom: 11px;">{{ r.desc }}</div>
+                        <div style="display: flex; align-items: baseline; gap: 4px;">
+                          <span style="font-size: 24px; font-weight: 700; color: #0B5A41;">{{ r.priceAr }}</span>
+                          <span style="font-size: 13px; color: #0B5A41; font-weight: 600;">ر.س</span>
+                          <span style="font-size: 12px; color: #9aa49d;">/ للفرد</span>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3);">
+                <div onClick="{{ goPaxFromRoom }}" style="height: 54px; background: #0B5A41; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 22px -10px rgba(11,90,65,.6);">
+                  متابعة · بيانات المعتمرين<span class="msym" style="font-size: 19px;">arrow_back</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ MY BOOKINGS ============ -->
+          <sc-if value="{{ isMyBookings }}" hint-placeholder-val="{{ false }}">
+            <div class="ta-scroll" style="position: absolute; inset: 0; overflow-y: auto; background: #F5F3EE; padding-bottom: 96px;">
+              <div style="padding: 62px 20px 18px;">
+                <div style="font-size: 25px; font-weight: 700; color: #16201b;">حجوزاتي</div>
+                <div style="font-family: 'IBM Plex Sans'; font-size: 10px; letter-spacing: 3px; color: #BE9A4E; margin-top: 3px;">MY BOOKINGS</div>
+              </div>
+
+              <sc-if value="{{ hasBooking }}" hint-placeholder-val="{{ false }}">
+                <div style="padding: 0 18px;">
+                  <div onClick="{{ myBooking.open }}" style="background: #fff; border: 1px solid #ECE8DF; border-radius: 16px; overflow: hidden; box-shadow: 0 14px 30px -20px rgba(6,56,42,.4); cursor: pointer;">
+                    <div style="position: relative; height: 116px; overflow: hidden;">
+                      <div style="position: absolute; inset: 0; background-image: url({{ myBooking.img }}); background-size: cover; background-position: center;"></div>
+                      <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,32,23,.1), rgba(5,32,23,.78));"></div>
+                      <div style="position: absolute; top: 12px; right: 14px; display: flex; align-items: center; gap: 6px; background: {{ myBooking.chipBg }}; color: {{ myBooking.chipColor }}; font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 20px;">
+                        <span class="msym" style="font-size: 14px;">{{ myBooking.chipIcon }}</span>{{ myBooking.statusAr }}
+                      </div>
+                      <div style="position: absolute; bottom: 12px; right: 14px;">
+                        <div style="font-size: 18px; font-weight: 700; color: #fff;">{{ myBooking.title }}</div>
+                        <div style="font-family: 'IBM Plex Sans'; font-size: 12px; color: rgba(255,255,255,.85); letter-spacing: .5px;">{{ myBooking.no }}</div>
+                      </div>
+                    </div>
+                    <div style="padding: 13px 16px; display: flex; align-items: center; justify-content: space-between;">
+                      <div style="display: flex; gap: 16px;">
+                        <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">king_bed</span>{{ myBooking.room }}</div>
+                        <div style="display: flex; align-items: center; gap: 6px; color: #55615a; font-size: 12.5px;"><span class="msym" style="font-size: 17px; color: #0B5A41;">group</span>{{ myBooking.paxAr }} معتمرين</div>
+                      </div>
+                      <span class="msym" style="font-size: 20px; color: #BE9A4E;">arrow_back</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ noBooking }}" hint-placeholder-val="{{ true }}">
+                <div style="padding: 60px 30px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                  <div style="width: 96px; height: 96px; border-radius: 50%; background: #EBEFE9; display: flex; align-items: center; justify-content: center; margin-bottom: 22px;">
+                    <span class="msym" style="font-size: 46px; color: #9DB3A4;">luggage</span>
+                  </div>
+                  <div style="font-size: 18px; font-weight: 700; color: #16201b;">لا توجد حجوزات بعد</div>
+                  <div style="font-size: 14px; color: #8a948e; margin-top: 8px; line-height: 1.6;">ابدأ رحلتك الإيمانية واحجز عمرتك الأولى مع تساهيل العمرة.</div>
+                  <div onClick="{{ goExplore }}" style="margin-top: 22px; height: 50px; padding: 0 26px; background: #0B5A41; border-radius: 12px; display: flex; align-items: center; gap: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;">تصفّح الرحلات<span class="msym" style="font-size: 18px;">arrow_back</span></div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- ============ BOOKING DETAILS / TRACK ============ -->
+          <sc-if value="{{ isBookingDetails }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; background: #F5F3EE;">
+              <div style="padding: 60px 18px 14px; display: flex; align-items: center; gap: 12px;">
+                <div onClick="{{ backToMyBookings }}" style="width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid #E9E5DB; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #16201b;">arrow_forward</span>
+                </div>
+                <div style="font-size: 18px; font-weight: 700; color: #16201b;">تتبّع الحجز</div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 6px 18px 18px;">
+                <!-- booking no banner -->
+                <div style="background: linear-gradient(150deg, #0B5A41, #073A2B); border-radius: 16px; padding: 18px; margin-bottom: 20px; position: relative; overflow: hidden;">
+                  <div style="position: absolute; top: -30px; left: -20px; width: 130px; height: 130px; border: 1px solid rgba(190,154,78,.25); border-radius: 50%;"></div>
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start; position: relative;">
+                    <div>
+                      <div style="font-size: 11.5px; color: rgba(255,255,255,.6);">رقم الحجز</div>
+                      <div style="font-family: 'IBM Plex Sans'; font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 1px; margin-top: 3px;">{{ bdNo }}</div>
+                      <div style="font-size: 13.5px; color: rgba(255,255,255,.85); margin-top: 8px;">{{ bdTrip.title }}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px; background: rgba(190,154,78,.95); color: #2a210b; font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 20px;">
+                      <span class="msym" style="font-size: 14px;">fiber_manual_record</span>{{ bdCurrentAr }}
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 7px; margin: 0 2px 16px;">
+                  <span class="msym" style="font-size: 19px; color: #BE9A4E;">timeline</span>
+                  <div style="font-size: 16px; font-weight: 700; color: #16201b;">مراحل الحجز</div>
+                </div>
+
+                <!-- stepper -->
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 16px; padding: 18px 16px 6px;">
+                  <sc-for list="{{ bdSteps }}" as="s" hint-placeholder-count="6">
+                    <div style="display: flex; gap: 14px;">
+                      <div style="display: flex; flex-direction: column; align-items: center;">
+                        <div style="width: 38px; height: 38px; border-radius: 50%; background: {{ s.nodeBg }}; border: {{ s.nodeBorder }}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                          <span class="msym" style="font-size: 20px; color: {{ s.nodeIconColor }}; font-variation-settings: 'FILL' 1;">{{ s.nodeIcon }}</span>
+                        </div>
+                        <sc-if value="{{ s.notLast }}" hint-placeholder-val="{{ true }}">
+                          <div style="width: 2px; flex: 1; min-height: 22px; background: {{ s.lineColor }}; margin: 3px 0;"></div>
+                        </sc-if>
+                      </div>
+                      <div style="flex: 1; padding-bottom: 16px;">
+                        <div style="font-size: 15px; font-weight: 700; color: {{ s.titleColor }};">{{ s.ar }}</div>
+                        <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 1.5px; color: #BE9A4E; margin-top: 2px;">{{ s.en }}</div>
+                        <sc-if value="{{ s.showNote }}" hint-placeholder-val="{{ false }}">
+                          <div style="font-size: 12.5px; color: #6b756e; margin-top: 6px; line-height: 1.5; background: #F2F6F2; padding: 9px 11px; border-radius: 8px;">{{ s.note }}</div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <!-- summary -->
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 14px; padding: 16px; margin-top: 16px;">
+                  <div style="display: flex; justify-content: space-between; padding-bottom: 11px; border-bottom: 1px solid #F4F1EA;"><span style="font-size: 13px; color: #6b756e;">الغرفة</span><span style="font-size: 13.5px; font-weight: 600; color: #1f2a24;">{{ bdRoom.name }}</span></div>
+                  <div style="display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid #F4F1EA;"><span style="font-size: 13px; color: #6b756e;">عدد المعتمرين</span><span style="font-size: 13.5px; font-weight: 600; color: #1f2a24;">{{ bdPaxCountAr }}</span></div>
+                  <div style="display: flex; justify-content: space-between; padding-top: 11px;"><span style="font-size: 14px; font-weight: 700; color: #16201b;">الإجمالي المدفوع</span><span style="font-size: 16px; font-weight: 700; color: #0B5A41;">{{ bdTotalAr }} ر.س</span></div>
+                </div>
+              </div>
+
+              <div style="background: #fff; border-top: 1px solid #EAE6DC; padding: 14px 18px 26px; box-shadow: 0 -8px 24px -16px rgba(6,56,42,.3); display: flex; flex-direction: column; gap: 10px;">
+                <sc-if value="{{ bdTicketReady }}" hint-placeholder-val="{{ false }}">
+                  <div onClick="{{ goQR }}" style="height: 54px; background: #0B5A41; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 22px -10px rgba(11,90,65,.6);">
+                    <span class="msym" style="font-size: 21px;">qr_code_2</span>عرض التذكرة
+                  </div>
+                </sc-if>
+                <sc-if value="{{ bdCanAdvance }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ advanceStatus }}" style="height: 46px; border: 1.5px dashed #C2CDBF; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #6b756e; font-size: 13.5px; font-weight: 600; cursor: pointer;">
+                    <span class="msym" style="font-size: 18px;">play_circle</span>محاكاة تحديث الحالة (تجريبي)
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ QR TICKET ============ -->
+          <sc-if value="{{ isQR }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; inset: 0; background: radial-gradient(120% 70% at 50% 0%, #0B5A41 0%, #052017 100%); display: flex; flex-direction: column;">
+              <div style="padding: 60px 18px 8px; display: flex; align-items: center; gap: 12px;">
+                <div onClick="{{ backToBD }}" style="width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                  <span class="msym" style="font-size: 22px; color: #fff;">arrow_forward</span>
+                </div>
+                <div style="font-size: 18px; font-weight: 700; color: #fff;">تذكرة العمرة</div>
+              </div>
+
+              <div class="ta-scroll" style="flex: 1; overflow-y: auto; padding: 14px 20px 28px; display: flex; flex-direction: column; align-items: center;">
+                <div style="width: 100%; background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 60px -24px rgba(0,0,0,.6);">
+                  <!-- pass header -->
+                  <div style="position: relative; background: linear-gradient(150deg, #0B5A41, #062a1f); padding: 20px 20px 22px; overflow: hidden;">
+                    <div style="position: absolute; top: -40px; right: -30px; width: 150px; height: 150px; border: 1px solid rgba(190,154,78,.22); border-radius: 50%;"></div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; position: relative;">
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 36px; height: 36px; border-radius: 9px; background: rgba(255,255,255,.12); border: 1px solid rgba(190,154,78,.5); display: flex; align-items: center; justify-content: center;">
+                          <div style="width: 14px; height: 14px; background: #0a0c0b; border-radius: 2px; box-shadow: inset 0 3px 0 -2px #BE9A4E;"></div>
+                        </div>
+                        <div>
+                          <div style="font-size: 14px; font-weight: 700; color: #fff;">تساهيل العمرة</div>
+                          <div style="font-family: 'IBM Plex Sans'; font-size: 7px; letter-spacing: 2.5px; color: #BE9A4E;">TASAHEEL ALUMRAH</div>
+                        </div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 5px; background: rgba(190,154,78,.95); color: #2a210b; font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 6px;">
+                        <span class="msym" style="font-size: 13px;">verified</span>مؤكدة
+                      </div>
+                    </div>
+                    <div style="position: relative; margin-top: 18px; display: flex; align-items: center; justify-content: space-between;">
+                      <div>
+                        <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,.55);">FROM</div>
+                        <div style="font-size: 19px; font-weight: 700; color: #fff;">الدمام</div>
+                      </div>
+                      <div style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; color: rgba(190,154,78,.9);">
+                        <div style="height: 1px; flex: 1; background: repeating-linear-gradient(90deg, rgba(190,154,78,.6) 0 5px, transparent 5px 10px);"></div>
+                        <span class="msym" style="font-size: 20px;">mosque</span>
+                        <div style="height: 1px; flex: 1; background: repeating-linear-gradient(90deg, rgba(190,154,78,.6) 0 5px, transparent 5px 10px);"></div>
+                      </div>
+                      <div style="text-align: left;">
+                        <div style="font-family: 'IBM Plex Sans'; font-size: 9px; letter-spacing: 2px; color: rgba(255,255,255,.55);">TO</div>
+                        <div style="font-size: 19px; font-weight: 700; color: #fff;">مكة المكرمة</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- perforation -->
+                  <div style="position: relative; height: 26px; background: #fff;">
+                    <div style="position: absolute; top: 50%; right: -13px; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; background: #06281f;"></div>
+                    <div style="position: absolute; top: 50%; left: -13px; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; background: #093726;"></div>
+                    <div style="position: absolute; top: 50%; right: 16px; left: 16px; transform: translateY(-50%); border-top: 2px dashed #E2DDD1;"></div>
+                  </div>
+
+                  <!-- qr -->
+                  <div style="padding: 6px 22px 22px; display: flex; flex-direction: column; align-items: center;">
+                    <div style="padding: 14px; border: 1px solid #ECE8DF; border-radius: 16px; background: #fff;">
+                      {{ qrImage }}
+                    </div>
+                    <div style="font-family: 'IBM Plex Sans'; font-size: 15px; font-weight: 700; color: #16201b; letter-spacing: 1px; margin-top: 14px;">{{ qrNo }}</div>
+                    <div style="font-size: 12px; color: #9aa49d; margin-top: 3px;">امسح الرمز عند نقطة الانطلاق</div>
+
+                    <div style="width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #F0ECE3;">
+                      <div>
+                        <div style="font-size: 10.5px; color: #9aa49d; margin-bottom: 3px;">الرحلة</div>
+                        <div style="font-size: 13.5px; font-weight: 700; color: #16201b;">{{ qrTrip.title }}</div>
+                      </div>
+                      <div>
+                        <div style="font-size: 10.5px; color: #9aa49d; margin-bottom: 3px;">يوم الانطلاق</div>
+                        <div style="font-size: 13.5px; font-weight: 700; color: #16201b;">{{ qrDepartDay }}</div>
+                      </div>
+                      <div>
+                        <div style="font-size: 10.5px; color: #9aa49d; margin-bottom: 3px;">الفندق</div>
+                        <div style="font-size: 13.5px; font-weight: 700; color: #16201b;">{{ qrHotel }}</div>
+                      </div>
+                      <div>
+                        <div style="font-size: 10.5px; color: #9aa49d; margin-bottom: 3px;">عدد المعتمرين</div>
+                        <div style="font-size: 13.5px; font-weight: 700; color: #16201b;">{{ qrPaxCountAr }} أشخاص</div>
+                      </div>
+                      <div style="grid-column: 1 / -1;">
+                        <div style="font-size: 10.5px; color: #9aa49d; margin-bottom: 5px;">المعتمرون</div>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                          <sc-for list="{{ qrPaxNames }}" as="nm" hint-placeholder-count="1">
+                            <div style="display: flex; align-items: center; gap: 7px;"><span class="msym" style="font-size: 16px; color: #0B5A41;">person</span><span style="font-size: 13.5px; font-weight: 600; color: #1f2a24;">{{ nm }}</span></div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 7px; margin-top: 18px; color: rgba(255,255,255,.6); font-size: 12px;">
+                  <span class="msym" style="font-size: 16px;">lock</span>تذكرة رقمية مؤمّنة · تساهيل العمرة
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ PROFILE ============ -->
+          <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+            <div class="ta-scroll" style="position: absolute; inset: 0; overflow-y: auto; background: #F5F3EE; padding-bottom: 96px;">
+              <div style="position: relative; background: linear-gradient(160deg, #0B5A41, #062a1f); padding: 64px 20px 30px; overflow: hidden;">
+                <div style="position: absolute; top: -40px; left: -30px; width: 160px; height: 160px; border: 1px solid rgba(190,154,78,.2); border-radius: 50%;"></div>
+                <div style="position: relative; display: flex; align-items: center; gap: 15px; justify-content: space-between">
+                  <div style="width: 66px; height: 66px; border-radius: 18px; background: rgba(255,255,255,.14); border: 1px solid rgba(190,154,78,.5); display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 28px; font-weight: 700; color: #fff;">ع</span>
+                  </div>
+                  <div>
+                    <div style="font-size: 20px; font-weight: 700; color: #fff; text-align: center">عبدالله العتيبي</div>
+                    
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding: 18px;">
+                <div style="background: #fff; border: 1px solid #ECE8DF; border-radius: 16px; overflow: hidden;">
+                  <sc-for list="{{ profMenu }}" as="m" hint-placeholder-count="5">
+                    <div onClick="{{ m.open }}" style="display: flex; align-items: center; gap: 14px; padding: 16px; border-bottom: 1px solid #F4F1EA; cursor: pointer;">
+                      
+                      <div style="flex: 1;">
+                        <div style="font-size: 14.5px; font-weight: 600; color: #16201b; text-align: right">{{ m.label }}</div>
+                        <sc-if value="{{ m.hasSub }}" hint-placeholder-val="{{ true }}"><div style="font-size: 12px; color: #9aa49d; margin-top: 2px; text-align: right">{{ m.sub }}</div></sc-if>
+                      </div><div style="width: 42px; height: 42px; border-radius: 11px; background: #EBEFE9; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><span class="msym" style="font-size: 21px; color: #0B5A41;">{{ m.icon }}</span></div>
+                      <span class="msym" style="font-size: 21px; color: #C9C3B5;">chevron_left</span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 16px; height: 52px; background: #FBEFEE; border-radius: 12px; color: #B23B3B; font-size: 15px; font-weight: 600; cursor: pointer;">
+                  <span class="msym" style="font-size: 20px;">logout</span>تسجيل الخروج
+                </div>
+
+                <div style="text-align: center; margin-top: 22px; color: #b3afa3; font-size: 11.5px; line-height: 1.7;">
+                  <div style="font-family: 'IBM Plex Sans'; letter-spacing: 2px;">TASAHEEL</div>
+                  <div>الإصدار ١.٠ · الدمام، حي ابن خلدون</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+
+        <!-- bottom nav -->
+        <sc-if value="{{ showNav }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 50; background: rgba(255,255,255,.92); backdrop-filter: blur(14px); border-top: 1px solid #EAE6DC; padding: 9px 26px 24px; display: flex; justify-content: space-between;">
+            <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="3">
+              <div onClick="{{ n.go }}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; min-width: 64px;">
+                <span class="msym" style="font-size: 25px; color: {{ n.color }}; font-variation-settings: 'FILL' {{ n.fill }};">{{ n.icon }}</span>
+                <span style="font-size: 10.5px; font-weight: {{ n.weight }}; color: {{ n.color }};">{{ n.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:461,&quot;height&quot;:920}}">
+class Component extends DCLogic {
+  API_BASE = window.TASAHEEL_API_BASE || '';
+
+  state = {
+    screen: 'splash',
+    tripId: 'mkmd',
+    roomKey: 'shared',
+    passengers: [
+      { id: 1, name: 'عبدالله محمد العتيبي', mobile: '0501234567', email: 'abdullah.alotaibi@email.com', idn: '1098234561', birth: '1399-05-12', relation: 'نفسي' },
+    ],
+    draft: null,
+    agree: false,
+    statusStep: 0,
+    submitted: false,
+    bookingNo: 'TSA-26-04871',
+    lang: 'ar',
+    formReturn: 'paxList',
+  };
+
+  AR = '٠١٢٣٤٥٦٧٨٩';
+  arn(n) { return String(n).replace(/[0-9]/g, d => this.AR[+d]); }
+
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  async api(path, options = {}) {
+    if (!this.API_BASE) return null;
+    const res = await fetch(this.API_BASE + path, {
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      ...options,
+    });
+    if (!res.ok) throw new Error('API request failed: ' + res.status);
+    return res.json();
+  }
+
+  go(s) {
+    const scrollTop = () => { const el = this.base && this.base.querySelector('.ta-scroll'); };
+    this.setState({ screen: s });
+  }
+
+  TRIPS() {
+    const HOTEL = { name: 'فندق إيلاف قنوان', nameEn: 'ELAF QINWAN', stars: 4, dist: '٥ دقائق سيرًا من الحرم',
+      building: 'assets/elaf-building.webp',
+      gallery: [
+        { img: 'assets/elaf-room.webp', cap: 'الغرف المشتركة' },
+        { img: 'assets/elaf-bath.webp', cap: 'دورة المياه' },
+        { img: 'assets/elaf-wardrobe.webp', cap: 'خزانة وميني بار' },
+        { img: 'assets/elaf-corridor.webp', cap: 'الممرات' },
+        { img: 'assets/elaf-hall.webp', cap: 'المصاعد' },
+      ],
+      amen: [
+        { icon: 'ac_unit', label: 'غرف مكيّفة' }, { icon: 'wifi', label: 'واي فاي مجاني' },
+        { icon: 'concierge', label: 'استقبال ٢٤ ساعة' }, { icon: 'restaurant', label: 'إفطار يومي' },
+      ] };
+    return [
+      {
+        id: 'mk', title: 'رحلة مكة', city: 'مكة المكرمة', cityEn: 'MAKKAH', subtitle: 'الرحلة الأسبوعية',
+        img: 'assets/kaaba-door.png', heroImg: 'assets/kaaba.png',
+        days: 3, nights: 2, departDay: 'كل خميس', from: 225,
+        durLabel: '٣ أيام وليلتان', hotelShort: 'إيلاف قنوان', hotel: HOTEL,
+        features: ['مواصلات مكيّفة فاخرة', 'مشرف ومنظم طوال الرحلة', 'إقامة قريبة من الحرم', 'إمكانية التقسيط مع تمارا'],
+        itinerary: [
+          { day: 'الخميس', dayEn: 'THU', time: '١:٣٠ ظهراً', title: 'الانطلاق من الدمام والخبر', desc: 'استقبال وتنظيم ثم التحرك إلى مكة المكرمة', icon: 'directions_bus' },
+          { day: 'الخميس', dayEn: 'THU', time: 'فجراً', title: 'الوصول وأداء العمرة', desc: 'الوصول إلى مكة وأداء مناسك العمرة', icon: 'mosque' },
+          { day: 'الجمعة', dayEn: 'FRI', time: '', title: 'يوم كامل في مكة', desc: 'صلاة وعبادة وراحة في رحاب الحرم', icon: 'self_improvement' },
+          { day: 'السبت', dayEn: 'SAT', time: 'بعد الظهر', title: 'العودة', desc: 'التحرك والعودة إلى الدمام والخبر', icon: 'home' },
+        ],
+        rooms: [
+          { key: 'shared', name: 'غرفة مشتركة', nameEn: 'SHARED', desc: 'سرير ضمن غرفة جماعية (حتى ٤ أشخاص)', photo: 'assets/elaf-room.webp', price: 225, icon: 'groups', tag: 'الأكثر طلباً' },
+          { key: 'private', name: 'غرفة خاصة', nameEn: 'PRIVATE', desc: 'غرفة خاصة بسريرين ومجلس جلوس مريح', photo: 'assets/elaf-private.jpg', price: 350, icon: 'king_bed', tag: '' },
+        ],
+      },
+      {
+        id: 'mkmd', title: 'رحلة مكة والمدينة', city: 'مكة والمدينة', cityEn: 'MAKKAH · MADINAH', subtitle: 'الرحلة الإيمانية الكبرى',
+        img: 'assets/haram-gate.png', heroImg: 'assets/haram-gate.png',
+        days: 5, nights: 4, departDay: 'كل أربعاء', from: 350,
+        durLabel: '٥ أيام وأربع ليالٍ', hotelShort: 'إيلاف قنوان', hotel: HOTEL,
+        features: ['زيارة الحرمين الشريفين', 'مواصلات مكيّفة فاخرة', 'مشرف ومنظم طوال الرحلة', 'إمكانية التقسيط مع تمارا'],
+        itinerary: [
+          { day: 'الأربعاء', dayEn: 'WED', time: '١:٣٠ ظهراً', title: 'الانطلاق', desc: 'التحرك من الدمام والخبر إلى مكة المكرمة', icon: 'directions_bus' },
+          { day: 'الخميس', dayEn: 'THU', time: 'فجراً', title: 'الوصول وأداء العمرة', desc: 'الوصول إلى مكة وأداء مناسك العمرة', icon: 'mosque' },
+          { day: 'الجمعة', dayEn: 'FRI', time: '', title: 'يوم كامل في مكة', desc: 'عبادة وصلاة في المسجد الحرام', icon: 'self_improvement' },
+          { day: 'السبت', dayEn: 'SAT', time: 'بعد العشاء', title: 'التحرك إلى المدينة المنورة', desc: 'الانتقال إلى المدينة وزيارة المسجد النبوي', icon: 'directions_bus' },
+          { day: 'الأحد', dayEn: 'SUN', time: 'بعد الظهر', title: 'الزيارة والعودة', desc: 'زيارة المسجد النبوي ثم العودة إلى الدمام', icon: 'home' },
+        ],
+        rooms: [
+          { key: 'shared', name: 'غرفة مشتركة', nameEn: 'SHARED', desc: 'سرير ضمن غرفة جماعية (حتى ٤ أشخاص)', photo: 'assets/elaf-room.webp', price: 350, icon: 'groups', tag: 'الأكثر طلباً' },
+          { key: 'private', name: 'غرفة خاصة', nameEn: 'PRIVATE', desc: 'غرفة خاصة بسريرين ومجلس جلوس مريح', photo: 'assets/elaf-private.jpg', price: 520, icon: 'king_bed', tag: '' },
+        ],
+      },
+    ];
+  }
+
+  curTrip() { return this.TRIPS().find(t => t.id === this.state.tripId); }
+  curRoom() { return this.curTrip().rooms.find(r => r.key === this.state.roomKey); }
+
+  STATUS() {
+    return [
+      { ar: 'قيد المراجعة', en: 'UNDER REVIEW', icon: 'hourglass_top', note: 'استلمنا طلبك ونعمل على مراجعته' },
+      { ar: 'تم القبول', en: 'ACCEPTED', icon: 'thumb_up', note: 'تم قبول طلبك وتأكيد توفّر المقاعد' },
+      { ar: 'بانتظار الدفع', en: 'AWAITING PAYMENT', icon: 'account_balance_wallet', note: 'يرجى إتمام عملية الدفع لتأكيد الحجز' },
+      { ar: 'تم التحقق من الدفع', en: 'PAYMENT VERIFIED', icon: 'verified', note: 'تم استلام المبلغ والتحقق منه' },
+      { ar: 'مؤكد', en: 'CONFIRMED', icon: 'task_alt', note: 'حجزك مؤكد، نراك على خير' },
+      { ar: 'إصدار التذكرة', en: 'TICKET ISSUED', icon: 'qr_code_2', note: 'تذكرتك جاهزة، احتفظ بها للدخول' },
+    ];
+  }
+
+  total() { return this.curRoom().price * this.state.passengers.length; }
+
+  RELATIONS() { return ['نفسي', 'زوج', 'زوجة', 'ابن', 'ابنة', 'والد', 'والدة', 'أخ', 'أخت', 'قريب']; }
+
+  setDraftField(k, v) { this.setState(s => ({ draft: { ...s.draft, [k]: v } })); }
+
+  openAddPax() { this.setState({ draft: { id: 0, name: '', mobile: '', email: '', idn: '', birth: '', relation: '' }, screen: 'paxForm', formReturn: 'paxList' }); }
+  openEditPax(p, ret) { this.setState({ draft: { ...p }, screen: 'paxForm', formReturn: ret || 'paxList' }); }
+  draftValid() { const d = this.state.draft || {}; return d.name && d.mobile && d.idn && d.birth && d.relation; }
+  savePax() {
+    const d = this.state.draft; if (!d || !this.draftValid()) return;
+    this.setState(s => {
+      let list = s.passengers.slice();
+      if (d.id) list = list.map(p => (p.id === d.id ? d : p));
+      else list.push({ ...d, id: Date.now() });
+      return { passengers: list, draft: null, screen: s.formReturn || 'paxList' };
+    });
+  }
+  removePax(id) { this.setState(s => ({ passengers: s.passengers.filter(p => p.id !== id) })); }
+  async submitBooking() {
+    if (!this.state.agree) return;
+    const payload = {
+      tripId: this.state.tripId,
+      roomKey: this.state.roomKey,
+      passengers: this.state.passengers,
+      total: this.total(),
+    };
+    try {
+      const saved = await this.api('/bookings', { method: 'POST', body: JSON.stringify(payload) });
+      this.setState({
+        submitted: true,
+        statusStep: 0,
+        bookingNo: (saved && saved.bookingNo) || this.state.bookingNo,
+        screen: 'submitted',
+      });
+    } catch (e) {
+      this.setState({ submitted: true, statusStep: 0, screen: 'submitted' });
+    }
+  }
+  advanceStatus() { this.setState(s => ({ statusStep: Math.min(s.statusStep + 1, 5) })); }
+  fmtBirth(b) { if (!b) return ''; return this.arn(b); }
+  maskId(idn) { if (!idn) return ''; return this.arn(idn); }
+
+  renderVals() {
+    const sc = this.state.screen;
+    const trip = this.curTrip();
+    const room = this.curRoom();
+    const ink = (sc === 'home' || sc === 'splash') ? '#fff' : '#16201b';
+    const navWith = ['home', 'myBookings', 'profile'];
+
+    const mkNav = (id, icon, label) => ({
+      icon, label, go: () => this.go(id),
+      color: sc === id ? '#0B5A41' : '#9aa49d',
+      fill: sc === id ? 1 : 0,
+      weight: sc === id ? 700 : 500,
+    });
+
+    return {
+      isSplash: sc === 'splash', isHome: sc === 'home', isTripDetails: sc === 'tripDetails',
+      isRoom: sc === 'room', isPaxList: sc === 'paxList', isPaxForm: sc === 'paxForm',
+      isReview: sc === 'review', isSubmitted: sc === 'submitted', isMyBookings: sc === 'myBookings',
+      isBookingDetails: sc === 'bookingDetails', isQR: sc === 'qr', isProfile: sc === 'profile',
+      statusInk: ink,
+      showNav: navWith.includes(sc),
+      goHome: () => this.go('home'),
+      goProfile: () => this.go('profile'),
+      // ---- welcome / language ----
+      langs: [
+        { code: 'ar', label: 'العربية' },
+        { code: 'en', label: 'English' },
+        { code: 'ur', label: 'اردو' },
+        { code: 'tr', label: 'Türkçe' },
+      ].map(l => {
+        const on = this.state.lang === l.code;
+        return {
+          ...l, active: on, pick: () => this.setState({ lang: l.code }),
+          bg: on ? '#BE9A4E' : 'rgba(255,255,255,.07)',
+          border: on ? '1px solid #BE9A4E' : '1px solid rgba(255,255,255,.22)',
+          color: on ? '#2a210b' : 'rgba(255,255,255,.92)',
+        };
+      }),
+      welcomeTagline: ({ ar: 'رحلتك الإيمانية تبدأ بكل يُسر', en: 'Your spiritual journey, made simple', ur: 'آپ کا روحانی سفر، نہایت آسانی کے ساتھ', tr: 'Manevi yolculuğunuz kolaylıkla başlıyor' })[this.state.lang],
+      startLabel: ({ ar: 'ابدأ الآن', en: 'Get Started', ur: 'شروع کریں', tr: 'Başla' })[this.state.lang],
+      startApp: () => this.go('home'),
+      navItems: [
+        mkNav('home', 'home', 'الرئيسية'),
+        mkNav('myBookings', 'confirmation_number', 'حجوزاتي'),
+        mkNav('profile', 'person', 'حسابي'),
+      ],
+      trustItems: [
+        { icon: 'verified_user', label: 'رحلة موثوقة' },
+        { icon: 'support_agent', label: 'دعم ٢٤ ساعة' },
+        { icon: 'credit_score', label: 'تقسيط تمارا' },
+      ],
+      trips: this.TRIPS().map(t => ({
+        ...t, fromAr: this.arn(t.from),
+        open: () => this.setState({ tripId: t.id, screen: 'tripDetails' }),
+      })),
+      tripA: (() => { const t = this.TRIPS()[0]; return { ...t, fromAr: this.arn(t.from), open: () => this.setState({ tripId: t.id, screen: 'tripDetails' }) }; })(),
+      tripB: (() => { const t = this.TRIPS()[1]; return { ...t, fromAr: this.arn(t.from), open: () => this.setState({ tripId: t.id, screen: 'tripDetails' }) }; })(),
+
+      // ---- shared ----
+      back: () => window.history && this.go(this._backMap()),
+      goBackHome: () => this.go('home'),
+
+      // ---- trip details ----
+      detTrip: trip,
+      detDaysAr: this.arn(trip.days), detNightsAr: this.arn(trip.nights), detFromAr: this.arn(trip.from),
+      detStars: Array.from({ length: trip.hotel.stars }, (_, i) => i),
+      detItinerary: trip.itinerary.map((it, i) => ({ ...it, n: this.arn(i + 1), hasTime: !!it.time, notLast: i < trip.itinerary.length - 1 })),
+      detFeatures: trip.features,
+      detAmen: trip.hotel.amen,
+      detHotelBuilding: trip.hotel.building,
+      detHotelPhotos: trip.hotel.gallery,
+      backToHome: () => this.go('home'),
+      goRoomSel: () => this.go('room'),
+
+      // ---- room selection ----
+      backToDetails: () => this.go('tripDetails'),
+      roomCards: trip.rooms.map(r => {
+        const on = r.key === this.state.roomKey;
+        return {
+          ...r, priceAr: this.arn(r.price), active: on, tagShow: !!r.tag,
+          pick: () => this.setState({ roomKey: r.key }),
+          cardBg: on ? '#FBFAF6' : '#fff',
+          border: on ? '2px solid #0B5A41' : '1px solid #ECE8DF',
+          shadow: on ? '0 14px 30px -18px rgba(11,90,65,.5)' : '0 8px 20px -16px rgba(6,56,42,.3)',
+          iconBg: on ? '#0B5A41' : '#E8F0EC',
+          iconColor: on ? '#fff' : '#0B5A41',
+          radio: on ? '2px solid #0B5A41' : '2px solid #D6D1C5',
+        };
+      }),
+      roomPickedAr: this.arn(room.price),
+      roomPickedName: room.name,
+      goPaxFromRoom: () => this.go('paxList'),
+
+      // ---- passenger list ----
+      paxList: this.state.passengers.map(p => ({
+        ...p, idAr: this.maskId(p.idn), birthAr: this.fmtBirth(p.birth),
+        edit: () => this.openEditPax(p), del: () => this.removePax(p.id),
+        initials: (p.name || '؟').trim().charAt(0),
+      })),
+      paxCount: this.state.passengers.length,
+      paxCountAr: this.arn(this.state.passengers.length),
+      hasPax: this.state.passengers.length > 0,
+      addPax: () => this.openAddPax(),
+      backToRoom: () => this.go('room'),
+      goReview: () => { if (this.state.passengers.length) this.go('review'); },
+      paxRoomLabel: room.name, paxTripLabel: trip.title,
+
+      // ---- passenger form ----
+      draftVals: this.state.draft || {},
+      isEditingPax: !!(this.state.draft && this.state.draft.id),
+      onName: (e) => this.setDraftField('name', e.target.value),
+      onMobile: (e) => this.setDraftField('mobile', e.target.value),
+      onEmail: (e) => this.setDraftField('email', e.target.value),
+      onIdn: (e) => this.setDraftField('idn', e.target.value),
+      onBirth: (e) => this.setDraftField('birth', e.target.value),
+      relChips: this.RELATIONS().map(r => {
+        const on = (this.state.draft || {}).relation === r;
+        return {
+          label: r, active: on, pick: () => this.setDraftField('relation', r),
+          border: on ? '1.5px solid #0B5A41' : '1.5px solid #E2DDD1',
+          bg: on ? '#0B5A41' : '#fff', color: on ? '#fff' : '#5a655d',
+        };
+      }),
+      draftOk: !!this.draftValid(),
+      saveBg: this.draftValid() ? '#0B5A41' : '#C2CBC4',
+      savePax: () => this.savePax(),
+      cancelForm: () => this.setState({ draft: null, screen: this.state.formReturn || 'paxList' }),
+
+      // ---- review ----
+      revTrip: trip, revRoom: room,
+      revPax: this.state.passengers,
+      revPerAr: this.arn(room.price), revPaxCountAr: this.arn(this.state.passengers.length),
+      revTotalAr: this.arn(this.total()),
+      revDepartDay: trip.departDay, revDur: trip.durLabel,
+      agree: this.state.agree,
+      agreeBorder: this.state.agree ? '0' : '2px solid #C9C3B5',
+      agreeBg: this.state.agree ? '#0B5A41' : '#fff',
+      submitBg: this.state.agree ? '#0B5A41' : '#C2CBC4',
+      toggleAgree: () => this.setState(s => ({ agree: !s.agree })),
+      submitBooking: () => this.submitBooking(),
+      backToPax: () => this.go('paxList'),
+
+      // ---- submitted ----
+      bookingNo: this.state.bookingNo,
+      goTrack: () => this.go('bookingDetails'),
+
+      // ---- my bookings ----
+      hasBooking: this.state.submitted,
+      noBooking: !this.state.submitted,
+      myBooking: this.state.submitted ? {
+        no: this.state.bookingNo, title: trip.title, img: trip.img, room: room.name,
+        paxAr: this.arn(this.state.passengers.length), departDay: trip.departDay,
+        statusAr: this.STATUS()[this.state.statusStep].ar,
+        statusEn: this.STATUS()[this.state.statusStep].en,
+        confirmed: this.state.statusStep >= 4,
+        chipBg: this.state.statusStep >= 4 ? 'rgba(22,160,110,.95)' : 'rgba(190,154,78,.95)',
+        chipColor: this.state.statusStep >= 4 ? '#fff' : '#2a210b',
+        chipIcon: this.state.statusStep >= 4 ? 'task_alt' : 'hourglass_top',
+        open: () => this.go('bookingDetails'),
+      } : null,
+      goExplore: () => this.go('home'),
+
+      // ---- booking details / track ----
+      bdTrip: trip, bdRoom: room, bdNo: this.state.bookingNo,
+      bdPaxCountAr: this.arn(this.state.passengers.length),
+      bdTotalAr: this.arn(this.total()),
+      bdSteps: this.STATUS().map((s, i) => {
+        const done = i < this.state.statusStep, current = i === this.state.statusStep, upcoming = i > this.state.statusStep;
+        return {
+          ...s, done, current, upcoming, notLast: i < this.STATUS().length - 1,
+          nodeBg: done ? '#0B5A41' : current ? '#fff' : '#F0ECE3',
+          nodeBorder: current ? '2px solid #0B5A41' : done ? '0' : '2px solid #E2DDD1',
+          nodeIcon: done ? 'check' : s.icon,
+          nodeIconColor: done ? '#fff' : current ? '#0B5A41' : '#B5B0A4',
+          lineColor: done ? '#0B5A41' : '#E2DDD1',
+          titleColor: upcoming ? '#A7A294' : '#16201b',
+          showRing: current,
+          showNote: current,
+        };
+      }),
+      bdCurrentNote: this.STATUS()[this.state.statusStep].note,
+      bdCurrentAr: this.STATUS()[this.state.statusStep].ar,
+      bdStepAr: this.arn(this.state.statusStep + 1),
+      bdCanAdvance: this.state.statusStep < 5,
+      advanceStatus: () => this.advanceStatus(),
+      bdTicketReady: this.state.statusStep >= 5,
+      goQR: () => this.go('qr'),
+      backToMyBookings: () => this.go('myBookings'),
+
+      // ---- qr ticket ----
+      qrTrip: trip, qrRoom: room, qrNo: this.state.bookingNo,
+      qrPaxNames: this.state.passengers.map(p => p.name),
+      qrPaxCountAr: this.arn(this.state.passengers.length),
+      qrDepartDay: trip.departDay, qrHotel: trip.hotel.name,
+      qrImage: React.createElement('img', {
+        src: 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&color=06382A&data=' + encodeURIComponent('TASAHEEL-ALUMRAH|' + this.state.bookingNo + '|' + trip.title),
+        alt: 'QR', style: { width: '168px', height: '168px', display: 'block' },
+      }),
+      backToBD: () => this.go('bookingDetails'),
+
+      // ---- profile ----
+      profMenu: [
+        { icon: 'badge', label: 'بياناتي الشخصية', sub: 'الاسم، الجوال، البريد، الهوية', hasSub: true, open: () => this.openEditPax(this.state.passengers[0], 'profile') },
+        { icon: 'group', label: 'المعتمرون المحفوظون', sub: this.arn(this.state.passengers.length) + ' أشخاص', hasSub: true, open: null },
+        { icon: 'language', label: 'اللغة', sub: 'العربية', hasSub: true, open: null },
+        { icon: 'headset_mic', label: 'الدعم والمساعدة', sub: '٠١٣٨٤٦٦٧٦٦', hasSub: true, open: null },
+        { icon: 'description', label: 'الشروط والأحكام', sub: '', hasSub: false, open: null },
+      ],
+    };
+  }
+
+  _backMap() {
+    const m = { tripDetails: 'home', room: 'tripDetails', paxList: 'room', paxForm: 'paxList', review: 'paxList', bookingDetails: 'myBookings', qr: 'bookingDetails', profile: 'home', myBookings: 'home', submitted: 'home' };
+    return m[this.state.screen] || 'home';
+  }
+}
+</script>
+</body>
+</html>

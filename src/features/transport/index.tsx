@@ -10,6 +10,7 @@ import { uid } from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { AppSelect } from "@/components/AppSelect";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
 
@@ -195,9 +196,7 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
                 <input className={inp} style={ist} value={form.name} placeholder="مثال: حافلة الحرمين 1" onChange={e=>set("name",e.target.value)}/></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>النوع</label>
-                  <select className={inp} style={ist} value={form.vehicleType} onChange={e=>set("vehicleType",e.target.value)}>
-                    {typeOptions.map(o=><option key={o} value={o}>{o}</option>)}
-                  </select>
+                  <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
                 </div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عدد المقاعد</label>
                   <input type="number" min={1} className={inp} style={ist} value={form.seats} onChange={e=>set("seats",Number(e.target.value))}/></div>
