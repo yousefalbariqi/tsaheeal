@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
+import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { useStore } from "@/store/useStore";
 import { PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
 
@@ -206,28 +207,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
   });
   const [sel,setSel]=useState<number[]>(()=>booking.seats.filter(s=>!occupied.has(s)));
   const toggle=(n:number)=>{ if(occupied.has(n)) return; setSel(prev=>prev.includes(n)?prev.filter(x=>x!==n):(prev.length>=need?prev:[...prev,n])); };
-  // rows: 2 + aisle + 2, back row of up to 5
-  const rows:number[][]=[]; let n=1;
-  while(n<=capacity){ const rem=capacity-n+1; if(rem<=5){rows.push(Array.from({length:rem},(_,i)=>n+i));n+=rem;} else {rows.push([n,n+1,n+2,n+3]);n+=4;} }
-  const seatBtn=(num:number)=>{
-    const occ=occupied.get(num); const isSel=sel.includes(num);
-    let bg="#fff",bd=B.border,fg=B.text2,ring="none",cursor="pointer";
-    let gender:"male"|"female"|null=null;
-    if(occ){ cursor="not-allowed"; gender=occ; if(occ==="female"){bg="#FBE9F1";bd="#F3CADF";fg="#B4266E";} else {bg="#EAF1FE";bd="#CBDBFB";fg="#1E52C7";} }
-    if(isSel){ const pg=booking.pilgrims[sel.indexOf(num)]; gender=pg?pg.gender:null;
-      bg=gender==="female"?"#FBE9F1":gender==="male"?"#EAF1FE":"#FFF7EA";
-      fg=gender==="female"?"#B4266E":gender==="male"?"#1E52C7":"#8a6a08";
-      bd=B.gold; ring=`0 0 0 2px ${B.gold}`; }
-    return (
-      <button key={num} onClick={()=>toggle(num)} disabled={!!occ} title={`مقعد ${num}`}
-        className="relative flex flex-col items-center justify-center rounded-[10px]"
-        style={{width:42,height:42,border:`1px solid ${bd}`,background:bg,color:fg,boxShadow:ring,cursor,padding:0,lineHeight:1.02}}>
-        <span style={{fontSize:13,fontWeight:800}}>{num}</span>
-        {gender&&<span style={{fontSize:11,fontWeight:800,lineHeight:1}}>{genderGlyph(gender)}</span>}
-        {isSel&&<span className="absolute flex items-center justify-center rounded-full" style={{top:-6,insetInlineStart:-6,width:16,height:16,background:"#B4266E",color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}>×</span>}
-      </button>
-    );
-  };
+  const occupiedSet=new Set(occupied.keys());
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-6 overflow-auto"
@@ -271,18 +251,8 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
             <span className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center" style={{background:"#1E52C7",color:"#fff"}}>💺</span>
             <span>اضغط على أي مقعد متاح لحجزه للمعتمر. اضغط على المقعد المختار (الذهبي) مرة أخرى لإلغائه واختيار غيره.</span>
           </div>
-          <div className="flex items-center justify-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{background:B.primary,color:B.cream}}>⬆ مقدمة الحافلة · السائق</span>
-          </div>
-          <div className="flex flex-col gap-2 items-center">
-            {rows.map((row,ri)=>(
-              <div key={ri} className="flex gap-2 items-center justify-center">
-                {row.length===4
-                  ? <>{seatBtn(row[0])}{seatBtn(row[1])}<div style={{width:26}}/>{seatBtn(row[2])}{seatBtn(row[3])}</>
-                  : row.map(seatBtn)}
-              </div>
-            ))}
-          </div>
+          <BusSeatGrid capacity={capacity} occupied={occupiedSet} selected={sel} need={need} onToggle={toggle}
+            occGender={(n)=>occupied.get(n)??null} selGender={(n)=>booking.pilgrims[sel.indexOf(n)]?.gender??null} showLegend={false}/>
           <div className="flex flex-wrap gap-3 justify-center pt-3" style={{borderTop:`1px solid ${B.border}`}}>
             {[["#fff",B.border,"متاح"],["#EAF1FE","#CBDBFB","ذكر"],["#FBE9F1","#F3CADF","أنثى"]].map(([bg,bd,l])=>(
               <span key={l} className="inline-flex items-center gap-1.5 text-xs font-bold" style={{color:B.text2}}>

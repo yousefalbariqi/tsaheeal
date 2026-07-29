@@ -535,6 +535,8 @@ begin
   insert into booking_pilgrims(booking_id,name,id_number,nationality,gender,birth_date,phone,sort)
     select v,e->>'name',e->>'idNumber',e->>'nationality',e->>'gender',e->>'birthDate',e->>'phone',(o-1)::int
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
+  insert into booking_seats(booking_id,seat_no,sort)
+    select v,(e)::int,(o-1)::int from jsonb_array_elements_text(coalesce(doc->'seats','[]')) with ordinality t(e,o);
   return v;
 end $$;
 grant execute on function public.create_public_booking(jsonb) to anon, authenticated;
@@ -550,6 +552,29 @@ language sql security definer set search_path=public as $$
   where b.id = p_booking_no and b.client_phone = p_phone;
 $$;
 grant execute on function public.lookup_public_booking(text,text) to anon, authenticated;
+
+-- المقاعد المحجوزة لرحلة (anon) — للكروكي في صفحة العميل
+create or replace function public.trip_taken_seats(p_trip_id text) returns int[]
+language sql security definer set search_path=public stable as $$
+  select coalesce(array_agg(bs.seat_no order by bs.seat_no), '{}')
+  from booking_seats bs join bookings b on b.id = bs.booking_id
+  where b.trip_id = p_trip_id and b.status not in ('cancelled','rejected');
+$$;
+grant execute on function public.trip_taken_seats(text) to anon, authenticated;
+
+-- طلبات العميل حسب رقم الجوال (anon) — للتتبّع التلقائي بعد الدخول
+create or replace function public.my_public_bookings(p_phone text)
+returns table(id text, status text, payment_status text, package_name text, trip_date text, trip_time text, persons int, total numeric, created_at text)
+language sql security definer set search_path=public stable as $$
+  select b.id, b.status, b.payment_status,
+         coalesce(p.name,''), t.departure_date, t.departure_time, b.persons, b.total, b.created_at
+  from bookings b
+  left join trips t    on t.id = b.trip_id
+  left join packages p on p.id = coalesce(nullif(b.package_id,''), t.package_id)
+  where b.client_phone = p_phone
+  order by b.created_at desc;
+$$;
+grant execute on function public.my_public_bookings(text) to anon, authenticated;
 
 -- ════════════════════════════════════════════════════════════
 -- دفع العميل (عام) — يحدّث الأعمدة مباشرة
@@ -591,6 +616,7 @@ declare t text;
   anon_tables text[] := array[
     'packages','package_features','package_program_stages','package_room_prices','package_reviews','package_policies','package_gallery',
     'trips','trip_drivers',
+    'transports','transport_features',
     'hotels','hotel_features','hotel_reviews','hotel_media','hotel_room_types','hotel_room_photos',
     'branches'
   ];

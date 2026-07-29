@@ -1,32 +1,47 @@
 /* طبقة بيانات صفحة العميل (anon).
    القراءة عبر repo (يقرأ Supabase كـ anon بعد الـMigration، أو seed محلياً).
    الإرسال عبر RPC عام create_public_booking (أو محلياً في وضع seed). */
-import type { Pkg, Trip, Hotel } from "@/types";
+import type { Pkg, Trip, Hotel, Transport } from "@/types";
 import { repo } from "@/data/repository";
 import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
 import { SEED_HOTELS } from "@/data/hotels";
+import { SEED_TRANSPORTS } from "@/data/transports";
 import { supabase, isSupabaseEnabled } from "@/supabase/client";
 import { useStore } from "@/store/useStore";
 
-export interface Catalog { packages: Pkg[]; trips: Trip[]; hotels: Hotel[]; }
+export interface Catalog { packages: Pkg[]; trips: Trip[]; hotels: Hotel[]; transports: Transport[]; }
 
 export async function fetchCatalog(): Promise<Catalog> {
   try {
-    const [packages, trips, hotels] = await Promise.all([
-      repo.packages.list(), repo.trips.list(), repo.hotels.list(),
+    const [packages, trips, hotels, transports] = await Promise.all([
+      repo.packages.list(), repo.trips.list(), repo.hotels.list(), repo.transports.list(),
     ]);
-    if (packages.length) return { packages, trips, hotels };
+    if (packages.length) return { packages, trips, hotels, transports };
   } catch (e) {
     console.error("[customer] فشل جلب الكتالوج، استخدام seed:", e);
   }
-  return { packages: SEED_PACKAGES, trips: SEED_TRIPS, hotels: SEED_HOTELS };
+  return { packages: SEED_PACKAGES, trips: SEED_TRIPS, hotels: SEED_HOTELS, transports: SEED_TRANSPORTS };
+}
+
+/** المقاعد المحجوزة لرحلة (لتلوينها في الكروكي). */
+export async function fetchTakenSeats(tripId: string): Promise<number[]> {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.rpc("trip_taken_seats", { p_trip_id: tripId });
+    if (error) { console.error(error); return []; }
+    return (data as number[]) ?? [];
+  }
+  const st = useStore.getState();
+  const taken = new Set<number>();
+  st.bookings.forEach(b => { if (b.tripId === tripId && b.status !== "cancelled" && b.status !== "rejected") b.seats.forEach(s => taken.add(s)); });
+  return [...taken];
 }
 
 export interface BookingPayload {
   tripId: string; packageId: string;
   clientName: string; clientPhone: string;
   roomType: string; persons: number; total: number;
+  seats: number[];
   pilgrims: { name: string; idNumber: string; nationality: string; gender: string; birthDate: string; phone: string }[];
 }
 
@@ -50,7 +65,7 @@ export async function submitBooking(p: BookingPayload): Promise<string> {
   st.setBookings(prev => [{
     id, tripId: p.tripId, packageId: p.packageId, clientName: p.clientName, clientPhone: p.clientPhone,
     roomType: p.roomType, persons: p.persons, total: p.total, status: "reviewing", paymentStatus: "none",
-    seats: [], createdAt: new Date().toISOString().slice(0, 10), staff: "", source: "public", sentDate: "",
+    seats: p.seats ?? [], createdAt: new Date().toISOString().slice(0, 10), staff: "", source: "public", sentDate: "",
     pilgrims: p.pilgrims.map(x => ({ ...x, gender: x.gender as "male" | "female" })),
   }, ...prev]);
   st.setTrips(prev => prev.map(t => t.id === p.tripId ? { ...t, bookedSeats: t.bookedSeats + p.persons } : t));
@@ -62,7 +77,23 @@ export class SeatsError extends Error {
   constructor(available: number) { super("insufficient_seats"); this.available = available; }
 }
 
-export interface TrackResult { id: string; status: string; paymentStatus: string; packageName: string; tripDate: string; tripTime: string; persons: number; total: number; }
+export interface TrackResult { id: string; status: string; paymentStatus: string; packageName: string; tripDate: string; tripTime: string; persons: number; total: number; createdAt?: string; }
+
+/** كل طلبات رقم جوال معيّن — للتتبّع التلقائي بعد الدخول. */
+export async function myBookings(phone: string): Promise<TrackResult[]> {
+  const ph = phone.replace(/\s/g, "");
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.rpc("my_public_bookings", { p_phone: ph });
+    if (error) { console.error(error); return []; }
+    return (data as any[] ?? []).map(r => ({ id: r.id, status: r.status, paymentStatus: r.payment_status, packageName: r.package_name, tripDate: r.trip_date, tripTime: r.trip_time, persons: r.persons, total: r.total, createdAt: r.created_at }));
+  }
+  const st = useStore.getState();
+  return st.bookings.filter(b => b.clientPhone.replace(/\s/g, "") === ph).map(b => {
+    const trip = st.trips.find(t => t.id === b.tripId);
+    const pkg = st.packages.find(pk => pk.id === (b.packageId || trip?.packageId));
+    return { id: b.id, status: b.status, paymentStatus: b.paymentStatus, packageName: pkg?.name ?? "", tripDate: trip?.departureDate ?? "", tripTime: trip?.departureTime ?? "", persons: b.persons, total: b.total, createdAt: b.createdAt };
+  });
+}
 
 export async function lookupBooking(phone: string, bookingNo: string): Promise<TrackResult | null> {
   if (isSupabaseEnabled && supabase) {
