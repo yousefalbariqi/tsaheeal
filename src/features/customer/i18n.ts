@@ -37,6 +37,16 @@ const D: Record<Lang, Dict> = {
     enterCode:"أدخل الرمز المُرسل", verify:"تحقّق", resend:"إعادة إرسال الرمز", resendIn:"إعادة الإرسال خلال",
     loginToTrack:"سجّل الدخول لعرض طلباتك تلقائياً", logout:"تسجيل الخروج", noBookings:"لا توجد طلبات بعد",
     loading:"جارٍ التحميل…", second:"ثانية", devCodeHint:"رمز تجريبي",
+    // ── واجهة Airbnb ──
+    bookYourTrip:"احجز رحلتك", viewPhotos:"الصور", photosLabel:"صور", guests:"أفراد", selectThisRoom:"اختيار هذا السكن", playVideo:"تشغيل الفيديو", all:"الكل", search:"ابحث عن باقتك", explore:"استكشاف", packagesIn:"باقات {city}",
+    whatOffers:"ما تقدمه هذه الباقة", showAllAmenities:"عرض الميزات الـ {n}",
+    program:"برنامج الرحلة", stay:"السكن", transport:"وسيلة النقل",
+    guestReviews:"تقييمات المعتمرين", showAllReviews:"إظهار كل التقييمات", noReviews:"لا توجد تقييمات بعد",
+    thingsToKnow:"أشياء يجب معرفتها", cancelPolicy:"سياسة الإلغاء", termsTitle:"الشروط والأحكام",
+    freeCancel:"إلغاء مجاني", clearDate:"محو التاريخ", change:"تغيير",
+    fromHaram:"من الحرم", meters:"م", forNights:"مقابل {n} ليالٍ",
+    openMap:"عرض على الخريطة", seatsCount:"مقعد", pickDateFirst:"اختر موعد السفر أولاً",
+    perNight:"لليلة", noPackages:"لا توجد باقات متاحة حالياً",
   },
   en: {
     brand:"Tasaheel Al-Umrah", tagline:"Book your Umrah with ease and peace of mind",
@@ -63,6 +73,16 @@ const D: Record<Lang, Dict> = {
     enterCode:"Enter the code", verify:"Verify", resend:"Resend code", resendIn:"Resend in",
     loginToTrack:"Log in to see your orders automatically", logout:"Logout", noBookings:"No orders yet",
     loading:"Loading…", second:"s", devCodeHint:"dev code",
+    // ── Airbnb-style UI ──
+    bookYourTrip:"Book your trip", viewPhotos:"Photos", photosLabel:"photos", guests:"guests", selectThisRoom:"Select this room", playVideo:"Play video", all:"All", search:"Find your package", explore:"Explore", packagesIn:"Packages in {city}",
+    whatOffers:"What this package offers", showAllAmenities:"Show all {n} features",
+    program:"Trip programme", stay:"Stay", transport:"Transport",
+    guestReviews:"Pilgrim reviews", showAllReviews:"Show all reviews", noReviews:"No reviews yet",
+    thingsToKnow:"Things to know", cancelPolicy:"Cancellation policy", termsTitle:"Terms & conditions",
+    freeCancel:"Free cancellation", clearDate:"Clear date", change:"Change",
+    fromHaram:"from the Haram", meters:"m", forNights:"for {n} nights",
+    openMap:"View on map", seatsCount:"seats", pickDateFirst:"Choose a travel date first",
+    perNight:"per night", noPackages:"No packages available right now",
   },
   ur: {
     brand:"تساہیل العمرہ", tagline:"اپنا عمرہ آسانی اور اطمینان سے بُک کریں",
@@ -89,6 +109,16 @@ const D: Record<Lang, Dict> = {
     enterCode:"بھیجا گیا کوڈ درج کریں", verify:"تصدیق", resend:"کوڈ دوبارہ بھیجیں", resendIn:"دوبارہ بھیجیں",
     loginToTrack:"اپنے آرڈرز خودکار دیکھنے کے لیے لاگ ان کریں", logout:"لاگ آؤٹ", noBookings:"ابھی کوئی آرڈر نہیں",
     loading:"لوڈ ہو رہا ہے…", second:"سیکنڈ", devCodeHint:"ٹیسٹ کوڈ",
+    // ── Airbnb طرز انٹرفیس ──
+    bookYourTrip:"اپنا سفر بُک کریں", viewPhotos:"تصاویر", photosLabel:"تصاویر", guests:"افراد", selectThisRoom:"یہ کمرہ منتخب کریں", playVideo:"ویڈیو چلائیں", all:"سب", search:"اپنا پیکج تلاش کریں", explore:"دریافت", packagesIn:"{city} کے پیکجز",
+    whatOffers:"یہ پیکج کیا پیش کرتا ہے", showAllAmenities:"تمام {n} خصوصیات دیکھیں",
+    program:"سفر کا پروگرام", stay:"قیام", transport:"ذریعۂ سفر",
+    guestReviews:"معتمرین کے تاثرات", showAllReviews:"تمام تاثرات دیکھیں", noReviews:"ابھی کوئی تاثر نہیں",
+    thingsToKnow:"جاننے کی باتیں", cancelPolicy:"منسوخی کی پالیسی", termsTitle:"شرائط و ضوابط",
+    freeCancel:"مفت منسوخی", clearDate:"تاریخ ہٹائیں", change:"تبدیل کریں",
+    fromHaram:"حرم سے", meters:"میٹر", forNights:"{n} راتوں کے لیے",
+    openMap:"نقشے پر دیکھیں", seatsCount:"نشستیں", pickDateFirst:"پہلے سفر کی تاریخ منتخب کریں",
+    perNight:"فی رات", noPackages:"فی الحال کوئی پیکج دستیاب نہیں",
   },
   tr: {
     brand:"Tasaheel Al-Umrah", tagline:"Umrenizi kolayca ve gönül rahatlığıyla rezerve edin",
@@ -115,6 +145,16 @@ const D: Record<Lang, Dict> = {
     enterCode:"Gelen kodu girin", verify:"Doğrula", resend:"Kodu tekrar gönder", resendIn:"Tekrar gönder",
     loginToTrack:"Siparişlerinizi otomatik görmek için giriş yapın", logout:"Çıkış", noBookings:"Henüz sipariş yok",
     loading:"Yükleniyor…", second:"sn", devCodeHint:"test kodu",
+    // ── Airbnb tarzı arayüz ──
+    bookYourTrip:"Seyahatini rezerve et", viewPhotos:"Fotoğraflar", photosLabel:"foto", guests:"kişi", selectThisRoom:"Bu odayı seç", playVideo:"Videoyu oynat", all:"Tümü", search:"Paketini bul", explore:"Keşfet", packagesIn:"{city} paketleri",
+    whatOffers:"Bu paket neler sunuyor", showAllAmenities:"{n} özelliğin tümünü göster",
+    program:"Seyahat programı", stay:"Konaklama", transport:"Ulaşım",
+    guestReviews:"Hacı yorumları", showAllReviews:"Tüm yorumları göster", noReviews:"Henüz yorum yok",
+    thingsToKnow:"Bilinmesi gerekenler", cancelPolicy:"İptal politikası", termsTitle:"Şartlar ve koşullar",
+    freeCancel:"Ücretsiz iptal", clearDate:"Tarihi temizle", change:"Değiştir",
+    fromHaram:"Harem'e uzaklık", meters:"m", forNights:"{n} gece için",
+    openMap:"Haritada gör", seatsCount:"koltuk", pickDateFirst:"Önce seyahat tarihi seçin",
+    perNight:"gecelik", noPackages:"Şu an paket yok",
   },
 };
 

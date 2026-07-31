@@ -1,0 +1,864 @@
+/* عناصر واجهة المستفيد — نظام Airbnb مطبّقاً على تساهيل.
+   كلها RTL-aware: تعتمد الخصائص المنطقية (insetInlineStart / textAlign:start)
+   ولا تعكس إلا الأيقونات الاتجاهية عبر flipRTL. */
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images } from "lucide-react";
+import { C, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
+
+/* ── اتجاه الصفحة ─────────────────────────────────────────────── */
+const DirCtx = createContext<"rtl" | "ltr">("rtl");
+export const DirProvider = DirCtx.Provider;
+export const useDir = () => useContext(DirCtx);
+
+/** سهم "رجوع"/"السابق": يشير يميناً في RTL ويساراً في LTR.
+    يُطبَّق على ChevronRight، فيُعكس في LTR فقط. */
+export const backArrow = (dir: "rtl" | "ltr") =>
+  dir === "ltr" ? { transform: "scaleX(-1)" } : undefined;
+
+/** يتابع تفضيل تقليل الحركة ويتحدّث إن غيّره المستخدم أثناء التصفّح. */
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+    const on = () => setReduced(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return reduced;
+}
+
+/* أنماط عامة تُحقن مرة واحدة لا مع كل مكوّن. */
+const GLOBAL_STYLE_ID = "ts-customer-style";
+if (typeof document !== "undefined" && !document.getElementById(GLOBAL_STYLE_ID)) {
+  const el = document.createElement("style");
+  el.id = GLOBAL_STYLE_ID;
+  el.textContent = `
+.ts-hscroll::-webkit-scrollbar,.ts-hgallery::-webkit-scrollbar{display:none}
+@keyframes ts-pulse{
+  0%,100%{ border-color:${C.border}; box-shadow:0 0 0 0 rgba(31,111,107,0); }
+  50%    { border-color:${C.green};  box-shadow:0 0 0 3px rgba(31,111,107,.13); }
+}
+.ts-pulse{ animation: ts-pulse ${MOTION.pulse}ms ease-in-out infinite; }
+.ts-card:active{ transform: scale(.985); }
+@media (prefers-reduced-motion: reduce){
+  .ts-pulse{ animation: none; border-color:${C.border}; }
+  .ts-card:active{ transform: none; }
+}`;
+  document.head.appendChild(el);
+}
+
+/* ── نص متحرك ─────────────────────────────────────────────────── */
+/** يبدّل بين سطور بانزلاق رأسي داخل ارتفاع ثابت، فلا تقفز الشبكة.
+    `delay` يُزيح بداية كل بطاقة حتى لا تنقلب كلها في اللحظة نفسها. */
+export function RotatingText({ items, delay = 0, style }: {
+  items: ReactNode[]; delay?: number; style?: CSSProperties;
+}) {
+  const reduced = useReducedMotion();
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    if (reduced || items.length < 2) return;
+    let interval: ReturnType<typeof setInterval>;
+    const start = setTimeout(() => {
+      setI(n => (n + 1) % items.length);
+      interval = setInterval(() => setI(n => (n + 1) % items.length), MOTION.rotate);
+    }, MOTION.rotate + delay);
+    return () => { clearTimeout(start); clearInterval(interval); };
+  }, [reduced, items.length, delay]);
+
+  // الارتفاع مقفول على سطر واحد — هو ما يمنع اهتزاز الشبكة أثناء التبديل
+  const lineH = Math.round(T.meta.fontSize * T.meta.lineHeight);
+  const safe = items.length ? items : [null];
+  const idx = Math.min(i, safe.length - 1);
+
+  return (
+    <div style={{ height: lineH, overflow: "hidden", position: "relative", ...style }}>
+      {reduced ? (
+        <div className="truncate" style={{ height: lineH, lineHeight: `${lineH}px` }}>{safe[0]}</div>
+      ) : (
+        // بلا mode="wait": الخارج والداخل يتحركان معاً، وإلا بقي السطر فارغاً
+        // طوال مدة الخروج فبدا كوميض.
+        <AnimatePresence initial={false}>
+          <motion.div key={idx}
+            initial={{ y: lineH, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -lineH, opacity: 0 }}
+            transition={{ duration: 0.42, ease: [0.4, 0, 0.2, 1] }}
+            className="truncate"
+            style={{ position: "absolute", insetInline: 0, top: 0, height: lineH, lineHeight: `${lineH}px` }}>
+            {safe[idx]}
+          </motion.div>
+        </AnimatePresence>
+      )}
+    </div>
+  );
+}
+
+/* ── فواصل وأقسام ─────────────────────────────────────────────── */
+export function Divider({ inset = false }: { inset?: boolean }) {
+  return <div style={{ height: 1, background: C.line, marginInline: inset ? SPACE.page : 0 }} />;
+}
+
+export type Tone = "white" | "sand" | "action";
+const TONE_BG: Record<Tone, string> = { white: C.white, sand: C.band, action: C.bandAction };
+
+/** «ضربة الصبغة» — شريط أخضر قصير قبل العنوان يعلن بداية موضوع جديد. */
+export function TitleAccent() {
+  return <span aria-hidden style={{ width: 4, height: 20, borderRadius: 2, background: C.green, flexShrink: 0 }} />;
+}
+
+/** قسم بخلفية ملوّنة ممتدة لحافتي الشاشة. تغيّر اللون بين قسمين هو الفاصل،
+    فالخط `1px` يُستخدم فقط حين يتجاور قسمان بنفس اللون.
+    bleed: يزيل الحشوة الجانبية عن المحتوى (للـ HScroll الممتد) ويبقيها على العنوان. */
+export function Section({ title, action, children, divider = false, bleed = false, tone = "white" }: {
+  title?: string; action?: ReactNode; children: ReactNode;
+  divider?: boolean; bleed?: boolean; tone?: Tone;
+}) {
+  return (
+    <>
+      <section style={{ background: TONE_BG[tone], paddingInline: bleed ? 0 : SPACE.page, paddingBlock: SPACE.section }}>
+        {(title || action) && (
+          <div className="flex items-center justify-between gap-3"
+            style={{ marginBottom: 16, paddingInline: bleed ? SPACE.page : 0 }}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <TitleAccent />
+              {title && <h2 className="truncate" style={{ ...T.h2, color: C.ink, margin: 0 }}>{title}</h2>}
+            </div>
+            {action}
+          </div>
+        )}
+        {children}
+      </section>
+      {divider && <Divider />}
+    </>
+  );
+}
+
+/* ── خطوة مرقّمة داخل كتلة الحجز ─────────────────────────────── */
+/** شارة رقم تتحول إلى ✓ عند الاكتمال — تعطي إحساس «٢ من ٤» بلا عدّاد منفصل. */
+export function StepRow({ n, title, done, children, last }: {
+  n: number; title: string; done?: boolean; children: ReactNode; last?: boolean;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center" style={{ flexShrink: 0, width: 28 }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: R.pill, flexShrink: 0,
+          background: done ? C.green : C.white,
+          border: done ? "none" : `1px solid ${C.border}`,
+          color: done ? C.white : C.ink2,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          ...T.small, fontWeight: 600,
+        }}>
+          {done ? <Check size={15} /> : <span style={LTR}>{n}</span>}
+        </span>
+        {!last && <span style={{ flex: 1, width: 1, background: C.border, marginBlock: 6 }} />}
+      </div>
+      <div className="min-w-0" style={{ flex: 1, paddingBottom: last ? 0 : 26 }}>
+        <div style={{ ...T.h3, color: C.ink, marginBottom: 12 }}>{title}</div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ── أزرار ────────────────────────────────────────────────────── */
+export function CTAButton({ children, onClick, disabled, variant = "green", full, style }: {
+  children: ReactNode; onClick?: () => void; disabled?: boolean;
+  variant?: "green" | "dark"; full?: boolean; style?: CSSProperties;
+}) {
+  const bg = disabled ? C.ink3 : variant === "dark" ? C.ink : undefined;
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        background: bg ?? CTA_GRADIENT, color: C.white, border: "none",
+        borderRadius: R.pill, paddingInline: 28, height: 50, width: full ? "100%" : undefined,
+        fontFamily: FONT.sans, fontSize: 16, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", transition: "opacity .15s",
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+        ...style,
+      }}>
+      {children}
+    </button>
+  );
+}
+
+export function GrayButton({ children, onClick, full, style }: {
+  children: ReactNode; onClick?: () => void; full?: boolean; style?: CSSProperties;
+}) {
+  return (
+    <button onClick={onClick}
+      style={{
+        background: C.fill, color: C.ink, border: "none", borderRadius: R.button,
+        paddingInline: 20, height: 48, width: full ? "100%" : undefined,
+        fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, cursor: "pointer",
+        ...style,
+      }}>
+      {children}
+    </button>
+  );
+}
+
+/** زر بحدود رفيعة — نمط "عرض كل التقييمات" ذي الإطار عندهم. */
+export function OutlineButton({ children, onClick, full }: { children: ReactNode; onClick?: () => void; full?: boolean }) {
+  return (
+    <button onClick={onClick}
+      style={{
+        background: C.white, color: C.ink, border: `1px solid ${C.ink}`, borderRadius: R.button,
+        paddingInline: 20, height: 48, width: full ? "100%" : undefined,
+        fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, cursor: "pointer",
+      }}>
+      {children}
+    </button>
+  );
+}
+
+/** الأزرار الدائرية العائمة فوق المعرض (رجوع، قلب، مشاركة). */
+export function IconBubble({ children, onClick, label }: { children: ReactNode; onClick?: () => void; label?: string }) {
+  return (
+    <button onClick={onClick} aria-label={label}
+      style={{
+        width: 34, height: 34, borderRadius: R.pill, border: "none",
+        background: "rgba(255,255,255,.92)", color: C.ink, boxShadow: SHADOW.float,
+        display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+      }}>
+      {children}
+    </button>
+  );
+}
+
+/* ── مبدّل اللغة ──────────────────────────────────────────────── */
+/** شريحة `ع | e` تبدّل مباشرة بين العربية والإنجليزية، وسهم يفتح باقي اللغات.
+    الكرة الأرضية وحدها غامضة؛ والشريحة وحدها تُسقط الأردية والتركية — فالاثنان معاً. */
+export function LangSwitch<L extends string>({ lang, setLang, langs, label }: {
+  lang: L;
+  setLang: (l: L) => void;
+  langs: { code: L; label: string }[];
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const primary = langs.filter(l => l.code === ("ar" as L) || l.code === ("en" as L));
+  const rest = langs.filter(l => !primary.includes(l));
+  const mark: Record<string, string> = { ar: "ع", en: "e" };
+
+  const seg = (on: boolean): CSSProperties => ({
+    minWidth: 30, height: 32, borderRadius: R.pill, border: "none", cursor: "pointer",
+    background: on ? C.ink : "transparent", color: on ? C.white : C.ink2,
+    fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, lineHeight: 1,
+    display: "flex", alignItems: "center", justifyContent: "center",
+  });
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <div className="flex items-center" aria-label={label}
+        style={{ height: 44, paddingInline: 5, gap: 2, borderRadius: R.pill, border: `1px solid ${C.border}`, background: C.white }}>
+        {primary.map(l => (
+          <button key={l.code} onClick={() => setLang(l.code)} aria-label={l.label} style={seg(lang === l.code)}>
+            {mark[l.code] ?? l.label.slice(0, 2)}
+          </button>
+        ))}
+        {rest.length > 0 && (
+          <button onClick={() => setOpen(v => !v)} aria-label={label}
+            style={{ ...seg(rest.some(l => l.code === lang)), minWidth: 22 }}>
+            <ChevronDown size={15} />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+          <div style={{ position: "absolute", top: 50, insetInlineEnd: 0, zIndex: 31, background: C.white, border: `1px solid ${C.border}`, borderRadius: R.card, overflow: "hidden", minWidth: 150, boxShadow: "0 10px 30px -8px rgba(0,0,0,.25)" }}>
+            {langs.map(l => (
+              <button key={l.code} onClick={() => { setLang(l.code); setOpen(false); }}
+                className="flex items-center justify-between gap-2 w-full"
+                style={{ padding: "12px 14px", background: lang === l.code ? C.fill : C.white, border: "none", cursor: "pointer", textAlign: "start", ...T.meta, fontWeight: lang === l.code ? 600 : 400, color: C.ink }}>
+                {l.label}{lang === l.code && <Check size={15} color={C.green} />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── شرائح ────────────────────────────────────────────────────── */
+export function Chip({ children, tone = "line" }: { children: ReactNode; tone?: "line" | "fill" | "gold" }) {
+  const s = tone === "fill" ? { background: C.fill, border: "none" }
+    : tone === "gold" ? { background: C.goldTint, border: `1px solid ${C.gold}` }
+    : { background: C.white, border: `1px solid ${C.border}` };
+  return (
+    <span className="inline-flex items-center gap-1.5"
+      style={{ ...s, borderRadius: R.chip, paddingInline: 12, height: 32, ...T.small, color: C.ink, whiteSpace: "nowrap" }}>
+      {children}
+    </span>
+  );
+}
+
+/** نجوم الفندق — بديلنا عن تقييم Airbnb الرقمي (لا يوجد حقل rating في البيانات).
+    `compact` يعرض «4★» بنجمة واحدة: أربع نجوم تأكل ثلث عرض البطاقة الضيقة
+    فتقصّ العنوان — وهو نفس ما تفعله Airbnb في بطاقاتها («4.92 ★»). */
+export function Stars({ n, size = 13, compact }: { n: number; size?: number; compact?: boolean }) {
+  if (compact) {
+    return (
+      <span className="inline-flex items-center" style={{ gap: 2, ...LTR, flexShrink: 0 }}>
+        <span style={{ ...T.small, fontWeight: 600, color: C.ink }}>{n}</span>
+        <Star size={size} fill={C.gold} color={C.gold} />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center" style={{ gap: 1, ...LTR }}>
+      {Array.from({ length: n }, (_, i) => <Star key={i} size={size} fill={C.gold} color={C.gold} />)}
+    </span>
+  );
+}
+
+/* ── صفوف ─────────────────────────────────────────────────────── */
+/** صف ميزة — أيقونة ونص، مع خط علوي عند عدم التوفر كما يفعلون. */
+export function AmenityRow({ icon, text, unavailable }: { icon: ReactNode; text: string; unavailable?: boolean }) {
+  return (
+    <div className="flex items-center gap-4" style={{ paddingBlock: 12 }}>
+      <span style={{ color: unavailable ? C.ink3 : C.ink, flexShrink: 0, display: "flex" }}>{icon}</span>
+      <span style={{ ...T.body, color: unavailable ? C.ink3 : C.ink, textDecoration: unavailable ? "line-through" : "none" }}>{text}</span>
+    </div>
+  );
+}
+
+/** صف قابل للطي — نمط "أشياء يجب معرفتها". */
+export function AccordionRow({ icon, title, children }: { icon?: ReactNode; title: string; children: ReactNode }) {
+  const dir = useDir();
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderBottom: `1px solid ${C.line}` }}>
+      <button onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-3 w-full"
+        style={{ background: "none", border: "none", padding: "18px 0", cursor: "pointer", textAlign: "start" }}>
+        {icon && <span style={{ color: C.ink, flexShrink: 0, display: "flex" }}>{icon}</span>}
+        <span className="flex-1" style={{ ...T.h3, color: C.ink }}>{title}</span>
+        <ChevronLeft size={18} color={C.ink2}
+          style={{ flexShrink: 0, transition: "transform .2s", transform: `${dir === "rtl" ? "" : "scaleX(-1) "}${open ? "rotate(-90deg)" : ""}` }} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            style={{ overflow: "hidden" }}>
+            <div style={{ ...T.meta, color: C.ink2, paddingBottom: 18, whiteSpace: "pre-line" }}>{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── تمرير أفقي ───────────────────────────────────────────────── */
+/** يمتد حتى حافة الشاشة ويملك حشوته الجانبية بنفسه.
+    الحاوية الأب يجب ألا تضيف paddingInline — استخدم <Section bleed>.
+    (الهامش السالب مع scroll-snap يُسقط حشوة البداية في RTL.) */
+export function HScroll({ children, gap = SPACE.gap }: { children: ReactNode; gap?: number }) {
+  return (
+    <div
+      className="ts-hscroll flex overflow-x-auto"
+      style={{
+        gap, scrollSnapType: "x mandatory", scrollbarWidth: "none",
+        paddingInline: SPACE.page,
+        // بدونها يحاذي snap حافة البطاقة بحافة الـpadding-box فيبتلع الحشوة
+        scrollPaddingInline: SPACE.page,
+      }}>
+      {children}
+    </div>
+  );
+}
+
+/* ── بطاقة الباقة في الاستكشاف ────────────────────────────────── */
+/** حاوية محدودة (بخلاف بطاقات Airbnb العارية) — الحدّ والنبض يوضّحان منطقة اللمس.
+    `facts` تدور تحت العنوان بارتفاع ثابت؛ إن غابت يُعرض `meta` ساكناً. */
+export function ListingCard({
+  image, title, meta, facts, factsDelay = 0, price, priceNote, badge, stars,
+  onClick, disabled, width, pulse,
+}: {
+  image: string; title: string; meta?: ReactNode; facts?: ReactNode[]; factsDelay?: number;
+  price?: string; priceNote?: string; badge?: string; stars?: number;
+  onClick?: () => void; disabled?: boolean; width?: number | string; pulse?: boolean;
+}) {
+  const [liked, setLiked] = useState(false);
+  const grid = width === "100%";
+  const act = disabled ? undefined : onClick;
+
+  return (
+    <div
+      className={`ts-card${pulse && !disabled ? " ts-pulse" : ""}`}
+      style={{
+        width: width ?? 200,
+        flexShrink: grid ? undefined : 0,
+        scrollSnapAlign: grid ? undefined : "start",
+        opacity: disabled ? 0.55 : 1,
+        border: `1px solid ${C.border}`, borderRadius: R.card,
+        overflow: "hidden", background: C.white,
+        transition: "transform .12s ease",
+      }}>
+      <div style={{ position: "relative" }}>
+        <button onClick={act} disabled={disabled}
+          style={{ display: "block", width: "100%", padding: 0, border: "none", background: "none", cursor: disabled ? "not-allowed" : "pointer" }}>
+          <img src={image} alt="" loading="lazy"
+            style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block", background: C.fill }} />
+        </button>
+        {badge && (
+          <span style={{
+            position: "absolute", top: 10, insetInlineStart: 10, background: C.white, color: C.ink,
+            borderRadius: R.pill, paddingInline: 10, height: 26, display: "inline-flex", alignItems: "center",
+            ...T.small, boxShadow: SHADOW.float, maxWidth: "calc(100% - 52px)", whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis",
+          }}>{badge}</span>
+        )}
+        <button onClick={() => setLiked(v => !v)} aria-label="حفظ"
+          style={{ position: "absolute", top: 8, insetInlineEnd: 8, background: "none", border: "none", cursor: "pointer", padding: 4, lineHeight: 0 }}>
+          <Heart size={22} color="#fff" fill={liked ? C.gold : "rgba(0,0,0,.35)"} strokeWidth={2} />
+        </button>
+      </div>
+
+      <button onClick={act} disabled={disabled}
+        style={{ display: "block", width: "100%", padding: 12, border: "none", background: "none", textAlign: "start", cursor: disabled ? "not-allowed" : "pointer" }}>
+        <div className="flex items-center gap-1.5">
+          <span className="flex-1 truncate" style={{ ...T.body, fontSize: grid ? 15 : T.body.fontSize, fontWeight: 500, color: C.ink }}>{title}</span>
+          {stars ? <Stars n={stars} size={12} compact={grid} /> : null}
+        </div>
+
+        {facts?.length
+          ? <RotatingText items={facts} delay={factsDelay} style={{ ...T.meta, color: C.ink2, marginTop: 3 }} />
+          : meta ? <div className="truncate" style={{ ...T.meta, color: C.ink2, marginTop: 3 }}>{meta}</div> : null}
+
+        {price && (
+          <div className="truncate" style={{ ...T.meta, color: C.ink, marginTop: 3 }}>
+            <b style={{ fontWeight: 600 }}>{price}</b>
+            {priceNote && <span style={{ color: C.ink2 }}> {priceNote}</span>}
+          </div>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/* ── معرض الصور العلوي ────────────────────────────────────────── */
+export function HeroGallery({ images, onBack, height = 300 }: { images: string[]; onBack?: () => void; height?: number }) {
+  const dir = useDir();
+  const ref = useRef<HTMLDivElement>(null);
+  const [i, setI] = useState(0);
+  const [liked, setLiked] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const onScroll = () => {
+      // في RTL يكون scrollLeft سالباً في المتصفحات الحديثة — abs يغطّي الحالتين
+      const idx = Math.round(Math.abs(el.scrollLeft) / el.clientWidth);
+      setI(Math.min(images.length - 1, Math.max(0, idx)));
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [images.length]);
+
+  return (
+    <div style={{ position: "relative", background: C.fill }}>
+      <div ref={ref} className="ts-hgallery flex overflow-x-auto"
+        style={{ height, scrollSnapType: "x mandatory", scrollbarWidth: "none" }}>
+        {images.map((src, n) => (
+          <img key={n} src={src} alt="" loading={n === 0 ? "eager" : "lazy"}
+            style={{ width: "100%", height, objectFit: "cover", flexShrink: 0, scrollSnapAlign: "center", display: "block" }} />
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between"
+        style={{ position: "absolute", top: 14, insetInline: 14, pointerEvents: "none" }}>
+        <div className="flex items-center gap-2" style={{ pointerEvents: "auto" }}>
+          <IconBubble onClick={() => setLiked(v => !v)} label="حفظ">
+            <Heart size={17} fill={liked ? C.gold : "none"} color={liked ? C.gold : C.ink} />
+          </IconBubble>
+          <IconBubble label="مشاركة"><Share size={16} /></IconBubble>
+        </div>
+        {onBack && (
+          <div style={{ pointerEvents: "auto" }}>
+            <IconBubble onClick={onBack} label="رجوع">
+              <ChevronRight size={19} style={backArrow(dir)} />
+            </IconBubble>
+          </div>
+        )}
+      </div>
+
+      {images.length > 1 && (
+        <span style={{
+          position: "absolute", bottom: 46, insetInlineStart: 16,
+          background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
+          paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
+        }}>{i + 1} / {images.length}</span>
+      )}
+    </div>
+  );
+}
+
+/* ── معرض وسائط: رئيسية فوق + شريط مصغّرات ───────────────────── */
+export interface GalleryItem { url: string; kind: "image" | "video"; poster?: string }
+
+const THUMB = 62;
+
+/** صورة رئيسية مع شريط مصغّرات. يتكيّف مع العدد:
+    عنصر واحد → بلا شريط · ≤4 → شريط ساكن · أكثر → يتمرّر ويتبع النشط.
+    التقدّم التلقائي يتوقف نهائياً عند أول تفاعل — وإلا قاوم المستخدمَ كلما تصفّح. */
+export function MediaGallery({ items, height = 210, onOpen }: {
+  items: GalleryItem[]; height?: number; onOpen?: (i: number) => void;
+}) {
+  const reduced = useReducedMotion();
+  const [i, setI] = useState(0);
+  const [touched, setTouched] = useState(false);
+  const [playing, setPlaying] = useState<number | null>(null);
+  const strip = useRef<HTMLDivElement>(null);
+
+  const auto = !reduced && !touched && items.length > 1 && playing === null;
+
+  useEffect(() => {
+    if (!auto) return;
+    const id = setInterval(() => setI(n => (n + 1) % items.length), 4000);
+    return () => clearInterval(id);
+  }, [auto, items.length]);
+
+  /* الشريط يتبع المصغّرة النشطة — بتمرير الشريط وحده.
+     ‏scrollIntoView ممنوع هنا: يمرّر كل الحاويات الأب بما فيها الصفحة،
+     فكل معرض يسحب الصفحة إليه مع كل تقدّم تلقائي ويقاوم تمرير المستخدم.
+     الإزاحة تُحسب من المواضع المرسومة فعلاً، فتصحّ في RTL و LTR معاً
+     (‏scrollLeft سالب في RTL، وحسابه يدوياً مصدر أخطاء). */
+  useEffect(() => {
+    const wrap = strip.current;
+    const el = wrap?.children[i] as HTMLElement | undefined;
+    if (!wrap || !el) return;
+    const w = wrap.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    const delta = (e.left + e.width / 2) - (w.left + w.width / 2);
+    if (Math.abs(delta) < 1) return;
+    wrap.scrollBy({ left: delta, behavior: reduced ? "auto" : "smooth" });
+  }, [i, reduced]);
+
+  if (!items.length) return null;
+  const cur = items[i];
+
+  const take = (n: number) => { setTouched(true); setPlaying(null); setI(n); };
+
+  return (
+    <div>
+      <div style={{ position: "relative", borderRadius: R.card, overflow: "hidden", background: C.fill, height }}>
+        {cur.kind === "video" && playing === i ? (
+          // يُحمَّل فقط بعد الضغط — الفيديو ثقيل والمستخدم غالباً على بيانات الجوال
+          <video src={cur.url} poster={cur.poster} controls autoPlay playsInline
+            style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000" }} />
+        ) : (
+          <button
+            onClick={() => { setTouched(true); cur.kind === "video" ? setPlaying(i) : onOpen?.(i); }}
+            style={{ display: "block", width: "100%", height: "100%", padding: 0, border: "none", background: "none", cursor: "pointer" }}>
+            <img src={cur.kind === "video" ? (cur.poster ?? "") : cur.url} alt="" loading="lazy"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            {cur.kind === "video" && (
+              <span style={{
+                position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(0,0,0,.28)",
+              }}>
+                <span style={{
+                  width: 54, height: 54, borderRadius: R.pill, background: "rgba(255,255,255,.94)",
+                  display: "flex", alignItems: "center", justifyContent: "center", boxShadow: SHADOW.float,
+                }}>
+                  <Play size={22} fill={C.ink} color={C.ink} style={{ marginInlineStart: 3 }} />
+                </span>
+              </span>
+            )}
+          </button>
+        )}
+
+        {items.length > 1 && (
+          <span style={{
+            position: "absolute", bottom: 10, insetInlineStart: 10,
+            background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
+            paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
+          }}>{i + 1} / {items.length}</span>
+        )}
+      </div>
+
+      {items.length > 1 && (
+        <div ref={strip} className="ts-hscroll flex overflow-x-auto"
+          style={{ gap: 8, marginTop: 8, scrollbarWidth: "none", paddingBlock: 3 }}>
+          {items.map((m, n) => (
+            <button key={n} onClick={() => take(n)} aria-label={`${n + 1}`}
+              style={{
+                position: "relative", width: THUMB, height: THUMB, flexShrink: 0, padding: 0,
+                borderRadius: R.button, overflow: "hidden", cursor: "pointer", background: C.fill,
+                border: n === i ? `2px solid ${C.green}` : `1px solid ${C.border}`,
+                opacity: n === i ? 1 : 0.72, transition: "opacity .15s",
+              }}>
+              <img src={m.kind === "video" ? (m.poster ?? "") : m.url} alt="" loading="lazy"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              {m.kind === "video" && (
+                <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.3)" }}>
+                  <Play size={16} fill="#fff" color="#fff" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── الشريط الثابت السفلي ─────────────────────────────────────── */
+export function StickyBar({ price, note, chip, cta, onCta, ctaDisabled, variant = "green" }: {
+  price?: string; note?: string; chip?: ReactNode;
+  cta: string; onCta?: () => void; ctaDisabled?: boolean; variant?: "green" | "dark";
+}) {
+  return (
+    <div style={{
+      position: "sticky", bottom: 0, zIndex: 30, background: C.white,
+      borderTop: `1px solid ${C.line}`, boxShadow: SHADOW.sheet,
+      paddingInline: SPACE.page, paddingBlock: 12,
+      display: "flex", alignItems: "center", gap: 16,
+      paddingBottom: `calc(12px + env(safe-area-inset-bottom, 0px))`,
+    }}>
+      {(price || note || chip) && (
+        <div className="flex-1 min-w-0">
+          {price && <div style={{ ...T.price, color: C.ink, textDecoration: "underline", textUnderlineOffset: 3 }}>{price}</div>}
+          {note && <div className="truncate" style={{ ...T.small, fontWeight: 400, color: C.ink2, marginTop: 2 }}>{note}</div>}
+          {chip && <div style={{ marginTop: 6 }}>{chip}</div>}
+        </div>
+      )}
+      <CTAButton onClick={onCta} disabled={ctaDisabled} variant={variant} full={!price && !note && !chip}
+        style={{ flexShrink: 0, minWidth: 150 }}>
+        {cta}
+      </CTAButton>
+    </div>
+  );
+}
+
+/* ── ورقة سفلية ───────────────────────────────────────────────── */
+export function Sheet({ open, onClose, title, children, footer }: {
+  open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={onClose}
+          style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end" }}>
+          <motion.div
+            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 320 }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%", maxHeight: "92vh", background: C.white,
+              borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet,
+              display: "flex", flexDirection: "column", overflow: "hidden",
+            }}>
+            <div className="flex items-center gap-3" style={{ padding: `14px ${SPACE.page}px`, borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
+              <button onClick={onClose} aria-label="إغلاق"
+                style={{ width: 34, height: 34, borderRadius: R.pill, border: "none", background: "none", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <X size={19} />
+              </button>
+              {title && <span className="flex-1 text-center" style={{ ...T.h3, color: C.ink }}>{title}</span>}
+              <span style={{ width: 34, flexShrink: 0 }} />
+            </div>
+            <div className="flex-1 overflow-y-auto" style={{ padding: SPACE.page }}>{children}</div>
+            {footer && <div style={{ padding: SPACE.page, borderTop: `1px solid ${C.line}`, flexShrink: 0 }}>{footer}</div>}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ── عدّاد ────────────────────────────────────────────────────── */
+export function Counter({ value, min = 1, max = 99, onChange, label, note }: {
+  value: number; min?: number; max?: number; onChange: (v: number) => void; label: string; note?: string;
+}) {
+  const btn = (on: boolean): CSSProperties => ({
+    width: 34, height: 34, borderRadius: R.pill,
+    border: `1px solid ${on ? C.ink2 : C.line}`, background: C.white,
+    color: on ? C.ink : C.ink3, cursor: on ? "pointer" : "not-allowed",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  });
+  return (
+    <div className="flex items-center gap-4" style={{ paddingBlock: 8 }}>
+      <div className="flex-1">
+        <div style={{ ...T.body, fontWeight: 500, color: C.ink }}>{label}</div>
+        {note && <div style={{ ...T.meta, color: C.ink2 }}>{note}</div>}
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={() => value > min && onChange(value - 1)} disabled={value <= min} style={btn(value > min)} aria-label="إنقاص"><Minus size={15} /></button>
+        <span style={{ ...T.body, fontWeight: 500, color: C.ink, minWidth: 20, textAlign: "center", ...LTR }}>{value}</span>
+        <button onClick={() => value < max && onChange(value + 1)} disabled={value >= max} style={btn(value < max)} aria-label="زيادة"><Plus size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ── حقل إدخال ────────────────────────────────────────────────── */
+export function Field({ value, onChange, placeholder, ltr, type = "text" }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; ltr?: boolean; type?: string;
+}) {
+  const dir = useDir();
+  return (
+    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type}
+      style={{
+        width: "100%", height: 54, paddingInline: 14, borderRadius: R.button,
+        border: `1px solid ${C.border}`, background: C.white, color: C.ink,
+        fontFamily: FONT.sans, fontSize: 16, outline: "none",
+        ...(ltr ? { direction: "ltr" as const, textAlign: dir === "rtl" ? ("right" as const) : ("left" as const) } : null),
+      }} />
+  );
+}
+
+/* ── صف اختيار (نوع السكن) ────────────────────────────────────── */
+/** صف اختيار. **الصف كله — بما فيه الصورة — يختار**، وعند تمرير `onDetails`
+    يُضاف زر مفصول بخط رفيع في طرف الصف يفتح التفاصيل.
+    الفصل مقصود: منطقتا لمس متداخلتان في صف واحد تُفاجئ المستخدم،
+    والخط الرفيع هو ما يعلن أن هذا شيء آخر. زران شقيقان لا متداخلان —
+    زر داخل زر HTML غير صحيح. */
+export function SelectRow({ image, title, note, price, priceNote, selected, onClick, onDetails, detailsLabel, detailsCount }: {
+  image?: string; title: string; note?: string; price?: string; priceNote?: string;
+  selected?: boolean; onClick?: () => void;
+  onDetails?: () => void; detailsLabel?: string; detailsCount?: number;
+}) {
+  return (
+    <div className="flex items-stretch"
+      style={{
+        border: `${selected ? 2 : 1}px solid ${selected ? C.green : C.border}`,
+        background: selected ? C.greenTint : C.white,
+        borderRadius: R.card, padding: selected ? 11 : 12,
+      }}>
+      <button onClick={onClick}
+        className="flex items-center gap-3 flex-1 min-w-0"
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "start" }}>
+        {image && (
+          <img src={image} alt="" loading="lazy"
+            style={{ width: 60, height: 60, borderRadius: R.button, objectFit: "cover", display: "block", flexShrink: 0, background: C.fill }} />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="truncate" style={{ ...T.body, fontWeight: 500, color: C.ink }}>{title}</div>
+          {note && <div className="truncate" style={{ ...T.meta, color: C.ink2 }}>{note}</div>}
+        </div>
+        <div style={{ textAlign: "end", flexShrink: 0 }}>
+          {price && <div style={{ ...T.body, fontWeight: 600, color: C.ink, ...LTR }}>{price}</div>}
+          {priceNote && <div style={{ ...T.small, fontWeight: 400, color: C.ink2 }}>{priceNote}</div>}
+        </div>
+      </button>
+
+      {onDetails && (
+        <>
+          <span aria-hidden style={{ width: 1, background: C.border, marginInline: 6, alignSelf: "stretch", flexShrink: 0 }} />
+          <button onClick={onDetails} aria-label={detailsLabel}
+            className="flex flex-col items-center justify-center"
+            style={{ width: 38, flexShrink: 0, gap: 3, background: "none", border: "none", cursor: "pointer", color: C.green, padding: 0 }}>
+            <Images size={18} />
+            <span style={{ fontSize: 10, fontWeight: 600, lineHeight: 1, whiteSpace: "nowrap" }}>
+              {detailsCount != null && <span style={LTR}>{detailsCount} </span>}{detailsLabel}
+            </span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── تقويم الرحلات ────────────────────────────────────────────── */
+const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const AR_WEEK = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
+
+/** تقويم شهري بنمطهم: المتاح أسود قابل للضغط، المختار دائرة خضراء، غير المتاح مشطوب. */
+export function TripCalendar<Tr extends { id: string; departureDate: string }>({
+  trips, valueId, onPick, onClear, clearLabel,
+}: {
+  trips: Tr[]; valueId?: string; onPick: (t: Tr) => void; onClear?: () => void; clearLabel?: string;
+}) {
+  const dir = useDir();
+  const byDate = new Map<string, Tr>();
+  trips.forEach(t => { if (!byDate.has(t.departureDate)) byDate.set(t.departureDate, t); });
+
+  const first = trips.map(t => t.departureDate).sort()[0];
+  const initial = first ? new Date(first + "T00:00:00") : new Date();
+  const [ym, setYm] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
+
+  const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate();
+  const firstCol = (new Date(ym.y, ym.m, 1).getDay() + 1) % 7;
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstCol; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const move = (delta: number) => setYm(s => {
+    let m = s.m + delta, y = s.y;
+    if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+    return { y, m };
+  });
+
+  const navBtn: CSSProperties = {
+    width: 34, height: 34, borderRadius: R.pill, border: "none", background: "none",
+    color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <button onClick={() => move(-1)} style={navBtn} aria-label="الشهر السابق">
+          <ChevronRight size={20} style={backArrow(dir)} />
+        </button>
+        <div style={{ ...T.h3, color: C.ink }}>{AR_MONTHS[ym.m]} {ym.y}</div>
+        <button onClick={() => move(1)} style={navBtn} aria-label="الشهر التالي">
+          <ChevronLeft size={20} style={backArrow(dir)} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7" style={{ gap: 2 }}>
+        {AR_WEEK.map((w, i) => (
+          <div key={"w" + i} style={{ textAlign: "center", ...T.small, color: C.ink2, paddingBottom: 6 }}>{w}</div>
+        ))}
+        {cells.map((d, i) => {
+          if (d === null) return <div key={"e" + i} style={{ height: 46 }} />;
+          const ds = `${ym.y}-${pad(ym.m + 1)}-${pad(d)}`;
+          const trip = byDate.get(ds);
+          const on = !!trip && valueId === trip.id;
+          return (
+            // عندهم الأغلب متاح والقليل مشطوب؛ عندنا العكس (رحلات بتواريخ محددة)،
+            // فالشطب على كل الشهر يصير ضجيجاً — نميّز بالتباين: المتاح داكن وعريض.
+            <button key={"d" + i} disabled={!trip} onClick={() => trip && onPick(trip)}
+              style={{
+                height: 46, border: "none",
+                // أبيض لا رمادي: التقويم يعيش داخل الكتلة الخضراء، والرمادي يختفي فوقها
+                background: on ? C.green : trip ? C.white : "none",
+                color: on ? C.white : trip ? C.ink : C.ink3,
+                borderRadius: R.pill, cursor: trip ? "pointer" : "default",
+                fontFamily: FONT.sans, fontSize: 15, fontWeight: on || trip ? 600 : 400,
+                ...LTR,
+              }}>
+              {d}
+            </button>
+          );
+        })}
+      </div>
+
+      {onClear && valueId && (
+        <div style={{ textAlign: "start", marginTop: 10 }}>
+          <button onClick={onClear}
+            style={{ background: "none", border: "none", ...T.meta, fontWeight: 600, color: C.ink, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+            {clearLabel ?? "محو التاريخ"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── مساعد عرض السعر ──────────────────────────────────────────── */
+export const priceText = (n: number, currency: string) => `${money(n)} ${currency}`;

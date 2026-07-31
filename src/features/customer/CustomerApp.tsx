@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Globe, ChevronLeft, Check, Users, CalendarDays, Clock, Plus, Minus, X, Search, Home, Wifi, Tv, BatteryCharging, ArrowLeft, ChevronRight } from "lucide-react";
+import { Globe, ChevronLeft, Check, Users, X, Search, Heart, UserRound, ArrowLeft } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, RoomPrice } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
@@ -11,9 +11,14 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/app/components/ui/input
 import { LANGS, dirOf, makeT, type Lang } from "./i18n";
 import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, type Catalog, type TrackResult } from "./data";
 import { sendOtp, verifyOtp, loadSession, saveSession, clearSession, DEV_OTP_HINT } from "./otp";
+import { DirProvider } from "./ui/kit";
+import { C } from "./ui/tokens";
+import { Explore } from "./screens/Explore";
+import { Listing } from "./screens/Listing";
 
 const G = { deep:"#0B5A41", dark:"#073A2B", green:B.primary, gold:B.gold, bg:"#F5F3EE" };
-type Screen = "packages"|"trip"|"seat"|"room"|"passengers"|"review"|"success"|"track"|"profile"|"login"|"otp";
+/* "listing" هي الصفحة الواحدة التي حلّت محل trip + seat + room. */
+type Screen = "packages"|"listing"|"passengers"|"review"|"success"|"track"|"profile"|"login"|"otp";
 interface Pax { name:string; phone:string; idNumber:string; birthDate:string; }
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
 const availSeats=(t:Trip)=>Math.max(0,t.seats-t.bookedSeats);
@@ -51,45 +56,6 @@ const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل ا�
 باستمرارك تُقرّ بأنك اطلعت على هذه الشروط ووافقت عليها.`;
 
 function roomLabel(r:RoomPrice){ return r.type + (r.persons?` · ${r.persons} أفراد`:""); }
-
-/* تقويم شهري لاختيار موعد السفر — المتاح أبيض قابل للضغط، غير المتاح رمادي معطّل */
-function TripCalendar({trips,value,onPick}:{trips:Trip[];value?:string;onPick:(t:Trip)=>void}){
-  const byDate=useMemo(()=>{ const m=new Map<string,Trip>(); trips.forEach(t=>{ if(!m.has(t.departureDate)) m.set(t.departureDate,t); }); return m; },[trips]);
-  const first=trips.map(t=>t.departureDate).sort()[0];
-  const initial=first?new Date(first+"T00:00:00"):new Date();
-  const [ym,setYm]=useState<{y:number;m:number}>({y:initial.getFullYear(),m:initial.getMonth()});
-  const daysInMonth=new Date(ym.y,ym.m+1,0).getDate();
-  const firstCol=(new Date(ym.y,ym.m,1).getDay()+1)%7;
-  const cells:(number|null)[]=[]; for(let i=0;i<firstCol;i++)cells.push(null); for(let d=1;d<=daysInMonth;d++)cells.push(d);
-  const pad=(n:number)=>String(n).padStart(2,"0");
-  const move=(dir:number)=>setYm(s=>{ let m=s.m+dir,y=s.y; if(m<0){m=11;y--;} if(m>11){m=0;y++;} return {y,m}; });
-  return (
-    <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={()=>move(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`}}><ChevronRight size={16}/></button>
-        <div className="font-extrabold" style={{color:B.black}}>{AR_MONTHS[ym.m]} {ym.y}</div>
-        <button onClick={()=>move(1)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`}}><ChevronLeft size={16}/></button>
-      </div>
-      <div className="grid grid-cols-7 gap-1.5">
-        {AR_WEEK.map((w,i)=><div key={"w"+i} className="text-center" style={{fontSize:11,color:B.muted,fontWeight:700}}>{w}</div>)}
-        {cells.map((d,i)=>{
-          if(d===null) return <div key={"e"+i} style={{height:44}}/>;
-          const ds=`${ym.y}-${pad(ym.m+1)}-${pad(d)}`;
-          const trip=byDate.get(ds); const on=value===trip?.id;
-          return (
-            <button key={"d"+i} disabled={!trip} onClick={()=>trip&&onPick(trip)}
-              className="rounded-xl flex items-center justify-center cursor-pointer"
-              style={{height:44,fontSize:14,fontWeight:trip?800:500,
-                background:on?G.green:trip?"#fff":"#F4F1EC",
-                color:on?"#fff":trip?B.black:"#C4BCB0",
-                border:`1.5px solid ${on?G.green:trip?G.green:"transparent"}`,
-                cursor:trip?"pointer":"not-allowed"}}>{d}</button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 export function CustomerApp(){
   const [lang,setLang]=useState<Lang>("ar");
@@ -131,7 +97,9 @@ export function CustomerApp(){
 
   const activePkgs=cat.packages.filter(p=>p.status==="active" && (p.settings?.allowOnlineBooking!==false));
   const pkgTrips=(p:Pkg)=>cat.trips.filter(x=>x.packageId===p.id && x.status==="open" && availSeats(x)>0).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
-  const transport=trip?cat.transports.find(x=>x.id===trip.transportId):undefined;
+  /* وسيلة النقل: الرحلة المختارة أولاً، وإلا افتراضي الباقة —
+     وإلا اختفى قسم النقل كلياً حتى يختار المستفيد تاريخاً، وهو يحتاجه ليقرر. */
+  const transport=cat.transports.find(x=>x.id===(trip?.transportId||pkg?.transportId));
   const hotel=pkg?cat.hotels.find(h=>h.id===pkg.hotelId):undefined;
   const rooms=pkg?.roomPrices??[];
   const nights=pkg?.nights||1;
@@ -198,13 +166,22 @@ export function CustomerApp(){
     </div>
   );
 
+  /* الشريط السفلي — بنمطهم: أيقونة خطية فوق نص صغير، والنشط ملوّن ومعبّأ. */
   const BottomBar=()=>(
-    <div className="sticky bottom-0 z-30 grid grid-cols-3 gap-1 px-3 py-2" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-      {([["packages",Home,t("home")],["track",Search,t("track")],["profile",Users,t("profile")]] as const).map(([sc,Icon,lbl])=>(
-        <button key={sc} onClick={()=>setScreen(sc as Screen)} className="flex flex-col items-center gap-1 py-1.5 rounded-lg cursor-pointer" style={{background:"none",border:"none",color:screen===sc?G.green:B.muted}}>
-          <Icon size={18}/><span style={{fontSize:10,fontWeight:700}}>{lbl}</span>
-        </button>
-      ))}
+    <div className="sticky bottom-0 z-30 grid grid-cols-3"
+      style={{background:C.white,borderTop:`1px solid ${C.line}`,paddingBlock:8,
+              paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))"}}>
+      {([["packages",Search,t("explore")],["track",Heart,t("myBookings")],["profile",UserRound,t("profile")]] as const).map(([sc,Icon,lbl])=>{
+        const on=screen===sc;
+        return (
+          <button key={sc} onClick={()=>setScreen(sc as Screen)}
+            className="flex flex-col items-center gap-1 cursor-pointer"
+            style={{background:"none",border:"none",paddingBlock:4,color:on?C.green:C.ink2}}>
+            <Icon size={21} strokeWidth={on?2.2:1.7} fill={on&&sc==="track"?C.green:"none"}/>
+            <span style={{fontSize:11,fontWeight:on?600:400}}>{lbl}</span>
+          </button>
+        );
+      })}
     </div>
   );
 
@@ -219,8 +196,6 @@ export function CustomerApp(){
     </div>
   ); };
 
-  const FeatureIcon=({txt}:{txt:string})=>{ const w=txt.includes("واي")||txt.toLowerCase().includes("wifi"); const s=txt.includes("شاش")||txt.toLowerCase().includes("screen")||txt.toLowerCase().includes("tv"); return w?<Wifi size={13}/>:s?<Tv size={13}/>:<BatteryCharging size={13}/>; };
-
   if(loading) return (
     <div dir={dir} className="min-h-screen flex flex-col items-center justify-center gap-4" style={{background:`linear-gradient(160deg,${G.deep},${G.dark})`}}>
       <TasaheelMark size={56}/>
@@ -230,131 +205,48 @@ export function CustomerApp(){
   );
 
   return (
-    <div dir={dir} lang={lang} className="min-h-screen flex flex-col relative" style={{background:G.bg,fontFamily:"'IBM Plex Sans Arabic',system-ui,sans-serif"}}>
-      {/* R1: خلفية خفيفة */}
-      <div aria-hidden style={{position:"fixed",inset:0,backgroundImage:"url(/bg-haram.jpg)",backgroundSize:"cover",backgroundPosition:"center",opacity:0.06,pointerEvents:"none",zIndex:0}}/>
+    <DirProvider value={dir}>
+    <div dir={dir} lang={lang} className="min-h-screen flex flex-col relative" style={{background:screen==="packages"||screen==="listing"?"#fff":G.bg,fontFamily:"'IBM Plex Sans Arabic',system-ui,sans-serif"}}>
+      {/* R1: خلفية خفيفة — تُخفى في الشاشات المعاد بناؤها لأن قاعدتها بيضاء */}
+      {screen!=="packages"&&screen!=="listing"&&
+        <div aria-hidden style={{position:"fixed",inset:0,backgroundImage:"url(/bg-haram.jpg)",backgroundSize:"cover",backgroundPosition:"center",opacity:0.06,pointerEvents:"none",zIndex:0}}/>}
       <div className="relative flex flex-col flex-1" style={{zIndex:1}}>
 
-      {/* ═══ PACKAGES ═══ */}
+      {/* ═══ EXPLORE (الاستكشاف) ═══ */}
       {screen==="packages"&&<>
-        <AppBar/>
-        <div className="px-4 py-4 flex-1">
-          <div className="rounded-2xl p-5 mb-4 text-center" style={{background:`linear-gradient(150deg,${G.deep},${G.dark})`,color:"#fff"}}>
-            <div className="text-xl font-extrabold" style={{fontFamily:"'Noto Kufi Arabic',serif"}}>{t("brand")}</div>
-            <div className="text-sm mt-1" style={{color:"#CFE4DC"}}>{t("tagline")}</div>
-          </div>
-          <div className="font-extrabold mb-3" style={{color:B.black,fontSize:16}}>{t("choosePackage")}</div>
-          <div className="flex flex-col gap-3">
-            {activePkgs.map(p=>{
-              const rp=p.roomPrices.map(r=>r.perNight).filter(Boolean) as number[];
-              const min=rp.length?Math.min(...rp)*(p.nights||1):p.marketPrice;
-              const trips=pkgTrips(p);
-              return (
-                <button key={p.id} onClick={()=>{setPkg(p);setTrip(null);setPersons(1);setRoom(null);setScreen("trip");}} disabled={!trips.length}
-                  className="text-right rounded-2xl overflow-hidden cursor-pointer" style={{border:`1px solid ${B.border}`,background:"#fff",opacity:trips.length?1:.6}}>
-                  <img src={p.coverImage||"/hotel.jpg"} alt="" style={{width:"100%",height:120,objectFit:"cover"}}/>
-                  <div className="p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-extrabold" style={{color:B.black,fontSize:15}}>{p.name}</div>
-                      <div className="text-left flex-shrink-0"><div className="text-xs" style={{color:B.muted}}>{t("from")}</div><div className="font-extrabold" style={{color:G.green,fontFamily:"'IBM Plex Mono',monospace"}}>{money(min)} <span className="text-xs">{t("currency")}</span></div></div>
-                    </div>
-                    <div className="text-xs mt-1 flex items-center gap-3" style={{color:B.text2}}>
-                      <span>{p.days} {t("days")} · {p.nights} {t("nights")}</span>
-                      {!trips.length&&<span style={{color:"#BE2626",fontWeight:700}}>{t("soldOut")}</span>}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <Explore
+          packages={activePkgs}
+          hotels={cat.hotels}
+          tripsOf={pkgTrips}
+          onOpen={p=>{setPkg(p);setTrip(null);setPersons(1);setRoom(null);setSeats([]);setScreen("listing");}}
+          t={t} lang={lang} setLang={setLang}
+        />
         <BottomBar/>
       </>}
 
-      {/* ═══ TRIP (calendar) + PEOPLE ═══ */}
-      {screen==="trip"&&pkg&&<>
-        <AppBar title={pkg.name} onBack={()=>setScreen("packages")}/>
-        <div className="px-4 py-4 flex-1 flex flex-col gap-5">
-          <div>
-            <div className="font-extrabold mb-2 flex items-center gap-2" style={{color:B.black}}><CalendarDays size={16} style={{color:G.green}}/>{t("chooseTrip")}</div>
-            {pkgTrips(pkg).length===0
-              ? <div className="text-sm" style={{color:B.muted}}>{t("noTrips")}</div>
-              : <TripCalendar trips={pkgTrips(pkg)} value={trip?.id} onPick={(tr)=>{setTrip(tr);setPersons(p=>Math.min(Math.max(1,p),availSeats(tr)));}}/>}
-            {trip&&<div className="mt-2 rounded-xl p-3 flex items-center gap-2 text-sm" style={{background:"#EAF5F0",border:`1px solid ${G.green}`,color:B.black}}>
-              <CalendarDays size={15} style={{color:G.green}}/><b>{trip.departureDate}</b><Clock size={13} style={{color:G.green}}/>{trip.departureTime}{transport&&<span style={{color:B.muted}}>· {transport.name}</span>}
-            </div>}
-          </div>
-          {trip&&<div>
-            <div className="font-extrabold mb-2 flex items-center gap-2" style={{color:B.black}}><Users size={16} style={{color:G.green}}/>{t("people")}</div>
-            <div className="flex items-center gap-4 rounded-xl p-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button onClick={()=>setPersons(p=>Math.max(1,p-1))} className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`}}><Minus size={16}/></button>
-              <div className="flex-1 text-center font-extrabold text-2xl" style={{color:B.black}}>{persons}</div>
-              <button onClick={()=>setPersons(p=>Math.min(availSeats(trip),p+1))} className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`}}><Plus size={16}/></button>
-            </div>
-          </div>}
-        </div>
-        <div className="px-4 py-3" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-          <button disabled={!trip} onClick={()=>setScreen("seat")} className="w-full py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(!!trip)}>{t("next")}</button>
-        </div>
-      </>}
-
-      {/* ═══ SEAT (bus map) ═══ */}
-      {screen==="seat"&&trip&&<>
-        <AppBar title={t("chooseSeat")} onBack={()=>setScreen("trip")}/>
-        <div className="px-4 py-4 flex-1 flex flex-col gap-4">
-          {/* bus photo + info */}
-          <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
-            <img src="/bus.jpg" alt="" style={{width:"100%",height:130,objectFit:"cover"}}/>
-            <div className="p-3">
-              <div className="font-extrabold" style={{color:B.black}}>{transport?.name??t("chooseSeat")}</div>
-              {transport&&transport.features.length>0&&<div className="flex flex-wrap gap-2 mt-2">
-                {transport.features.slice(0,6).map(f=>(
-                  <span key={f.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#EAF5F0",color:G.deep}}><FeatureIcon txt={f.text}/>{f.text}</span>
-                ))}
-              </div>}
-            </div>
-          </div>
-          <div className="text-sm font-bold" style={{color:B.black}}>{t("pickSeatsHint").replace("{n}",String(persons))}</div>
-          <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <BusSeatGrid capacity={trip.seats} occupied={takenSet} selected={seats} need={persons} onToggle={toggleSeat}/>
-          </div>
-          {seats.length>0&&<div className="rounded-xl p-3 text-sm" style={{background:"#FFF7EA",border:`1px solid ${B.gold}`,color:"#8a6a08"}}>
-            {seats.map(s=>`مقعد ${s}${seatNote(s,trip.seats)?` (${seatNote(s,trip.seats)})`:""}`).join(" · ")}
-          </div>}
-        </div>
-        <div className="px-4 py-3" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-          <button disabled={seats.length!==persons} onClick={()=>setScreen("room")} className="w-full py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(seats.length===persons)}>{t("next")}</button>
-        </div>
-      </>}
-
-      {/* ═══ ROOM (cards) ═══ */}
-      {screen==="room"&&pkg&&<>
-        <AppBar title={t("chooseRoom")} onBack={()=>setScreen("seat")}/>
-        <div className="px-4 py-4 flex-1 flex flex-col gap-3">
-          {hotel&&<div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
-            <img src={(hotel.media?.find(m=>m.primary)?.url)||"/hotel.jpg"} alt="" style={{width:"100%",height:120,objectFit:"cover"}}/>
-            <div className="p-3">
-              <div className="font-extrabold" style={{color:B.black}}>{hotel.name} · {hotel.city} · {hotel.stars}★</div>
-              {hotel.features.length>0&&<div className="flex flex-wrap gap-2 mt-2">{hotel.features.slice(0,5).map(f=>(<span key={f.id} className="px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#EAF5F0",color:G.deep}}>{f.text}</span>))}</div>}
-            </div>
-          </div>}
-          {rooms.map(r=>{ const pp=r.perNight*nights; const on=room?.id===r.id; return (
-            <button key={r.id} onClick={()=>setRoom(r)} className="text-right rounded-2xl p-4 cursor-pointer flex items-center justify-between gap-3" style={{border:`2px solid ${on?G.green:B.border}`,background:on?"#EAF5F0":"#fff"}}>
-              <div><div className="font-extrabold" style={{color:B.black}}>{roomLabel(r)}</div></div>
-              <div className="text-left flex-shrink-0"><div className="font-extrabold text-lg" style={{color:G.green,fontFamily:"'IBM Plex Mono',monospace"}}>{money(pp)} {t("currency")}</div><div className="text-xs" style={{color:B.muted}}>{t("perPerson")}</div></div>
-            </button>
-          ); })}
-          {rooms.length===0&&<div className="text-sm" style={{color:B.muted}}>—</div>}
-        </div>
-        <div className="px-4 py-3 flex items-center gap-3" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-          <div className="flex-1"><div className="text-xs" style={{color:B.muted}}>{t("total")}</div><div className="font-extrabold text-lg" style={{color:G.green,fontFamily:"'IBM Plex Mono',monospace"}}>{money(total)} {t("currency")}</div></div>
-          <button disabled={!room} onClick={()=>setScreen("passengers")} className="px-8 py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(!!room)}>{t("next")}</button>
-        </div>
-      </>}
+      {/* ═══ LISTING — الصفحة الواحدة (تحل محل trip + seat + room) ═══ */}
+      {screen==="listing"&&pkg&&
+        <Listing
+          pkg={pkg}
+          trips={pkgTrips(pkg)}
+          hotel={hotel}
+          transport={transport}
+          trip={trip}
+          setTrip={tr=>{ setTrip(tr); if(tr) setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); }}
+          persons={persons} setPersons={setPersons}
+          room={room} setRoom={setRoom}
+          seats={seats} toggleSeat={toggleSeat}
+          takenSeats={takenSet}
+          total={total}
+          onBack={()=>setScreen("packages")}
+          onNext={()=>setScreen("passengers")}
+          terms={TERMS_AR}
+          t={t} lang={lang}
+        />}
 
       {/* ═══ PASSENGERS ═══ */}
       {screen==="passengers"&&<>
-        <AppBar title={t("passengers")} onBack={()=>setScreen("room")}/>
+        <AppBar title={t("passengers")} onBack={()=>setScreen("listing")}/>
         <div className="px-4 py-4 flex-1 flex flex-col gap-4">
           {pax.map((p,i)=>(
             <div key={i} className="rounded-2xl p-4 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
@@ -520,5 +412,6 @@ export function CustomerApp(){
         )}
       </AnimatePresence>
     </div>
+    </DirProvider>
   );
 }
