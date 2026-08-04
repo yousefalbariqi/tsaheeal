@@ -95,7 +95,7 @@ export interface Payment {
   roomType?:string;
 }
 
-export interface Pilgrim { name:string; idNumber:string; nationality:string; gender:"male"|"female"; birthDate:string; phone:string; }
+export interface Pilgrim { name:string; docType?:"national_id"|"iqama"|"passport"; idNumber:string; nationality:string; gender:"male"|"female"; ageGroup?:"adult"|"child"; birthDate:string; phone:string; seat?:number; }
 export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"|"awaiting_payment"|"awaiting_trip"|"paid"|"verifying"|"verified"|"confirmed"|"cancelled";
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
 export interface Booking {
@@ -120,6 +120,19 @@ export interface TicketEntry {
   tripDate:string; tripTime:string; departurePoint:string;
   persons:number; pilgrims:Pilgrim[];
   total:number;
+}
+
+/* طلب باقة مخصّصة — لا حجز مباشر: يجمع رغبة العميل ويصله الفريق لتجهيز العرض. */
+export type CustomReqStatus = "new"|"contacted"|"quoted"|"converted"|"closed";
+export interface CustomRequest {
+  id:string;
+  departDate:string; returnDate:string; persons:number;
+  destination:string;            // مكة | مكة والمدينة
+  roomType:string;               // نوع السكن المطلوب
+  hotelLevel:string;             // مستوى الفندق (نجوم)
+  tripNotes:string;
+  name:string; phone:string; city:string; notes:string;
+  status:CustomReqStatus; createdAt:string; staff?:string;
 }
 
 export type UserRole = "مدير عام"|"مدير النظام"|"موظف";

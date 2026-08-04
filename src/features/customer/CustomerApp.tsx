@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Globe, ChevronLeft, Check, Users, X, Search, Heart, UserRound, ArrowLeft } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, RoomPrice } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { QRBlock } from "@/components/QRBlock";
-import { ArabicDatePicker } from "@/components/ArabicDatePicker";
-import { BusSeatGrid, seatNote } from "@/components/BusSeatGrid";
+import { NationalitySelect } from "@/components/NationalitySelect";
+import { BirthDateSelect } from "@/components/BirthDateSelect";
+import { SearchSelect } from "@/components/SearchSelect";
+import { DOC_TYPES, docTypeDef, docText, type DocType } from "@/data/docTypes";
+import { BusSeatGrid } from "@/components/BusSeatGrid";
+import { WhatsAppFab } from "@/components/WhatsAppFab";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/app/components/ui/input-otp";
 import { LANGS, dirOf, makeT, type Lang } from "./i18n";
 import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, type Catalog, type TrackResult } from "./data";
@@ -15,14 +19,75 @@ import { DirProvider } from "./ui/kit";
 import { C } from "./ui/tokens";
 import { Explore } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
+import { CustomRequestScreen } from "./screens/CustomRequest";
 
 const G = { deep:"#0B5A41", dark:"#073A2B", green:B.primary, gold:B.gold, bg:"#F5F3EE" };
-/* "listing" هي الصفحة الواحدة التي حلّت محل trip + seat + room. */
-type Screen = "packages"|"listing"|"passengers"|"review"|"success"|"track"|"profile"|"login"|"otp";
-interface Pax { name:string; phone:string; idNumber:string; birthDate:string; }
+/* "listing" هي الصفحة trip + seat + room. */
+type Screen = "packages"|"listing"|"custom"|"passengers"|"seats"|"review"|"success"|"track"|"profile"|"login"|"otp";
+interface Pax { name:string; phone:string; docType:DocType|""; idNumber:string; nationality:string;
+  birthDate:string; gender:"male"|"female"; ageGroup:"adult"|"child"; seat:number|null; }
+const emptyPax=():Pax=>({name:"",phone:"",docType:"",idNumber:"",nationality:"",birthDate:"",gender:"male",ageGroup:"adult",seat:null});
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
 const availSeats=(t:Trip)=>Math.max(0,t.seats-t.bookedSeats);
 const validPhone=(p:string)=>/^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
+const validName=(s:string)=>s.trim().split(/\s+/).filter(Boolean).length>=2&&s.trim().length>=5;
+
+/* تحقق حقول المعتمر — رسالة لكل حقل تظهر تحته مباشرة.
+   جوال المعتمر الأول إلزامي (هو جوال التواصل والتتبّع)، وبقية المرافقين اختياري. */
+type PaxField="name"|"phone"|"docType"|"idNumber"|"nationality"|"birthDate"|"gender"|"ageGroup";
+/** الطفل لا يُطلب جواله إطلاقاً؛ والبالغ الأول جواله إلزامي لأنه جوال التواصل. */
+const phoneRequired=(p:Pax,first:boolean)=>p.ageGroup!=="child"&&first;
+function paxErrors(p:Pax,first:boolean,t:(k:string)=>string,lang:string):Partial<Record<PaxField,string>>{
+  const e:Partial<Record<PaxField,string>>={};
+  if(!p.name.trim()) e.name=t("required"); else if(!validName(p.name)) e.name=t("nameErr");
+  if(phoneRequired(p,first)){ if(!p.phone.trim()) e.phone=t("required"); else if(!validPhone(p.phone)) e.phone=t("invalidPhone"); }
+  else if(p.phone.trim()&&!validPhone(p.phone)) e.phone=t("invalidPhone");
+  if(!p.docType) e.docType=t("required");
+  else { const d=docTypeDef(p.docType);
+    if(!p.idNumber.trim()) e.idNumber=t("required");
+    else if(!d.test(p.idNumber.trim())) e.idNumber=docText(d.error,lang); }
+  if(!p.nationality) e.nationality=t("required");
+  if(!p.birthDate) e.birthDate=t("required");
+  return e;
+}
+
+/* اختيار من خيارين بشكل شريط مقسوم — أسرع من قائمة منسدلة لخيارين. */
+function SegPick({value,onChange,options,dir}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[];dir:"rtl"|"ltr"}){
+  return (
+    <div className="flex gap-1 p-1 rounded-xl" style={{background:B.bg,border:`1px solid ${B.border}`,direction:dir}}>
+      {options.map(o=>{
+        const on=value===o.value;
+        return (
+          <button key={o.value} type="button" onClick={()=>onChange(o.value)} aria-pressed={on}
+            style={{flex:1,padding:"7px 6px",borderRadius:10,fontSize:13,fontWeight:700,border:"none",fontFamily:"inherit",
+              cursor:"pointer",background:on?"#fff":"transparent",color:on?B.primary:B.muted,
+              boxShadow:on?"0 1px 3px rgba(0,0,0,.08)":"none"}}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* حقل معنون: عنوان فوق المربع + نص إرشادي تحته يتحوّل إلى رسالة خطأ عند الحاجة.
+   مُعرَّف خارج المكوّن الرئيسي حتى لا يفقد الإدخال التركيز عند إعادة الرسم. */
+function LField({label,hint,error,optional,children}:{label:string;hint?:string;error?:string;optional?:string;children:ReactNode}){
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-bold flex items-center gap-1" style={{color:B.text3}}>
+        {label}
+        {optional
+          ? <span className="font-medium" style={{color:B.muted}}>({optional})</span>
+          : <span style={{color:"#C13515"}}>*</span>}
+      </label>
+      {children}
+      {error
+        ? <span className="text-[11px] font-bold" style={{color:"#C13515"}}>{error}</span>
+        : hint ? <span className="text-[11px]" style={{color:B.muted}}>{hint}</span> : null}
+    </div>
+  );
+}
 
 const AR_MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const AR_WEEK=["س","ح","ن","ث","ر","خ","ج"];
@@ -71,9 +136,11 @@ export function CustomerApp(){
   const [trip,setTrip]=useState<Trip|null>(null);
   const [persons,setPersons]=useState(1);
   const [room,setRoom]=useState<RoomPrice|null>(null);
-  const [seats,setSeats]=useState<number[]>([]);
   const [takenSeats,setTakenSeats]=useState<number[]>([]);
-  const [pax,setPax]=useState<Pax[]>([{name:"",phone:"",idNumber:"",birthDate:""}]);
+  const [pax,setPax]=useState<Pax[]>([emptyPax()]);
+  const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
+  const [paxTried,setPaxTried]=useState(false);
+  const [activePax,setActivePax]=useState(0);
   const [termsOpen,setTermsOpen]=useState(false);
   const [agreed,setAgreed]=useState(false);
   const [submitting,setSubmitting]=useState(false);
@@ -91,8 +158,12 @@ export function CustomerApp(){
   const [ordersLoading,setOrdersLoading]=useState(false);
 
   useEffect(()=>{ fetchCatalog().then(c=>{setCat(c);setLoading(false);}); },[]);
-  useEffect(()=>{ setPax(prev=>{ const a=[...prev]; while(a.length<persons) a.push({name:"",phone:"",idNumber:"",birthDate:""}); return a.slice(0,persons); }); },[persons]);
-  useEffect(()=>{ if(trip){ setSeats([]); fetchTakenSeats(trip.id).then(setTakenSeats); } },[trip?.id]);
+  /* خلفية الـbody بيج عامة (لوحة الموظف)؛ صفحة المستفيد بيضاء — نوحّدها هنا
+     حتى لا يظهر شريط بيج فوق الرأس في iOS Safari (منطقة شريط الحالة والسحب الزائد). */
+  useEffect(()=>{ const prev=document.body.style.background; document.body.style.background="#fff";
+    return ()=>{ document.body.style.background=prev; }; },[]);
+  useEffect(()=>{ setPax(prev=>{ const a=[...prev]; while(a.length<persons) a.push(emptyPax()); return a.slice(0,persons); }); },[persons]);
+  useEffect(()=>{ if(trip){ setPax(a=>a.map(x=>({...x,seat:null}))); fetchTakenSeats(trip.id).then(setTakenSeats); } },[trip?.id]);
   useEffect(()=>()=>{ if(resendTimer.current) clearInterval(resendTimer.current); },[]);
 
   const activePkgs=cat.packages.filter(p=>p.status==="active" && (p.settings?.allowOnlineBooking!==false));
@@ -107,20 +178,56 @@ export function CustomerApp(){
   const total=perPerson*persons;
   const takenSet=useMemo(()=>new Set(takenSeats),[takenSeats]);
 
-  function reset(){ setPkg(null);setTrip(null);setPersons(1);setRoom(null);setSeats([]);setPax([{name:"",phone:"",idNumber:"",birthDate:""}]);setAgreed(false);setBookingNo("");setErrMsg(""); }
-  function toggleSeat(n:number){ setSeats(prev=> prev.includes(n)?prev.filter(x=>x!==n):(prev.length>=persons?prev:[...prev,n])); }
+  function reset(){ setPkg(null);setTrip(null);setPersons(1);setRoom(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setErrMsg(""); }
+
+  // ── تحقق خطوة بيانات المعتمرين ──
+  const paxErrs=useMemo(()=>pax.map((p,i)=>paxErrors(p,i===0,t,lang)),[pax,t,lang]);
+  const paxValid=paxErrs.every(e=>Object.keys(e).length===0);
+  const setPaxField=(i:number,k:keyof Pax,v:string)=>setPax(a=>a.map((x,j)=>j===i?{...x,[k]:v}:x));
+  const touch=(i:number,f:PaxField)=>setPaxTouched(s=>({...s,[`${i}.${f}`]:true}));
+  const errOf=(i:number,f:PaxField)=>(paxTried||paxTouched[`${i}.${f}`])?paxErrs[i]?.[f]:undefined;
+  function goSeats(){
+    setPaxTried(true);
+    if(!paxValid){ window.scrollTo({top:0,behavior:"smooth"}); return; }
+    setActivePax(pax.findIndex(x=>x.seat==null)>=0?pax.findIndex(x=>x.seat==null):0);
+    window.scrollTo({top:0});
+    setScreen("seats");
+  }
+
+  /* ── توزيع المقاعد بالاسم: يختار المستفيد المعتمر ثم مقعده، فينتقل تلقائياً للتالي.
+        المقعد مرتبط بالشخص لا بالحجز، فلا يلتبس على الموظف من يجلس أين. ── */
+  const seats=useMemo(()=>pax.map(x=>x.seat).filter((n):n is number=>n!=null),[pax]);
+  const seatsDone=pax.length>0&&pax.every(x=>x.seat!=null);
+  function assignSeat(n:number){
+    if(takenSet.has(n)) return;
+    setPax(a=>{
+      const owner=a.findIndex(x=>x.seat===n);
+      const next=a.map((x,j)=>{
+        if(j===activePax) return {...x,seat:x.seat===n?null:n};      // النقر على نفس المقعد يلغيه
+        if(owner===j) return {...x,seat:null};                        // مقعد مأخوذ من مرافق يُنقل
+        return x;
+      });
+      const after=next.findIndex((x,j)=>j>activePax&&x.seat==null);
+      const any=next.findIndex(x=>x.seat==null);
+      setActivePax(after>=0?after:any>=0?any:activePax);
+      return next;
+    });
+  }
 
   async function doSubmit(){
     if(submitting||!trip||!pkg) return;
     setErrMsg("");
     if(!agreed){ setErrMsg(t("iAgreeRead")); return; }
-    for(const p of pax){ if(!p.name.trim()||!validPhone(p.phone)||!p.idNumber.trim()||!p.birthDate){ setErrMsg(t("required")); return; } }
+    if(!paxValid){ setErrMsg(t("required")); setPaxTried(true); setScreen("passengers"); return; }
+    if(!seatsDone){ setErrMsg(t("pickSeatsHint").replace("{n}",String(persons))); setScreen("seats"); return; }
     setSubmitting(true);
     try{
       const id=await submitBooking({
         tripId:trip.id, packageId:pkg.id, clientName:pax[0].name, clientPhone:pax[0].phone.replace(/\s/g,""),
         roomType:room?.type??"", persons, total, seats,
-        pilgrims:pax.map(p=>({name:p.name,idNumber:p.idNumber,nationality:"",gender:"male",birthDate:p.birthDate,phone:p.phone.replace(/\s/g,"")})),
+        pilgrims:pax.map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
+          nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
+          phone:p.phone.replace(/\s/g,""),seat:p.seat??undefined})),
       });
       setBookingNo(id); setScreen("success");
     }catch(e){
@@ -218,7 +325,8 @@ export function CustomerApp(){
           packages={activePkgs}
           hotels={cat.hotels}
           tripsOf={pkgTrips}
-          onOpen={p=>{setPkg(p);setTrip(null);setPersons(1);setRoom(null);setSeats([]);setScreen("listing");}}
+          onOpen={p=>{setPkg(p);setTrip(null);setPersons(1);setRoom(null);setPax([emptyPax()]);setScreen("listing");}}
+          onCustom={()=>setScreen("custom")}
           t={t} lang={lang} setLang={setLang}
         />
         <BottomBar/>
@@ -235,8 +343,6 @@ export function CustomerApp(){
           setTrip={tr=>{ setTrip(tr); if(tr) setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); }}
           persons={persons} setPersons={setPersons}
           room={room} setRoom={setRoom}
-          seats={seats} toggleSeat={toggleSeat}
-          takenSeats={takenSet}
           total={total}
           onBack={()=>setScreen("packages")}
           onNext={()=>setScreen("passengers")}
@@ -244,49 +350,188 @@ export function CustomerApp(){
           t={t} lang={lang}
         />}
 
-      {/* ═══ PASSENGERS ═══ */}
+      {/* ═══ CUSTOM — الباقة المخصّصة: طلب لا حجز ═══ */}
+      {screen==="custom"&&<>
+        <AppBar title={t("customPkg")} onBack={()=>setScreen("packages")}/>
+        <CustomRequestScreen lang={lang} dir={dir} onDone={()=>setScreen("packages")}/>
+      </>}
+
+      {/* ═══ PASSENGERS — كل حقل بعنوان ونص إرشادي، والزر مباشرة تحت البطاقة ═══ */}
       {screen==="passengers"&&<>
         <AppBar title={t("passengers")} onBack={()=>setScreen("listing")}/>
-        <div className="px-4 py-4 flex-1 flex flex-col gap-4">
-          {pax.map((p,i)=>(
-            <div key={i} className="rounded-2xl p-4 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="font-extrabold text-sm flex items-center justify-between" style={{color:G.green}}>{t("person")} {i+1}{seats[i]!=null&&<span className="px-2 py-0.5 rounded-full text-xs" style={{background:"#FFF7EA",color:"#8a6a08",border:`1px solid ${B.gold}`}}>مقعد {seats[i]}</span>}</div>
-              <input value={p.name} onChange={e=>setPax(a=>a.map((x,j)=>j===i?{...x,name:e.target.value}:x))} placeholder={t("name")} className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border}}/>
-              <input value={p.phone} onChange={e=>setPax(a=>a.map((x,j)=>j===i?{...x,phone:e.target.value}:x))} placeholder={t("phone")} className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,direction:"ltr",textAlign:dir==="rtl"?"right":"left"}}/>
-              <input value={p.idNumber} onChange={e=>setPax(a=>a.map((x,j)=>j===i?{...x,idNumber:e.target.value}:x))} placeholder={t("idNumber")} className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,direction:"ltr",textAlign:dir==="rtl"?"right":"left"}}/>
-              <ArabicDatePicker value={p.birthDate} onChange={v=>setPax(a=>a.map((x,j)=>j===i?{...x,birthDate:v}:x))} placeholder={t("birthDate")}/>
-            </div>
-          ))}
+        <div className="px-4 py-4 flex flex-col gap-4">
+          <p className="text-xs" style={{color:B.muted}}>{t("pilgrimCardHint")}</p>
+
+          {pax.map((p,i)=>{
+            const doc=p.docType?docTypeDef(p.docType):null;
+            const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
+            const ist=(bad?:string)=>({borderColor:bad?"#E1A3A3":B.border,fontFamily:"inherit",background:"#fff"} as const);
+            const ltr={direction:"ltr",textAlign:(dir==="rtl"?"right":"left")} as const;
+            return (
+              <div key={i} className="rounded-2xl p-4 flex flex-col gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+                <div className="font-extrabold text-sm flex items-center justify-between" style={{color:G.green}}>
+                  {t("person")} {i+1}
+                  {p.ageGroup==="child"&&<span className="px-2 py-0.5 rounded-full text-xs" style={{background:"#EAF1FE",color:"#1E52C7",border:"1px solid #C9D9F6"}}>{t("child")}</span>}
+                </div>
+
+                {/* الاسم */}
+                <LField label={t("name")} hint={t("nameHint")} error={errOf(i,"name")}>
+                  <input value={p.name} onChange={e=>setPaxField(i,"name",e.target.value)} onBlur={()=>touch(i,"name")}
+                    placeholder={t("namePh")} className={inp} style={ist(errOf(i,"name"))}/>
+                </LField>
+
+                {/* الفئة العمرية والجنس — صفّان متجاوران */}
+                <div className="grid grid-cols-2 gap-3">
+                  <LField label={t("ageGroup")}>
+                    <SegPick dir={dir} value={p.ageGroup}
+                      onChange={v=>setPax(a=>a.map((x,j)=>j===i?{...x,ageGroup:v as Pax["ageGroup"],phone:v==="child"?"":x.phone}:x))}
+                      options={[{value:"adult",label:t("adult")},{value:"child",label:t("child")}]}/>
+                  </LField>
+                  <LField label={t("gender")}>
+                    <SegPick dir={dir} value={p.gender}
+                      onChange={v=>setPaxField(i,"gender",v)}
+                      options={[{value:"male",label:t("male")},{value:"female",label:t("female")}]}/>
+                  </LField>
+                </div>
+
+                {/* الجوال — يختفي للطفل، ويكفي جوال ولي الأمر */}
+                {p.ageGroup==="child"
+                  ? <div className="text-[11px] rounded-xl px-3 py-2" style={{background:B.bg,color:B.muted}}>{t("childNoPhone")}</div>
+                  : (
+                    <LField label={t("phone")} hint={t("phoneHint")} error={errOf(i,"phone")} optional={i>0?t("optional"):undefined}>
+                      <input value={p.phone} onChange={e=>setPaxField(i,"phone",e.target.value.replace(/[^\d+ ]/g,""))} onBlur={()=>touch(i,"phone")}
+                        inputMode="tel" maxLength={14} placeholder={t("phonePh")} className={inp} style={{...ist(errOf(i,"phone")),...ltr}}/>
+                    </LField>
+                  )}
+
+                {/* نوع الوثيقة — يحدّد شكل الرقم المطلوب */}
+                <LField label={t("docType")} hint={t("docTypeHint")} error={errOf(i,"docType")}>
+                  <SearchSelect
+                    dir={dir} searchable={false} subInTrigger={false} value={p.docType} invalid={!!errOf(i,"docType")}
+                    onChange={v=>{ setPax(a=>a.map((x,j)=>j===i?{...x,docType:v as DocType,idNumber:""}:x)); touch(i,"docType"); }}
+                    options={DOC_TYPES.map(d=>({value:d.value,label:docText(d.label,lang),prefix:d.icon,sub:docText(d.hint,lang)}))}
+                    placeholder={t("docTypePh")}/>
+                </LField>
+
+                {/* رقم الوثيقة — عنوانه ونصّه الإرشادي يتغيّران حسب النوع */}
+                <LField label={doc?docText(doc.numberLabel,lang):t("idNumber")}
+                  hint={doc?docText(doc.hint,lang):t("docTypeHint")} error={errOf(i,"idNumber")}>
+                  <input value={p.idNumber} disabled={!p.docType} onBlur={()=>touch(i,"idNumber")}
+                    onChange={e=>{ const raw=e.target.value; const v=doc?.numeric?raw.replace(/\D/g,""):raw.replace(/\s/g,""); setPaxField(i,"idNumber",v.slice(0,doc?.maxLength??20)); }}
+                    inputMode={doc?.numeric?"numeric":"text"} maxLength={doc?.maxLength??20}
+                    placeholder={doc?doc.placeholder:"—"} className={inp}
+                    style={{...ist(errOf(i,"idNumber")),...ltr,background:p.docType?"#fff":B.bg,cursor:p.docType?"text":"not-allowed"}}/>
+                </LField>
+
+                {/* الجنسية — قائمة ببحث */}
+                <LField label={t("nationality")} hint={t("nationalityHint")} error={errOf(i,"nationality")}>
+                  <NationalitySelect lang={lang} dir={dir} value={p.nationality} invalid={!!errOf(i,"nationality")}
+                    placeholder={t("nationalityPh")}
+                    onChange={v=>{ setPaxField(i,"nationality",v); touch(i,"nationality"); }}/>
+                </LField>
+
+                {/* تاريخ الميلاد — قوائم لا تقويم */}
+                <LField label={t("birthDate")} hint={p.birthDate?undefined:t("birthDateHint")} error={errOf(i,"birthDate")}>
+                  <BirthDateSelect lang={lang} dir={dir} value={p.birthDate} invalid={!!errOf(i,"birthDate")}
+                    onChange={v=>{ setPaxField(i,"birthDate",v); touch(i,"birthDate"); }}/>
+                </LField>
+              </div>
+            );
+          })}
+
+          {/* الزر مباشرة تحت بطاقة البيانات — لا شريط سفلي */}
+          {paxTried&&!paxValid&&(
+            <div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{t("fillFirst")}</div>
+          )}
+          <button onClick={goSeats} className="w-full py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(true)}>{t("next")}</button>
         </div>
-        <div className="px-4 py-3" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-          <button onClick={()=>setScreen("review")} className="w-full py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(true)}>{t("next")}</button>
+      </>}
+
+      {/* ═══ SEATS — مقعد لكل معتمر بالاسم، بعد إدخال بياناتهم ═══ */}
+      {screen==="seats"&&trip&&<>
+        <AppBar title={t("assignSeats")} onBack={()=>setScreen("passengers")}/>
+        <div className="px-4 py-4 flex flex-col gap-4">
+          <p className="text-xs" style={{color:B.muted}}>{t("pickPilgrim")}</p>
+
+          {/* قائمة المعتمرين — النشط مميّز، ومقعده يظهر بجانب اسمه */}
+          <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+            {pax.map((x,i)=>{
+              const on=i===activePax;
+              return (
+                <button key={i} onClick={()=>setActivePax(i)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-start cursor-pointer"
+                  style={{background:on?"#EAF5F0":"#fff",border:"none",borderTop:i?`1px solid ${B.border}`:"none"}}>
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                    style={{background:x.gender==="female"?"#F1E9FA":"#EAF1FE",color:x.gender==="female"?"#7226BE":"#1E52C7"}}>{i+1}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate text-sm font-bold" style={{color:B.black}}>{x.name||`${t("person")} ${i+1}`}</span>
+                    {x.ageGroup==="child"&&<span className="text-[11px]" style={{color:B.muted}}>{t("child")}</span>}
+                  </span>
+                  {x.seat!=null
+                    ? <span className="px-2.5 py-1 rounded-lg text-xs font-extrabold flex-shrink-0" style={{background:"#FFF7EA",color:"#8a6a08",border:`1px solid ${B.gold}`,fontFamily:"'IBM Plex Mono',monospace"}}>{t("seatFor")} {x.seat}</span>
+                    : <span className="text-xs flex-shrink-0" style={{color:on?G.green:B.muted,fontWeight:on?700:500}}>{on?t("chooseSeat"):"—"}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* كروكي الباص — النقر يخصّص المقعد للمعتمر النشط ثم ينتقل للتالي */}
+          <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+            <BusSeatGrid
+              capacity={trip.seats} occupied={takenSet}
+              selected={seats} need={pax.length} onToggle={assignSeat}
+            />
+          </div>
+
+          {seatsDone
+            ? <div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#E3F3E8",border:"1px solid #C4E4CE",color:"#1E7A44"}}>✓ {t("allSeatsSet")}</div>
+            : <div className="rounded-xl px-4 py-3 text-sm" style={{background:B.bg,color:B.muted}}>{t("pickSeatsHint").replace("{n}",String(pax.filter(x=>x.seat==null).length))}</div>}
+
+          <button onClick={()=>{ if(seatsDone) setScreen("review"); }} disabled={!seatsDone}
+            className="w-full py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(seatsDone)}>{t("next")}</button>
         </div>
       </>}
 
       {/* ═══ REVIEW ═══ */}
       {screen==="review"&&pkg&&trip&&<>
-        <AppBar title={t("review")} onBack={()=>setScreen("passengers")}/>
-        <div className="px-4 py-4 flex-1 flex flex-col gap-3">
+        <AppBar title={t("review")} onBack={()=>setScreen("seats")}/>
+        <div className="px-4 py-4 flex flex-col gap-3">
           <div className="rounded-2xl p-4 flex flex-col gap-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
             {[[t("package"),pkg.name],[t("trip"),`${trip.departureDate} · ${trip.departureTime}`],[t("room"),room?roomLabel(room):"—"],[t("people"),`${persons}`],["المقاعد",seats.join("، ")||"—"]].map(([l,v])=>(
               <div key={l} className="flex items-center justify-between gap-2 text-sm"><span style={{color:B.muted}}>{l}</span><span className="font-bold" style={{color:B.black}}>{v}</span></div>
             ))}
           </div>
           <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-            {pax.map((p,i)=>(<div key={i} className="px-4 py-2.5 text-sm flex items-center justify-between" style={{background:i%2?"#FDFCFA":"#fff",borderTop:i?`1px solid ${B.border}`:"none"}}><span className="font-bold" style={{color:B.black}}>{p.name||"—"}</span><span className="font-mono text-xs" style={{color:B.muted,direction:"ltr"}}>{p.phone}</span></div>))}
+            {pax.map((p,i)=>(
+              <div key={i} className="px-4 py-2.5 text-sm flex items-center justify-between gap-2" style={{background:i%2?"#FDFCFA":"#fff",borderTop:i?`1px solid ${B.border}`:"none"}}>
+                <span className="font-bold truncate" style={{color:B.black}}>{p.name||"—"}</span>
+                <span className="text-xs flex items-center gap-2 flex-shrink-0" style={{color:B.muted}}>
+                  {p.nationality&&<span>{p.nationality}</span>}
+                  {p.seat!=null&&<span className="px-1.5 py-0.5 rounded font-bold" style={{background:"#FFF7EA",color:"#8a6a08"}}>{t("seatFor")} {p.seat}</span>}
+                  <span className="font-mono" style={{direction:"ltr"}}>{p.idNumber}</span>
+                </span>
+              </div>
+            ))}
           </div>
           <div className="rounded-2xl p-4" style={{background:G.deep,color:"#fff"}}>
             <div className="flex items-center justify-between"><span>{t("total")}</span><span className="font-extrabold text-2xl" style={{fontFamily:"'IBM Plex Mono',monospace"}}>{money(total)} {t("currency")}</span></div>
           </div>
-          {/* R7: terms link + agree */}
-          <div className="flex items-center gap-2">
-            <button onClick={()=>setTermsOpen(true)} className="text-sm font-bold underline cursor-pointer" style={{background:"none",border:"none",color:"#1E52C7",padding:0}}>{t("readTerms")}</button>
-            {agreed&&<Check size={16} style={{color:G.green}}/>}
+
+          {/* الشروط: مربع اختيار مباشر — والقراءة اختيارية عبر الرابط */}
+          <div className="rounded-2xl p-3.5 flex flex-col gap-1.5" style={{background:"#fff",border:`1.5px solid ${agreed?G.green:B.border}`}}>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={agreed} onChange={e=>{setAgreed(e.target.checked); if(e.target.checked) setErrMsg("");}}
+                style={{width:20,height:20,accentColor:G.green,flexShrink:0,cursor:"pointer"}}/>
+              <span className="text-sm font-bold leading-relaxed" style={{color:B.black}}>{t("iAgreeRead")}</span>
+            </label>
+            <button onClick={()=>setTermsOpen(true)} className="text-xs font-bold underline cursor-pointer text-start"
+              style={{background:"none",border:"none",color:"#1E52C7",padding:0,marginInlineStart:30}}>{t("readTerms")}</button>
           </div>
+
           {errMsg&&<div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{errMsg}</div>}
-        </div>
-        <div className="px-4 py-3" style={{background:"#fff",borderTop:`1px solid ${B.border}`}}>
-          <button disabled={!agreed||submitting} onClick={doSubmit} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(agreed&&!submitting)}>
+
+          {/* زر التأكيد مباشرة تحت المربع — بلا شريط سفلي */}
+          <button disabled={submitting} onClick={doSubmit} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm" style={primaryBtn(agreed&&!submitting)}>
             {submitting&&<motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}} style={{width:15,height:15,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:B.black,borderRadius:"50%",display:"inline-block"}}/>}
             {submitting?t("submitting"):t("submit")}
           </button>
@@ -411,6 +656,12 @@ export function CustomerApp(){
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* فراغ أسفل الشاشات بلا شريط سفلي حتى لا يغطّي زر الواتساب آخر عنصر */}
+      {!["packages","listing","track","profile"].includes(screen)&&<div style={{height:76,flexShrink:0}}/>}
+
+      {/* زر واتساب — ثابت في كل الشاشات، ويرتفع فوق الشريط السفلي حيث يظهر */}
+      <WhatsAppFab bottom={["packages","listing","track","profile"].includes(screen)?100:24}/>
     </div>
     </DirProvider>
   );

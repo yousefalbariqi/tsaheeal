@@ -6,7 +6,7 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import type {
   Hotel, Transport, Pkg, Trip, Booking, Payment,
-  TicketEntry, Beneficiary, SystemUser, SupportReq, Branch,
+  TicketEntry, Beneficiary, SystemUser, SupportReq, Branch, CustomRequest,
 } from "@/types";
 import { SEED_HOTELS } from "@/data/hotels";
 import { SEED_TRANSPORTS } from "@/data/transports";
@@ -54,6 +54,7 @@ interface StoreState {
   users: SystemUser[];           setUsers: (u: Updater<SystemUser>) => void;
   support: SupportReq[];         setSupport: (u: Updater<SupportReq>) => void;
   branches: Branch[];            setBranches: (u: Updater<Branch>) => void;
+  customRequests: CustomRequest[]; setCustomRequests: (u: Updater<CustomRequest>) => void;
 
   loaded: boolean;
   hydrate: () => Promise<void>;
@@ -80,18 +81,19 @@ export const useStore = create<StoreState>((set, get) => ({
   users: SEED_USERS,                 setUsers: (u) => set((s) => { const n = apply(s.users, u); syncDiff(repo.users, "id", s.users, n); return { users: n }; }),
   support: SEED_SUPPORT,             setSupport: (u) => set((s) => { const n = apply(s.support, u); syncDiff(repo.support, "id", s.support, n); return { support: n }; }),
   branches: SEED_BRANCHES,           setBranches: (u) => set((s) => { const n = apply(s.branches, u); syncDiff(repo.branches, "id", s.branches, n); return { branches: n }; }),
+  customRequests: [],                setCustomRequests: (u) => set((s) => { const n = apply(s.customRequests, u); syncDiff(repo.customRequests, "id", s.customRequests, n); return { customRequests: n }; }),
 
   loaded: false,
   hydrate: async () => {
     if (!isSupabaseEnabled) { set({ loaded: true }); return; }
     // يعرض ما في قاعدة البيانات فقط (بلا تعبئة تلقائية) — البيانات الحقيقية تُدار من الواجهة.
-    const [hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches] =
+    const [hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches, customRequests] =
       await Promise.all([
         repo.hotels.list(), repo.transports.list(), repo.packages.list(), repo.trips.list(),
         repo.bookings.list(), repo.payments.list(), repo.tickets.list(), repo.beneficiaries.list(),
-        repo.users.list(), repo.support.list(), repo.branches.list(),
+        repo.users.list(), repo.support.list(), repo.branches.list(), repo.customRequests.list(),
       ]);
-    set({ hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches, loaded: true });
+    set({ hotels, transports, packages, trips, bookings, payments, tickets, beneficiaries, users, support, branches, customRequests, loaded: true });
   },
 
   session: null,

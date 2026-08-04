@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "motion/react";
 import {
   Building2, Building, LayoutDashboard, Package, Plane, Bus, BookOpen,
-  Users, CreditCard, Ticket, Settings, Wrench, LogOut, X,
+  Users, CreditCard, Ticket, Settings, Wrench, LogOut, X, Sparkles,
 } from "lucide-react";
 import { B } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { view:"transport",     label:"المواصلات",       Icon:Bus },
   { view:"hotels",        label:"الفنادق",         Icon:Building2 },
   { view:"bookings",      label:"الطلبات",         Icon:BookOpen },
+  { view:"customRequests",label:"الطلبات المخصّصة", Icon:Sparkles },
   { view:"beneficiaries", label:"المستفيدون",      Icon:Users },
   { view:"payments",      label:"الفواتير",        Icon:CreditCard },
   { view:"tickets",       label:"التذاكر",         Icon:Ticket },

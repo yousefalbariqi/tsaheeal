@@ -138,28 +138,63 @@ export function Section({ title, action, children, divider = false, bleed = fals
 
 /* ── خطوة مرقّمة داخل كتلة الحجز ─────────────────────────────── */
 /** شارة رقم تتحول إلى ✓ عند الاكتمال — تعطي إحساس «٢ من ٤» بلا عدّاد منفصل. */
-export function StepRow({ n, title, done, children, last }: {
+/** خطوة واحدة في مسار الحجز.
+    - شريط الأرقام على يسار الشاشة في العربية (يمينها في الإنجليزية) — يُرسَم
+      بعد المحتوى في RTL فيقع طبيعياً على اليسار بلا تحويلات.
+    - أكورديون: المفتوحة وحدها تعرض محتواها، والمنتهية تُطوى إلى سطر واحد
+      فيه ✓ وقيمة مختصرة، والضغط عليها يعيد فتحها. */
+export function StepRow({ n, title, done, children, last, open = true, value, onOpen, locked }: {
   n: number; title: string; done?: boolean; children: ReactNode; last?: boolean;
+  /** مفتوحة = تعرض المحتوى. */
+  open?: boolean;
+  /** قيمة مختصرة تظهر بجانب العنوان عند الطي — سطر واحد لا ملخّص. */
+  value?: string;
+  /** يُستدعى عند الضغط على ترويسة خطوة مطويّة. */
+  onOpen?: () => void;
+  /** خطوة لم يحن دورها — لا تُفتح بالضغط. */
+  locked?: boolean;
 }) {
+  const dir = useDir();
+  const clickable = !open && !locked && !!onOpen;
+
+  const rail = (
+    <div className="flex flex-col items-center" style={{ flexShrink: 0, width: 28 }}>
+      <span style={{
+        width: 28, height: 28, borderRadius: R.pill, flexShrink: 0,
+        background: done ? C.green : C.white,
+        border: done ? "none" : `1px solid ${C.border}`,
+        color: done ? C.white : locked ? C.ink3 : C.ink2,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        ...T.small, fontWeight: 600,
+      }}>
+        {done ? <Check size={15} /> : <span style={LTR}>{n}</span>}
+      </span>
+      {!last && <span style={{ flex: 1, width: 1, background: C.border, marginBlock: 6 }} />}
+    </div>
+  );
+
+  const head = (
+    <div className="flex items-center gap-2 min-w-0" style={{ marginBottom: open ? 12 : 0 }}>
+      <span className="truncate" style={{ ...T.h3, color: locked && !done ? C.ink3 : C.ink }}>{title}</span>
+      {!open && value && (
+        <span className="truncate" style={{ ...T.meta, color: C.ink2, flexShrink: 1 }}>· {value}</span>
+      )}
+      {clickable && <ChevronDown size={16} style={{ color: C.ink2, marginInlineStart: "auto", flexShrink: 0 }} />}
+    </div>
+  );
+
+  const body = (
+    <div className="min-w-0" style={{ flex: 1, paddingBottom: last ? 0 : open ? 26 : 18 }}>
+      {clickable
+        ? <button onClick={onOpen} className="w-full" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "start" }}>{head}</button>
+        : head}
+      {open && children}
+    </div>
+  );
+
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center" style={{ flexShrink: 0, width: 28 }}>
-        <span style={{
-          width: 28, height: 28, borderRadius: R.pill, flexShrink: 0,
-          background: done ? C.green : C.white,
-          border: done ? "none" : `1px solid ${C.border}`,
-          color: done ? C.white : C.ink2,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          ...T.small, fontWeight: 600,
-        }}>
-          {done ? <Check size={15} /> : <span style={LTR}>{n}</span>}
-        </span>
-        {!last && <span style={{ flex: 1, width: 1, background: C.border, marginBlock: 6 }} />}
-      </div>
-      <div className="min-w-0" style={{ flex: 1, paddingBottom: last ? 0 : 26 }}>
-        <div style={{ ...T.h3, color: C.ink, marginBottom: 12 }}>{title}</div>
-        {children}
-      </div>
+      {dir === "rtl" ? <>{body}{rail}</> : <>{rail}{body}</>}
     </div>
   );
 }
@@ -378,11 +413,13 @@ export function HScroll({ children, gap = SPACE.gap }: { children: ReactNode; ga
     `facts` تدور تحت العنوان بارتفاع ثابت؛ إن غابت يُعرض `meta` ساكناً. */
 export function ListingCard({
   image, title, meta, facts, factsDelay = 0, price, priceNote, badge, stars,
-  onClick, disabled, width, pulse,
+  onClick, disabled, width, pulse, imageAspect = "1 / 1",
 }: {
   image: string; title: string; meta?: ReactNode; facts?: ReactNode[]; factsDelay?: number;
   price?: string; priceNote?: string; badge?: string; stars?: number;
   onClick?: () => void; disabled?: boolean; width?: number | string; pulse?: boolean;
+  /** نسبة صورة البطاقة — بطاقات الشريط الأفقي أعرض فتُخفَّض لتبقى البطاقة قصيرة. */
+  imageAspect?: string;
 }) {
   const [liked, setLiked] = useState(false);
   const grid = width === "100%";
@@ -404,7 +441,7 @@ export function ListingCard({
         <button onClick={act} disabled={disabled}
           style={{ display: "block", width: "100%", padding: 0, border: "none", background: "none", cursor: disabled ? "not-allowed" : "pointer" }}>
           <img src={image} alt="" loading="lazy"
-            style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block", background: C.fill }} />
+            style={{ width: "100%", aspectRatio: imageAspect, objectFit: "cover", display: "block", background: C.fill }} />
         </button>
         {badge && (
           <span style={{

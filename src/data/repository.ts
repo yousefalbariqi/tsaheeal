@@ -4,7 +4,7 @@
      والكتابة عبر دوال upsert_<entity>(jsonb) الذرّية. */
 import type {
   Hotel, Transport, Pkg, Trip, Booking, Payment,
-  TicketEntry, Beneficiary, SystemUser, SupportReq, Branch,
+  TicketEntry, Beneficiary, SystemUser, SupportReq, Branch, CustomRequest,
 } from "@/types";
 import { SEED_HOTELS } from "@/data/hotels";
 import { SEED_TRANSPORTS } from "@/data/transports";
@@ -55,7 +55,7 @@ const sortBy = (arr: any[] = []) => [...(arr || [])].sort((a, b) => (a.sort ?? 0
 const mMedia = (r: any) => ({ id: r.item_id, kind: r.kind, url: r.url, primary: !!r.is_primary, category: r.category });
 const mReview = (r: any) => ({ id: r.item_id, name: r.name, text: r.text, consent: !!r.consent, image: r.image ?? undefined });
 const mIconFeat = (r: any) => ({ id: r.item_id, icon: r.icon, text: r.text });
-const mPilgrim = (r: any) => ({ name: r.name, idNumber: r.id_number, nationality: r.nationality, gender: r.gender, birthDate: r.birth_date, phone: r.phone });
+const mPilgrim = (r: any) => ({ name: r.name, docType: r.doc_type ?? undefined, idNumber: r.id_number, nationality: r.nationality, gender: r.gender, ageGroup: r.age_group ?? undefined, birthDate: r.birth_date, phone: r.phone, seat: r.seat_no ?? undefined });
 const tripSettings = (r: any) => ({
   allowOnlineBooking: !!r.set_allow_online_booking, manualConfirm: !!r.set_manual_confirm,
   waitlistEnabled: !!r.set_waitlist_enabled, requirePaymentFirst: !!r.set_require_payment_first,
@@ -134,6 +134,12 @@ const beneficiaryFrom = (r: any): Beneficiary => ({
   bookingIds: sortBy(r.beneficiary_bookings).map((x: any) => x.value),
 });
 const userFrom = (r: any): SystemUser => ({ id: r.id, name: r.name, email: r.email, role: r.role, status: r.status, lastLogin: r.last_login });
+const customReqFrom = (r: any): CustomRequest => ({
+  id: r.id, departDate: r.depart_date ?? "", returnDate: r.return_date ?? "", persons: r.persons ?? 1,
+  destination: r.destination ?? "", roomType: r.room_type ?? "", hotelLevel: r.hotel_level ?? "",
+  tripNotes: r.trip_notes ?? "", name: r.name ?? "", phone: r.phone ?? "", city: r.city ?? "",
+  notes: r.notes ?? "", status: r.status ?? "new", createdAt: r.created_at ?? "", staff: r.staff ?? undefined,
+});
 const supportFrom = (r: any): SupportReq => ({ id: r.id, category: r.category, title: r.title, desc: r.descr, priority: r.priority, status: r.status, date: r.date });
 
 /* ─── التركيب: Supabase عند التفعيل، وإلا seed ─── */
@@ -159,5 +165,6 @@ export const repo = {
     "*, beneficiary_bookings(*)", "upsert_beneficiary", beneficiaryFrom)),
   users: make<SystemUser>(SEED_USERS, "id", () => supaEntity("users", "id", "*", "upsert_user", userFrom)),
   support: make<SupportReq>(SEED_SUPPORT, "id", () => supaEntity("support", "id", "*", "upsert_support", supportFrom)),
+  customRequests: make<CustomRequest>([], "id", () => supaEntity("custom_requests", "id", "*", "upsert_custom_request", customReqFrom)),
   branches: make<Branch>(SEED_BRANCHES, "id", () => supaEntity("branches", "id", "*", "upsert_branch", branchFrom)),
 };

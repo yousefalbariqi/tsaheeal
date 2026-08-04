@@ -90,11 +90,14 @@ export const LTR = { direction: "ltr" as const, unicodeBidi: "isolate" as const 
 export const money = (n: number) => Math.round(n).toLocaleString("en-US");
 
 /** "2025-08-07" → "7 أغسطس 2025" — كما يعرضونها، بأرقام لاتينية في كل اللغات. */
-export function formatDate(iso: string, lang = "ar"): string {
+export function formatDate(iso: string, lang = "ar", withWeekday = false): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   try {
-    return new Intl.DateTimeFormat(`${lang}-u-nu-latn`, { day: "numeric", month: "long", year: "numeric" }).format(d);
+    return new Intl.DateTimeFormat(`${lang}-u-nu-latn`, {
+      ...(withWeekday ? { weekday: "long" as const } : {}),
+      day: "numeric", month: "long", year: "numeric",
+    }).format(d);
   } catch {
     return iso;
   }

@@ -177,7 +177,7 @@ create table bookings (
 create table booking_pilgrims (
   id bigint generated always as identity primary key,
   booking_id text references bookings(id) on delete cascade,
-  name text, id_number text, nationality text, gender text, birth_date text, phone text, sort int
+  name text, doc_type text, id_number text, nationality text, gender text, age_group text, birth_date text, phone text, seat_no int, sort int
 );
 create table booking_seats (
   id bigint generated always as identity primary key,
@@ -199,7 +199,7 @@ create table payments (
 create table payment_pilgrims (
   id bigint generated always as identity primary key,
   payment_id text references payments(id) on delete cascade,
-  name text, id_number text, nationality text, gender text, birth_date text, phone text, sort int
+  name text, doc_type text, id_number text, nationality text, gender text, age_group text, birth_date text, phone text, sort int
 );
 create index on payment_pilgrims(payment_id);
 create index on payments(booking_id);
@@ -214,7 +214,7 @@ create table tickets (
 create table ticket_pilgrims (
   id bigint generated always as identity primary key,
   ticket_no text references tickets(ticket_no) on delete cascade,
-  name text, id_number text, nationality text, gender text, birth_date text, phone text, sort int
+  name text, doc_type text, id_number text, nationality text, gender text, age_group text, birth_date text, phone text, seat_no int, sort int
 );
 create index on ticket_pilgrims(ticket_no);
 
@@ -410,8 +410,8 @@ begin
     created_at=excluded.created_at,staff=excluded.staff,created_by=excluded.created_by,branch_id=excluded.branch_id,
     source=excluded.source,sent_date=excluded.sent_date;
   delete from booking_pilgrims where booking_id=v;
-  insert into booking_pilgrims(booking_id,name,id_number,nationality,gender,birth_date,phone,sort)
-    select v,e->>'name',e->>'idNumber',e->>'nationality',e->>'gender',e->>'birthDate',e->>'phone',(o-1)::int
+  insert into booking_pilgrims(booking_id,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,seat_no,sort)
+    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',nullif(e->>'seat','')::int,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
   delete from booking_seats where booking_id=v;
   insert into booking_seats(booking_id,seat_no,sort)
@@ -431,8 +431,8 @@ begin
     package_name=excluded.package_name,trip_date=excluded.trip_date,total=excluded.total,pay_method=excluded.pay_method,
     pay_status=excluded.pay_status,txn_no=excluded.txn_no,pay_date=excluded.pay_date,created_at=excluded.created_at,room_type=excluded.room_type;
   delete from payment_pilgrims where payment_id=v;
-  insert into payment_pilgrims(payment_id,name,id_number,nationality,gender,birth_date,phone,sort)
-    select v,e->>'name',e->>'idNumber',e->>'nationality',e->>'gender',e->>'birthDate',e->>'phone',(o-1)::int
+  insert into payment_pilgrims(payment_id,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,sort)
+    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',(o-1)::int
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
 end $$;
 
@@ -450,8 +450,8 @@ begin
     trip_date=excluded.trip_date,trip_time=excluded.trip_time,departure_point=excluded.departure_point,
     persons=excluded.persons,total=excluded.total;
   delete from ticket_pilgrims where ticket_no=v;
-  insert into ticket_pilgrims(ticket_no,name,id_number,nationality,gender,birth_date,phone,sort)
-    select v,e->>'name',e->>'idNumber',e->>'nationality',e->>'gender',e->>'birthDate',e->>'phone',(o-1)::int
+  insert into ticket_pilgrims(ticket_no,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,seat_no,sort)
+    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',nullif(e->>'seat','')::int,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
 end $$;
 
@@ -532,8 +532,8 @@ begin
   values(v,tid,nullif(doc->>'packageId',''),doc->>'clientName',doc->>'clientPhone',doc->>'roomType',n,
     (doc->>'total')::numeric,'reviewing','none',to_char(now(),'YYYY-MM-DD'),'','public',null);
   update trips set booked_seats = booked_seats + n where id = tid;
-  insert into booking_pilgrims(booking_id,name,id_number,nationality,gender,birth_date,phone,sort)
-    select v,e->>'name',e->>'idNumber',e->>'nationality',e->>'gender',e->>'birthDate',e->>'phone',(o-1)::int
+  insert into booking_pilgrims(booking_id,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,seat_no,sort)
+    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',nullif(e->>'seat','')::int,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
   insert into booking_seats(booking_id,seat_no,sort)
     select v,(e)::int,(o-1)::int from jsonb_array_elements_text(coalesce(doc->'seats','[]')) with ordinality t(e,o);

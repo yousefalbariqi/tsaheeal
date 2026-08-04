@@ -6,10 +6,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Wifi, Tv, BatteryCharging, Utensils, UserCheck, BusFront, MapPin, Building2,
-  CalendarX, KeyRound, ShieldCheck, CalendarDays, Clock, Star, Armchair,
+  CalendarX, KeyRound, ShieldCheck, Star,
 } from "lucide-react";
 import type { Pkg, Trip, Hotel, Transport, RoomPrice, PkgFeature } from "@/types";
-import { BusSeatGrid, seatNote } from "@/components/BusSeatGrid";
 import { C, T, R, SPACE, STICKY_H, LTR, money, formatDate } from "../ui/tokens";
 import {
   Section, HeroGallery, StickyBar, Chip, Stars, AmenityRow, AccordionRow, StepRow,
@@ -28,8 +27,6 @@ export interface ListingProps {
   trip: Trip | null;      setTrip: (t: Trip | null) => void;
   persons: number;        setPersons: (n: number) => void;
   room: RoomPrice | null; setRoom: (r: RoomPrice) => void;
-  seats: number[];        toggleSeat: (n: number) => void;
-  takenSeats: Set<number>;
   total: number;
   onBack: () => void;
   onNext: () => void;
@@ -56,7 +53,7 @@ function featureIcon(text: string, hint?: string) {
 }
 
 export function Listing(p: ListingProps) {
-  const { pkg, trips, hotel, transport, trip, room, seats, persons, total, t } = p;
+  const { pkg, trips, hotel, transport, trip, room, persons, total, t } = p;
 
   const [amenitiesOpen, setAmenitiesOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
@@ -69,8 +66,11 @@ export function Listing(p: ListingProps) {
   const hotelPics = useMemo(() => hotelMedia(hotel, pkg.order - 1), [hotel, pkg.order]);
   const transportPics = useMemo(() => transportMedia(transport), [transport]);
   const nights = pkg.nights || 1;
-  const seatsDone = !!trip && seats.length === persons;
-  const ready = !!trip && seatsDone && !!room;
+  /* المقاعد انتقلت لشاشة مستقلة بعد بيانات المعتمرين — لكل معتمر مقعده بالاسم. */
+  const ready = !!trip && !!room;
+
+  /** الخطوة المفتوحة حالياً — واحدة فقط، وتنتقل تلقائياً بعد كل اختيار. */
+  const [openStep, setOpenStep] = useState<string>("date");
 
   const AMENITY_PREVIEW = 6;
   const features: PkgFeature[] = pkg.features ?? [];
@@ -78,7 +78,6 @@ export function Listing(p: ListingProps) {
 
   /** ما ينقص الحجز — يُعرض في الشريط الثابت بدل تعطيل صامت. */
   const missing = !trip ? t("chooseTrip")
-    : !seatsDone ? t("pickSeatsHint").replace("{n}", String(persons))
     : !room ? t("chooseRoom")
     : null;
 
@@ -87,87 +86,62 @@ export function Listing(p: ListingProps) {
     <div style={{ ...T.meta, color: C.ink3 }}>{t("pickDateFirst")}</div>
   );
 
-  /* ── خطوات الحجز — الترقيم يُشتق من الموضع لا يُكتب يدوياً ── */
-  const steps: { key: string; title: string; done: boolean; body: ReactNode }[] = [
+  /* ── خطوات الحجز: تاريخ ← عدد ← سكن. المقاعد بعد بيانات المعتمرين.
+        الترقيم يُشتق من الموضع، والخطوة المنتهية تُطوى إلى سطر واحد. ── */
+  const steps: { key: string; title: string; done: boolean; value?: string; locked?: boolean; body: ReactNode }[] = [
     {
       key: "date", title: t("chooseTrip"), done: !!trip,
+      value: trip ? formatDate(trip.departureDate, p.lang, true) : undefined,
       body: trips.length === 0
         ? <div style={{ ...T.body, color: C.ink2 }}>{t("noTrips")}</div>
         : (
-          <>
-            <TripCalendar
-              trips={trips} valueId={trip?.id}
-              onPick={tr => p.setTrip(tr)} onClear={() => p.setTrip(null)}
-              clearLabel={t("clearDate")}
-            />
-            {trip && (
-              <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 16 }}>
-                <Chip tone="fill"><CalendarDays size={14} />{formatDate(trip.departureDate, p.lang)}</Chip>
-                <Chip tone="fill"><Clock size={14} /><span style={LTR}>{trip.departureTime}</span></Chip>
-                {trip.departurePoint && <Chip tone="fill"><MapPin size={14} />{trip.departurePoint}</Chip>}
-              </div>
-            )}
-          </>
+          <TripCalendar
+            trips={trips} valueId={trip?.id}
+            onPick={tr => { p.setTrip(tr); setOpenStep("people"); }}
+            onClear={() => { p.setTrip(null); setOpenStep("date"); }}
+            clearLabel={t("clearDate")}
+          />
         ),
     },
     {
-      key: "people", title: t("people"), done: !!trip,
-      body: trip
-        ? <Counter
-            label={t("person")} note={`${t("seatsLeft")}: ${availSeats(trip)}`}
-            value={persons} min={1} max={availSeats(trip)} onChange={p.setPersons}
-          />
-        : locked,
-    },
-    {
-      key: "seat", title: t("chooseSeat"), done: seatsDone,
+      key: "people", title: t("people"), done: !!trip, locked: !trip,
+      value: trip ? `${persons} ${t("person")}` : undefined,
       body: trip
         ? (
           <>
-            {/* المصغّرة حُذفت — وسيلة النقل لها قسمها الكامل أسفل السكن */}
-            <div style={{ ...T.meta, color: C.ink2, marginBottom: 14 }}>
-              {t("pickSeatsHint").replace("{n}", String(persons))}
-            </div>
-            <BusSeatGrid
-              capacity={trip.seats} occupied={p.takenSeats}
-              selected={seats} need={persons} onToggle={p.toggleSeat}
+            <Counter
+              label={t("person")} note={`${t("seatsLeft")}: ${availSeats(trip)}`}
+              value={persons} min={1} max={availSeats(trip)} onChange={p.setPersons}
             />
-            {seats.length > 0 && (
-              <div className="flex flex-wrap gap-2" style={{ marginTop: 16 }}>
-                {seats.map(s => (
-                  <Chip key={s} tone="gold">
-                    <Armchair size={13} />
-                    <span style={LTR}>{s}</span>
-                    {seatNote(s, trip.seats) && <span style={{ color: C.ink2 }}>· {seatNote(s, trip.seats)}</span>}
-                  </Chip>
-                ))}
-              </div>
-            )}
+            <div style={{ marginTop: 14 }}>
+              <CTAButton full onClick={() => setOpenStep(pkg.roomPrices?.length ? "room" : "people")}>
+                {t("next")}
+              </CTAButton>
+            </div>
           </>
         )
         : locked,
     },
     ...(pkg.roomPrices?.length ? [{
-      key: "room", title: t("chooseRoom"), done: !!room,
+      key: "room", title: t("chooseRoom"), done: !!room, locked: !trip,
+      value: room ? roomLabel(room) : undefined,
       body: (
-        // الصفوف مضغوطة بلا تمدد: المستفيد يقارن أربعة أسعار،
-        // وأي معرض بينها يباعدها ويخرجها من الشاشة فيضيع غرض القائمة.
+        /* الضغط على الصف يفتح التفاصيل فقط — الاختيار يتم من داخلها،
+           فلا يعتمد المستفيد سكناً قبل أن يرى صوره وسعره ومسافته. */
         <div className="flex flex-col gap-3">
           {pkg.roomPrices.map(r => (
             <SelectRow
               key={r.id}
               image={roomCover(r)}
-              onDetails={() => setRoomSheet(r)}
               detailsLabel={t("photosLabel")}
               detailsCount={roomMedia(r).length}
-              // النوع وحده في العنوان وعدد الأفراد تحته — زر التفاصيل يأكل عرضاً،
-              // وسعر الليلة موجود في جدول الورقة فلا داعي لتكراره هنا.
               title={r.type}
               note={`${r.persons} ${t("guests")}`}
               price={`${money(r.perNight * nights)} ${t("currency")}`}
               priceNote={t("perPerson")}
               selected={room?.id === r.id}
-              onClick={() => p.setRoom(r)}
+              onClick={() => setRoomSheet(r)}
+              onDetails={() => setRoomSheet(r)}
             />
           ))}
         </div>
@@ -388,7 +362,12 @@ export function Listing(p: ListingProps) {
             <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("bookYourTrip")}</h2>
           </div>
           {steps.map((s, i) => (
-            <StepRow key={s.key} n={i + 1} title={s.title} done={s.done} last={i === steps.length - 1}>
+            <StepRow
+              key={s.key} n={i + 1} title={s.title} done={s.done}
+              last={i === steps.length - 1}
+              open={openStep === s.key} value={s.value} locked={s.locked}
+              onOpen={() => setOpenStep(s.key)}
+            >
               {s.body}
             </StepRow>
           ))}

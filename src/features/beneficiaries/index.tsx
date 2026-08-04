@@ -6,6 +6,7 @@ import type { Beneficiary, Payment, Booking, TicketEntry } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { NationalitySelect } from "@/components/NationalitySelect";
 import { useStore } from "@/store/useStore";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
@@ -69,8 +70,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
           </div>
           <div>
             <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الجنسية</label>
-            <input value={form.nationality} onChange={e=>f("nationality")(e.target.value)} placeholder="ابحث أو اكتب"
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <NationalitySelect value={form.nationality} onChange={f("nationality")} subInTrigger={false}/>
           </div>
           <div>
             <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ الميلاد</label>

@@ -1,7 +1,7 @@
 /* طبقة بيانات صفحة العميل (anon).
    القراءة عبر repo (يقرأ Supabase كـ anon بعد الـMigration، أو seed محلياً).
    الإرسال عبر RPC عام create_public_booking (أو محلياً في وضع seed). */
-import type { Pkg, Trip, Hotel, Transport } from "@/types";
+import type { Pkg, Trip, Hotel, Transport, Pilgrim, CustomRequest } from "@/types";
 import { repo } from "@/data/repository";
 import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
@@ -42,7 +42,7 @@ export interface BookingPayload {
   clientName: string; clientPhone: string;
   roomType: string; persons: number; total: number;
   seats: number[];
-  pilgrims: { name: string; idNumber: string; nationality: string; gender: string; birthDate: string; phone: string }[];
+  pilgrims: { name: string; docType?: string; idNumber: string; nationality: string; gender: string; ageGroup?: string; birthDate: string; phone: string; seat?: number }[];
 }
 
 /** يعيد رقم الطلب عند النجاح، أو يرمي خطأً (بما فيه نقص المقاعد). */
@@ -66,9 +66,32 @@ export async function submitBooking(p: BookingPayload): Promise<string> {
     id, tripId: p.tripId, packageId: p.packageId, clientName: p.clientName, clientPhone: p.clientPhone,
     roomType: p.roomType, persons: p.persons, total: p.total, status: "reviewing", paymentStatus: "none",
     seats: p.seats ?? [], createdAt: new Date().toISOString().slice(0, 10), staff: "", source: "public", sentDate: "",
-    pilgrims: p.pilgrims.map(x => ({ ...x, gender: x.gender as "male" | "female" })),
+    pilgrims: p.pilgrims.map(x => ({ ...x, gender: x.gender as "male" | "female", docType: x.docType as Pilgrim["docType"], ageGroup: x.ageGroup as Pilgrim["ageGroup"] })),
   }, ...prev]);
   st.setTrips(prev => prev.map(t => t.id === p.tripId ? { ...t, bookedSeats: t.bookedSeats + p.persons } : t));
+  return id;
+}
+
+/* ── الباقة المخصّصة: طلب فقط، لا حجز. يصل للوحة الإدارة ويتواصل الفريق مع العميل. ── */
+export interface CustomReqPayload {
+  departDate: string; returnDate: string; persons: number;
+  destination: string; roomType: string; hotelLevel: string; tripNotes: string;
+  name: string; phone: string; city: string; notes: string;
+}
+
+/** يعيد رقم الطلب. لا يحجز مقاعد ولا يخصم شيئاً — مجرد تسجيل رغبة. */
+export async function submitCustomRequest(p: CustomReqPayload): Promise<string> {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.rpc("create_custom_request", { doc: p });
+    if (error) throw error;
+    return data as string;
+  }
+  const id = `CST-${String(Date.now()).slice(-5)}`;
+  const row: CustomRequest = {
+    ...p, id, status: "new",
+    createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+  };
+  useStore.getState().setCustomRequests(prev => [row, ...prev]);
   return id;
 }
 

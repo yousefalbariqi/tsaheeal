@@ -9,6 +9,7 @@ import { HotelsPage } from "@/features/hotels";
 import { TransportPage } from "@/features/transport";
 import { UsersPage } from "@/features/users";
 import { SupportPage } from "@/features/support";
+import { CustomRequestsPage } from "@/features/customRequests";
 import { TicketsPage } from "@/features/tickets";
 import { PaymentsPage } from "@/features/payments";
 import { BeneficiariesPage } from "@/features/beneficiaries";
@@ -61,7 +62,7 @@ export default function AdminApp() {
   const signOut    = useStore(s=>s.signOut);
   const [mobileSidebar,setMobileSidebar]=useState(false);
 
-  const knownViews = ["hotels","transport","packages","trips","branches","bookings","beneficiaries","payments","tickets","users","support"];
+  const knownViews = ["hotels","transport","packages","trips","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support"];
 
   useEffect(()=>{ useStore.getState().initAuth(); },[]);
   useEffect(()=>{ if(isSupabaseEnabled && session) useStore.getState().hydrate(); },[session]);
@@ -85,6 +86,7 @@ export default function AdminApp() {
         {activeView==="trips"    && <TripsPage packages={packages} transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="branches"       && <BranchesPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="bookings"       && <BookingsPage packages={packages} trips={trips} onMenuOpen={()=>setMobileSidebar(true)}/>}
+        {activeView==="customRequests" && <CustomRequestsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="beneficiaries"  && <BeneficiariesPage bookings={bookings} onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="payments"       && <PaymentsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="tickets"        && <TicketsPage  onMenuOpen={()=>setMobileSidebar(true)}/>}

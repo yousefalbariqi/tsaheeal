@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
+import { NationalitySelect } from "@/components/NationalitySelect";
+import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
 import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { useStore } from "@/store/useStore";
 import { PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
@@ -548,10 +550,14 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
                   ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
                       <div className="col-span-2 sm:col-span-2"><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم الكامل</div>
                         <input className={einp} style={eist} value={draft.name} onChange={e=>setD("name",e.target.value)}/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>رقم الهوية / الجواز</div>
-                        <input className={einp} style={{...eist,direction:"ltr"}} value={draft.idNumber} onChange={e=>setD("idNumber",e.target.value)}/></div>
+                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>نوع الوثيقة</div>
+                        <AppSelect value={draft.docType??guessDocType(draft.idNumber)} onChange={v=>setD("docType",v as Pilgrim["docType"])}
+                          options={DOC_TYPES.map(d=>({value:d.value,label:`${d.icon} ${d.label.ar}`}))} placeholder="اختر النوع"/></div>
+                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>{numberLabelOf(draft.docType,draft.idNumber)}</div>
+                        <input className={einp} style={{...eist,direction:"ltr"}} value={draft.idNumber}
+                          placeholder={docTypeDef(draft.docType).placeholder} onChange={e=>setD("idNumber",e.target.value)}/></div>
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنسية</div>
-                        <input className={einp} style={eist} value={draft.nationality} onChange={e=>setD("nationality",e.target.value)}/></div>
+                        <NationalitySelect value={draft.nationality} onChange={v=>setD("nationality",v)} subInTrigger={false} compact/></div>
                       <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنس</div>
                         <AppSelect value={draft.gender} onChange={v=>setD("gender",v as Pilgrim["gender"])}
                           options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/></div>
@@ -562,7 +568,7 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
                     </div>
                   : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
                       {[
-                        {l:"رقم الهوية / الجواز",v:pg.idNumber||"—",mono:true},
+                        {l:numberLabelOf(pg.docType,pg.idNumber),v:pg.idNumber||"—",mono:true},
                         {l:"الجنسية",v:pg.nationality||"—"},
                         {l:"تاريخ الميلاد",v:pg.birthDate||"—",mono:true},
                         {l:"الجوال",v:pg.phone||"—",mono:true},
