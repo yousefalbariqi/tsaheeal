@@ -23,7 +23,9 @@ export const NAV_ITEMS = [
   { view:"settings",      label:"الإعدادات",       Icon:Settings },
 ];
 
-export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSignOut}:{active:string;onNav:(v:string)=>void;mobileOpen?:boolean;onMobileClose?:()=>void;currentUser?:{name:string;role:string}|null;onSignOut?:()=>void}) {
+/* items يُمرَّر من الخارج ليُصفَّى بالدور — القائمة نفسها لا تعرف
+   الصلاحيات، والافتراضي هو الكل كي تبقى قابلة للاستعمال بلا سياق. */
+export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSignOut,items=NAV_ITEMS}:{active:string;onNav:(v:string)=>void;mobileOpen?:boolean;onMobileClose?:()=>void;currentUser?:{name:string;role:string}|null;onSignOut?:()=>void;items?:typeof NAV_ITEMS}) {
   /* الافتراضي أدنى صلاحية لا أعلاها: currentUser فارغ يعني «لم نعرف بعد»،
      وترجمته إلى «مدير النظام» تجعل الواجهة تفشل مفتوحةً — تعرض للمجهول ما
      لا يعرضه إلا للمدير. واسم تجريبي ثابت هنا يظهر لمستخدم حقيقي. */
@@ -46,7 +48,7 @@ export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSig
         <div style={{fontSize:10,color:"#6E938F",fontWeight:700,letterSpacing:2}}>القائمة الرئيسية</div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 flex flex-col gap-0.5 pb-4" style={{scrollbarWidth:"none"}}>
-        {NAV_ITEMS.map(({view,label,Icon})=>{
+        {items.map(({view,label,Icon})=>{
           const on=view===active;
           return (
             <button key={view} onClick={()=>{onNav(view);onMobileClose?.();}}

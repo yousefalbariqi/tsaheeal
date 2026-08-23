@@ -8,6 +8,7 @@
    نصّ الرسالة عربيّ ثابت لا مترجَم: قد يقع الخطأ قبل جهوز طبقة الترجمة. */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { B } from "@/lib/theme";
+import { hideBootSplash } from "@/lib/bootSplash";
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -23,6 +24,10 @@ export class ErrorBoundary extends Component<Props, State> {
     /* السجل يبقى في الطرفية للتشخيص، والمستخدم يرى نصّاً مفهوماً.
        لا خدمة تتبّع بعد — حين توجد، هذا موضع الإبلاغ. */
     console.error("[ErrorBoundary]", error, info.componentStack);
+    /* الشاشة التي أخفقت لن تستدعي hideBootSplash، فتبقى شاشة البدء فوق
+       رسالة الخطأ حتى تنتهي شبكة أمان الـ15 ثانية. يظهر هذا مع تقسيم
+       الحزمة خاصةً: تعذّر جلب شفرة المسار يرفع الاستثناء هنا. */
+    hideBootSplash();
   }
 
   render() {

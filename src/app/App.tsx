@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { X, Check, ShieldCheck } from "lucide-react";
@@ -6,8 +6,20 @@ import { B } from "@/lib/theme";
 import { Spinner } from "@/components/Spinner";
 import { hideBootSplash } from "@/lib/bootSplash";
 import { fetchBookingForPay, confirmPayment, type PayView } from "@/features/customer/data";
-import AdminApp from "./AdminApp";
-import { CustomerApp } from "@/features/customer/CustomerApp";
+
+/* ════════════════════════════════════════════════════════════
+   تقسيم الحزمة عند الجذر — الاستيراد الساكن للوحتين كان يجعل البناء
+   حزمةً واحدة: كل زائر للصفحة العامة ينزّل لوحة الإدارة كاملة (١٢
+   صفحة إدارية) قبل أن يرى الكتالوج، وكل موظف ينزّل واجهة المستفيد
+   كاملة. `lazy` يجعل كل مسار يجلب شفرته وحده عند دخوله.
+
+   CustomerApp تصدير مُسمّى لا افتراضي، فيُلفّ هنا ليعطي React الشكل
+   الذي يتوقّعه lazy — بلا تعديل ملف الشاشة نفسه.
+════════════════════════════════════════════════════════════ */
+const AdminApp = lazy(() => import("./AdminApp"));
+const CustomerApp = lazy(() =>
+  import("@/features/customer/CustomerApp").then(m => ({ default: m.CustomerApp }))
+);
 
 /* ════════════════════════════════════════════════════════════
    PUBLIC PAYMENT CHECKOUT — صفحة الدفع للعميل (/pay/:id)
@@ -167,13 +179,24 @@ function PayRoute() {
   return <PayCheckoutPage bookingId={decodeURIComponent(id ?? "")} token={params.get("t") ?? ""} />;
 }
 
+/* مسار جامع لواجهة المستفيد لا مسار لكل شاشة: مسارٌ منفصل لكل شاشة
+   يُركّب CustomerApp من جديد عند كل انتقال، فتُفقد الباقة والرحلة وبيانات
+   المعتمرين بين الخطوتين. الشاشة تُقرأ من المسار داخله (routing.ts).
+   الترتيب لا يهمّ — react-router يرجّح المسار الأخصّ، فـ/admin و/pay
+   يسبقان الجامع. */
 export default function App() {
+  /* fallback={null} مقصود: شاشة البدء في index.html ما زالت على الشاشة
+     ولا تُزال إلا عند جهوز بيانات الشاشة (hideBootSplash)، فأي مؤشّر
+     تحميل هنا يعني شاشة تحميل ثانية فوق الأولى — وهي التي أُزيلت أصلاً.
+     تعذّر جلب الشفرة يرفع استثناءً يلتقطه ErrorBoundary. */
   return (
-    <Routes>
-      <Route path="/" element={<CustomerApp/>}/>
-      <Route path="/admin/*" element={<AdminApp/>}/>
-      <Route path="/pay/:id" element={<PayRoute/>}/>
-      <Route path="*" element={<Navigate to="/" replace/>}/>
-    </Routes>
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/admin/*" element={<AdminApp/>}/>
+        <Route path="/pay/:id" element={<PayRoute/>}/>
+        <Route path="/pay" element={<Navigate to="/" replace/>}/>
+        <Route path="/*" element={<CustomerApp/>}/>
+      </Routes>
+    </Suspense>
   );
 }

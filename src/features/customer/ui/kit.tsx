@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images, Globe } from "lucide-react";
 import { C, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
+import { useDialogA11y } from "@/lib/useDialogA11y";
 
 /* ── اتجاه الصفحة ─────────────────────────────────────────────── */
 const DirCtx = createContext<"rtl" | "ltr">("rtl");
@@ -893,9 +894,16 @@ export function StickyBar({ price, note, chip, cta, onCta, ctaDisabled, variant 
 }
 
 /* ── ورقة سفلية ───────────────────────────────────────────────── */
+/* الورقة هي الحوار الأكثر استعمالاً في واجهة المستفيد (اختيار التاريخ،
+   الغرف، المعرض، الشروط، بيانات المسافر). كانت div بلا دور ولا Escape
+   ولا حصر تركيز: من يستعمل لوحة المفاتيح وحدها لا يستطيع إغلاقها، وقارئ
+   الشاشة لا يعلن أن حواراً فُتح. الحرس كلّه في useDialogA11y فيسري على
+   كل موضع استُعملت فيه بلا تعديل أي منها. */
 export function Sheet({ open, onClose, title, children, footer }: {
   open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode;
 }) {
+  const a11y = useDialogA11y({ open, onClose, title });
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -910,6 +918,8 @@ export function Sheet({ open, onClose, title, children, footer }: {
           onClick={onClose}
           style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end" }}>
           <motion.div
+            ref={a11y.ref}
+            {...a11y.panelProps}
             initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320 }}
             onClick={e => e.stopPropagation()}
@@ -917,13 +927,16 @@ export function Sheet({ open, onClose, title, children, footer }: {
               width: "100%", maxHeight: "92vh", background: C.white,
               borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet,
               display: "flex", flexDirection: "column", overflow: "hidden",
+              /* الصندوق يقبل التركيز برمجياً (tabIndex=-1) فلا يُرسم له
+                 إطار تركيز: الإطار على عنصرٍ ليس هدف تنقّلٍ يُشوّش. */
+              outline: "none",
             }}>
             <div className="flex items-center gap-3" style={{ padding: `14px ${SPACE.page}px`, borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
               <button onClick={onClose} aria-label="إغلاق"
                 style={{ width: 34, height: 34, borderRadius: R.pill, border: "none", background: "none", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <X size={19} />
               </button>
-              {title && <span className="flex-1 text-center" style={{ ...T.h3, color: C.ink }}>{title}</span>}
+              {title && <span id={a11y.titleId} className="flex-1 text-center" style={{ ...T.h3, color: C.ink }}>{title}</span>}
               <span style={{ width: 34, flexShrink: 0 }} />
             </div>
             <div className="flex-1 overflow-y-auto" style={{ padding: SPACE.page }}>{children}</div>

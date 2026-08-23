@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { Package, AlertTriangle, RotateCw } from "lucide-react";
+import { useLocation, useNavigate } from "react-router";
+import { Package, AlertTriangle, RotateCw, Lock } from "lucide-react";
 import { Toaster } from "sonner";
 import { B } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { hideBootSplash } from "@/lib/bootSplash";
 import { Sidebar, NAV_ITEMS } from "@/components/Sidebar";
+import { useRole } from "@/lib/useRole";
 import { useStore } from "@/store/useStore";
 import { HotelsPage } from "@/features/hotels";
 import { TransportPage } from "@/features/transport";
@@ -32,6 +34,25 @@ function ComingSoonPage({view}:{view:string}) {
         <p className="font-bold mb-1" style={{color:B.text3}}>صفحة "{view}" قيد البناء</p>
         <p className="text-sm" style={{color:B.muted}}>سيتم إضافتها قريباً</p>
       </div>
+    </div>
+  );
+}
+
+/* شاشة محجوزة للموظف الذي بلغ شاشةً إدارية بحتة. تُصفَّى هذه الشاشات من
+   القائمة الجانبية، فالوصول إليها لا يقع إلا من حالة تنقّل قديمة أو من
+   رابط مباشر بعد توجيه الموجة ٣ — والحجب لا يُترك للقائمة وحدها. */
+function NoAccessPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5 px-6 text-center" style={{color:B.muted}}>
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primary,border:`1px solid ${B.border2}`}}>
+        <Lock size={30} style={{color:B.gold,opacity:0.55}}/>
+      </div>
+      <div>
+        <p className="font-bold mb-1" style={{color:B.text3}}>هذه الصفحة للمدير وحده</p>
+        <p className="text-sm" style={{color:B.muted}}>راجع مدير النظام إن كنت تحتاج الوصول إليها.</p>
+      </div>
+      {onMenuOpen&&<button onClick={onMenuOpen} className="md:hidden text-sm font-bold px-5 py-2 rounded-xl cursor-pointer"
+        style={{background:B.primary,color:B.gold,border:`1px solid ${B.border2}`}}>القائمة</button>}
     </div>
   );
 }
@@ -94,10 +115,23 @@ function SavingPill() {
   );
 }
 
+/** الشاشة الافتراضية — الطلبات: أكثر ما يُفتح في اليوم. */
+const DEFAULT_VIEW = "bookings";
+
 export default function AdminApp() {
-  const [activeView,setActiveView]=useState("bookings");
+  /* الشاشة في المسار لا في الحالة: بلا ذلك كل شاشات اللوحة على /admin
+     وحده — لا رابط شاشةٍ يُرسَل لموظف، ولا صفحة تُحفظ في المفضّلة، وزر
+     الرجوع يخرج من اللوحة كلّها بدل أن يعود شاشة. */
+  const location=useLocation();
+  const navigate=useNavigate();
+  const viewInPath=location.pathname.replace(/^\/admin\/?/,"").split("/")[0];
+  const activeView=viewInPath||DEFAULT_VIEW;
   const [navNonce,setNavNonce]=useState(0);
-  const nav=(v:string)=>{setActiveView(v);setNavNonce(n=>n+1);};
+  /* العدّاد يبقى: نقر الشاشة النشطة نفسها لا يغيّر المسار، وكان يعيد
+     تركيب الصفحة فيصفّر نماذجها ومرشّحاتها — سلوك يعتمده الموظف. */
+  const nav=(v:string)=>{ if(v!==activeView) navigate(`/admin/${v}`); setNavNonce(n=>n+1); };
+  /* /admin وحده يُحوَّل إلى مساره الكامل — استبدالاً حتى لا يعيده زر الرجوع. */
+  useEffect(()=>{ if(!viewInPath) navigate(`/admin/${DEFAULT_VIEW}`,{replace:true}); },[viewInPath,navigate]);
   const transports = useStore(s=>s.transports);
   const hotels     = useStore(s=>s.hotels);
   const packages   = useStore(s=>s.packages);
@@ -128,6 +162,13 @@ export default function AdminApp() {
   /* المراحل الثلاث التي كانت تعرض Splash — تُعيد null الآن وتبقى شاشة
      البدء في index.html فوقها، فلا شاشة تحميل ثانية. شاشتا الدخول و«ليس
      موظفاً» ليستا انتظاراً بل وجهة، فتُزال الشاشة عندهما. */
+  /* الصلاحيات في الواجهة — مرآةٌ لحرس القاعدة لا بديل عنه. الشاشات
+     المخفيّة تُحرَس مرّتين: تُصفَّى من القائمة، ويُردّ الوصول المباشر
+     إليها (تنقّل قديم في الحالة، أو رابط لاحقاً بعد توجيه الموجة ٣). */
+  const role = useRole();
+  const navItems = NAV_ITEMS.filter(n => role.canView(n.view));
+  const viewAllowed = role.canView(activeView);
+
   const booting = isSupabaseEnabled &&
     (!authReady || (!!session && (!profileReady || (isStaff && !loaded && !loadError))));
   useEffect(()=>{ if(!booting) hideBootSplash(); },[booting]);
@@ -146,8 +187,10 @@ export default function AdminApp() {
     <div dir="rtl" lang="ar" className="flex min-h-screen"
       style={{fontFamily:"var(--font-app)",background:B.bg}}>
       <Sidebar active={activeView} onNav={nav} mobileOpen={mobileSidebar} onMobileClose={()=>setMobileSidebar(false)}
-        currentUser={currentUser} onSignOut={signOut}/>
+        currentUser={currentUser} onSignOut={signOut} items={navItems}/>
       <div className="flex-1 min-w-0" key={navNonce}>
+        {!viewAllowed && <NoAccessPage onMenuOpen={()=>setMobileSidebar(true)}/>}
+        {viewAllowed && <>
         {activeView==="hotels"   && <HotelsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="transport"&& <TransportPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="packages" && <PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
@@ -161,6 +204,7 @@ export default function AdminApp() {
         {activeView==="users"          && <UsersPage    onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="support"        && <SupportPage  onMenuOpen={()=>setMobileSidebar(true)}/>}
         {!knownViews.includes(activeView)&&<ComingSoonPage view={NAV_ITEMS.find(n=>n.view===activeView)?.label??""}/>}
+        </>}
       </div>
       <SavingPill/>
       <Toaster position="bottom-center" dir="rtl" richColors closeButton

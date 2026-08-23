@@ -10,7 +10,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
 import { isSupabaseEnabled } from "@/supabase/client";
-import { createAuthUser, updateProfile, deleteProfile } from "@/supabase/adminUsers";
+import { toast } from "sonner";
+import { createAuthUser, updateProfile, deleteProfile, setProfileStatus } from "@/supabase/adminUsers";
 
 const ROLE_COLORS:Record<UserRole,{bg:string;fg:string}> = {
   "مدير عام":     {bg:"#FBF3D6",fg:"#8A6A08"},
@@ -118,7 +119,21 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     setUsers(p=>[...p,nu]);
     setShowModal(false); setEditTarget(null);
   }
-  function toggleStatus(id:string){setUsers(p=>p.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));}
+  /* الإيقاف يكتب profiles أولاً ثم users. الترتيب مقصود: profiles هو ما
+     تقرأه is_staff() في القاعدة، وusers سجلٌّ للعرض. لو فشل الأول لا
+     نلمس الثاني — وإلا أظهرنا «موقوف» في الجدول لحسابٍ ما زال يعمل. */
+  async function toggleStatus(id:string){
+    const cur=users.find(u=>u.id===id); if(!cur) return;
+    const next=cur.status==="active"?"inactive":"active";
+    if(isSupabaseEnabled){
+      const err=await setProfileStatus(id,next);
+      if(err){ toast.error("تعذّر تغيير حالة الحساب",{description:err,duration:9000}); return; }
+    }
+    setUsers(p=>p.map(u=>u.id===id?{...u,status:next}:u));
+    toast.success(next==="inactive"?"أُوقف الحساب":"فُعِّل الحساب",{
+      description:next==="inactive"?"لن يستطيع الدخول ولا الكتابة بعد الآن.":"عاد وصوله كاملاً.",
+    });
+  }
   function deleteUser(id:string){setUsers(p=>p.filter(u=>u.id!==id));if(isSupabaseEnabled)deleteProfile(id);setDeleteId(null);}
 
   const stats={

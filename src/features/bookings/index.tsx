@@ -12,7 +12,7 @@ import { AppSelect } from "@/components/AppSelect";
 import { NationalitySelect } from "@/components/NationalitySelect";
 import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
 import { BusSeatGrid } from "@/components/BusSeatGrid";
-import { useStore } from "@/store/useStore";
+import { useStore, flushSync, clearSyncError } from "@/store/useStore";
 import { PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
 
 const PAY_METHODS_INTERNAL = ["كاش","تحويل بنكي","آجل للموظف"];
@@ -52,12 +52,18 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
     else if(selTrip && persons>maxSeats) e.persons=`المتبقي ${maxSeats} مقاعد فقط`;
     setErrors(e); return Object.keys(e).length===0;
   }
-  function submit(){
+  /* ينتظر ردّ القاعدة قبل شاشة النجاح. كان يعرض «تمت الإضافة بنجاح»
+     فور استدعاء onCreate — والكتابة تفاؤلية، فالرفض (سعة ممتلئة، مقعد
+     مبيع، صلاحية ناقصة) يصل بعد أن قرأ الموظف النجاح وأغلق النافذة. */
+  async function submit(){
     if(busy) return;
     if(!validate()) return;
     setBusy(true);
     const err=onCreate({clientName:clientName.trim(),clientPhone:clientPhone.replace(/\s/g,""),tripId,persons,payMethod});
     if(err){ setErrors(x=>({...x,seats:err})); setBusy(false); return; }
+    const syncErr=await flushSync();
+    if(syncErr){ setErrors(x=>({...x,seats:syncErr})); setBusy(false); return; }
+    setBusy(false);
     setDone(`تم إنشاء الطلب بحالة «مؤكد».`);
   }
 
@@ -688,6 +694,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
       payMethod:d.payMethod, seats:[], createdAt:new Date().toISOString().slice(0,10),
       staff:currentUser?.name??"—", createdBy:currentUser?.id, branchId:currentUser?.branch, source:"internal", sentDate:"", pilgrims:[],
     };
+    clearSyncError();
     setBookings(p=>[booking,...p]);
     /* لا زيادة محلية لـbookedSeats: صارت مشتقّة في القاعدة و upsert_trip
        يتجاهل ما ترسله الواجهة. نقرأ القيمة الصحيحة بدل تخمينها. */

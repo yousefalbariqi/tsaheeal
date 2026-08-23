@@ -21,7 +21,7 @@ import { SEED_SUPPORT } from "@/data/support";
 import { SEED_BRANCHES } from "@/data/branches";
 import { repo, type Repo } from "@/data/repository";
 import { supabase, isSupabaseEnabled } from "@/supabase/client";
-import { notifySyncError, notifyLoadError, notifyPartialLoad, syncErrorMessage } from "@/lib/notify";
+import { notifySyncError, notifyLoadError, notifyPartialLoad, notifyAccountSuspended, syncErrorMessage } from "@/lib/notify";
 
 type Updater<T> = T[] | ((prev: T[]) => T[]);
 const apply = <T,>(prev: T[], u: Updater<T>): T[] =>
@@ -68,9 +68,43 @@ function syncDiff<T>(
   if (!ops.length) return;
 
   bumpSyncing(1);
-  Promise.all(ops)
-    .catch((e) => { revert(prev); notifySyncError(label, e); })
+  const p = Promise.all(ops)
+    .then(() => undefined)
+    .catch((e) => { lastSyncError = syncErrorMessage(e); revert(prev); notifySyncError(label, e); })
     .finally(() => bumpSyncing(-1));
+  /* سلسلة لا مصفوفة: المصفوفة تنمو بلا حدّ طوال عمر الصفحة. الـcatch
+     الفارغ يمنع كسر السلسلة — الفشل مُعالَج فوق ومُسجَّل في
+     lastSyncError، ولا يُراد له أن يُسقط انتظار كتابةٍ لاحقة. */
+  inflight = inflight.then(() => p).catch(() => undefined);
+}
+
+/* ═══════ انتظار الكتابة: من «تفاؤلي صامت» إلى «تفاؤلي مُعلَن» ═══════
+
+   الكتابة تفاؤلية بحكم التصميم — الشاشة تتحدّث فوراً والقاعدة تلحق. هذا
+   صحيح للتعديل داخل جدول: الفشل يُرجع الصف ويرفع توستاً أحمر ويراه
+   الموظف في مكانه.
+
+   لكنه خاطئ لنافذةٍ تُغلق على شاشة نجاح: «تمت الإضافة بنجاح» تظهر قبل
+   أن تردّ القاعدة، فيقرؤها الموظف ويغلق النافذة ويمضي — والتوست الأحمر
+   يأتي بعده على شاشةٍ لم يعد ينظر إليها. لذلك تنتظر تلك النوافذ وحدها.
+
+   الاستعمال:
+     clearSyncError();
+     setBookings(...);
+     const err = await flushSync();
+     if (err) { أظهر err ولا تغلق } else { أظهر النجاح }  */
+let inflight: Promise<void> = Promise.resolve();
+let lastSyncError: string | null = null;
+
+/** يصفّر آخر خطأ — يُنادى قبل الإجراء مباشرةً لا بعده. */
+export function clearSyncError(): void { lastSyncError = null; }
+
+/** ينتظر الكتابات الجارية ويعيد رسالة الفشل، أو null إن نجحت كلها.
+    ينتظر دورتين: كتابةٌ قد تُطلَق أثناء انتظار الأولى فتُضاف للسلسلة. */
+export async function flushSync(): Promise<string | null> {
+  await inflight;
+  await inflight;
+  return lastSyncError;
 }
 
 interface StoreState {
@@ -236,9 +270,21 @@ export const useStore = create<StoreState>((set, get) => ({
     const sess = get().session;
     if (!sess || !supabase) return;
     const uid = sess.user.id;
-    const { data } = await supabase.from("profiles").select("id,name,role,branch_id").eq("id", uid).single();
+    const { data } = await supabase.from("profiles").select("id,name,role,branch_id,status").eq("id", uid).single();
     /* غياب صف profiles = ليس موظفاً. كان يُصنَّع له دور "موظف" هنا،
-       فيمرّ بوابة لوحة الإدارة بلا أي صلاحية مقصودة. */
+       فيمرّ بوابة لوحة الإدارة بلا أي صلاحية مقصودة.
+
+       والحساب الموقوف = ليس موظفاً كذلك. القاعدة ترفضه أصلاً (is_staff
+       تشترط status='active' منذ 20260823) فيرى لوحةً فارغة بلا تفسير؛
+       هنا يُخرَج صراحةً برسالة. الجلسة تُنهى لأن رمزها يبقى صالحاً حتى
+       تنتهي مدّته، فبقاؤه يعني نافذةً يُعاد فيها المحاولة بلا فائدة. */
+    const suspended = !!data && data.status === "inactive";
+    if (suspended) {
+      notifyAccountSuspended();
+      await supabase.auth.signOut();
+      set({ session: null, currentUser: null, isStaff: false, profileReady: true });
+      return;
+    }
     set(data
       ? { currentUser: { id: data.id, name: data.name, role: data.role, branch: data.branch_id ?? undefined }, isStaff: true, profileReady: true }
       : { currentUser: null, isStaff: false, profileReady: true });

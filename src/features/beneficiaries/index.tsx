@@ -11,6 +11,8 @@ import { useStore } from "@/store/useStore";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
 import { newId } from "@/lib/utils";
+import { toast } from "sonner";
+import { useRole } from "@/lib/useRole";
 
 const EMPTY_BEN: Omit<Beneficiary,"id"|"bookingIds"> = { name:"", phone:"", idNumber:"", nationality:"", gender:"male", birthDate:"", rating:0, notes:"", suspended:false };
 
@@ -139,6 +141,17 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
 }
 
 export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMenuOpen?:()=>void}) {
+  /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
+     نموذج التعديل تمرّ من هنا، فالموظف لا يملأ نموذجاً ليُرفض في آخره. */
+  const { canWrite } = useRole();
+  const mayWrite = canWrite("beneficiaries");
+  const openForm = (t: any) => {
+    if (!mayWrite) {
+      toast.error("لا تملك صلاحية التعديل", { description: "هذه الشاشة يكتبها مدير النظام وحده." });
+      return;
+    }
+    setEditTarget(t); setShowModal(true);
+  };
   const bens=useStore(s=>s.beneficiaries); const setBens=useStore(s=>s.setBeneficiaries);
   const payments=useStore(s=>s.payments); const tickets=useStore(s=>s.tickets);
   const [search,setSearch]=useState("");
@@ -149,7 +162,23 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
   const [invoiceView,setInvoiceView]=useState<Payment|null>(null);
   const [ticketView,setTicketView]=useState<TicketEntry|null>(null);
   const [cancelView,setCancelView]=useState<Booking|null>(null);
-  const openInvoice=(bk:Booking)=>setInvoiceView(payments.find(p=>p.bookingId===bk.id)??{id:`INV-${bk.id.replace("TSH-","")}`,bookingId:bk.id,clientName:bk.clientName,clientPhone:bk.clientPhone,packageName:"—",tripDate:"—",total:bk.total,payMethod:bk.payMethod||"—",payStatus:bk.paymentStatus==="verified"?"verified":bk.paymentStatus==="sent"?"sent":bk.paymentStatus==="failed"?"failed":"none",txnNo:bk.txnNo||"—",payDate:bk.payDate||"—",createdAt:bk.createdAt.split(" ")[0],roomType:bk.roomType,pilgrims:bk.pilgrims});
+  /* لا تلفيق فاتورة عند غيابها. كان يُصنع كائن فاتورة في الذاكرة برقم
+     INV-<رقم الطلب> ويُعرض ويُطبع — ورقمٌ لا وجود له في القاعدة يصل يد
+     العميل، ولا يجده أحد في شاشة الفواتير حين يسأل عنه.
+
+     الفواتير تُنشأ الآن في القاعدة تلقائياً عند تأكيد الطلب (حارس
+     trg_booking_confirm_docs، ترحيل 20260823). فغيابها هنا يعني أمراً
+     واحداً: الطلب ليس مؤكَّداً بعد — وهذا ما يُقال. */
+  const openInvoice=(bk:Booking)=>{
+    const found=payments.find(p=>p.bookingId===bk.id);
+    if(found){ setInvoiceView(found); return; }
+    toast.info("لا توجد فاتورة لهذا الطلب",{
+      description:bk.status==="confirmed"
+        ? "الطلب مؤكَّد لكن فاتورته لم تصل بعد — حدّث الصفحة بعد لحظات."
+        : "تُنشأ الفاتورة تلقائياً عند تأكيد الطلب.",
+      duration:7000,
+    });
+  };
   const openTicket=(bk:Booking)=>{const t=tickets.find(t=>t.bookingId===bk.id);if(t)setTicketView(t);};
 
   const detail = detailId ? bens.find(b=>b.id===detailId) : null;
@@ -168,7 +197,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     }
     setShowModal(false); setEditTarget(null);
   }
-  function openEdit(b:Beneficiary){setEditTarget(b);setShowModal(true);}
+  function openEdit(b:Beneficiary){openForm(b);}
   function toggleSuspend(id:string){setBens(p=>p.map(b=>b.id===id?{...b,suspended:!b.suspended}:b));}
   function setRating(id:string,r:number){setBens(p=>p.map(b=>b.id===id?{...b,rating:r}:b));}
   function setNotes(id:string,n:string){setBens(p=>p.map(b=>b.id===id?{...b,notes:n}:b));}
@@ -324,10 +353,13 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm" style={{color:B.muted}}>{filtered.length} مستفيد</span>
-            <button onClick={()=>{setEditTarget(null);setShowModal(true);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+            {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+            {mayWrite && (
+            <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
               style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
               <Plus size={14}/>إضافة مستفيد
             </button>
+            )}
           </div>
         </div>
         <div className="mt-4" style={{height:1,background:B.border}}/>

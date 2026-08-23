@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Globe, ChevronLeft, Check, Users, X, Search, Heart, UserRound, ArrowLeft, Clock} from "lucide-react";
 import { B } from "@/lib/theme";
@@ -32,13 +33,13 @@ import { Explore } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
 import { Account } from "./screens/Account";
+import { parseRoute, pathOf, NEEDS_PACKAGE, type Screen } from "./routing";
+import { readDraft, writeDraft, clearDraft, draftHasInput, emptyPax, type Pax } from "./draft";
+import { fetchTravellers, saveTraveller, type Traveller } from "./travellers";
 
 const G = { deep:"#0B5A41", dark:"#073A2B", green:B.primary, gold:B.gold, bg:"#F5F3EE" };
-/* "listing" هي الصفحة trip + seat + room. */
-type Screen = "packages"|"listing"|"custom"|"passengers"|"seats"|"review"|"success"|"track"|"profile"|"login"|"otp"|"account";
-interface Pax { name:string; phone:string; docType:DocType|""; idNumber:string; nationality:string;
-  birthDate:string; gender:"male"|"female"; ageGroup:"adult"|"child"; seat:number|null; }
-const emptyPax=():Pax=>({name:"",phone:"",docType:"",idNumber:"",nationality:"",birthDate:"",gender:"male",ageGroup:"adult",seat:null});
+/* "listing" هي الصفحة trip + seat + room. الشاشة تُقرأ من المسار
+   (routing.ts) وPax ومسوّدتها في draft.ts. */
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
 const validPhone=(p:string)=>/^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
 const validName=(s:string)=>s.trim().split(/\s+/).filter(Boolean).length>=2&&s.trim().length>=5;
@@ -146,7 +147,14 @@ export function CustomerApp(){
   const [lang,setLang]=useState<Lang>("ar");
   const t=useMemo(()=>makeT(lang),[lang]);
   const dir=dirOf(lang);
-  const [screen,setScreen]=useState<Screen>("packages");
+  /* ── الشاشة من المسار ──
+     المسار هو مصدر الحقيقة، لا حالةٌ موازية تُزامَن معه: نسختان
+     تتفارقان عند أول حالة لم تُحسب (زر رجوع المتصفّح، رابط مُلصق،
+     إعادة تحميل). وبهذا صار رابط الباقة قابلاً للإرسال في واتساب. */
+  const location=useLocation();
+  const navigate=useNavigate();
+  const route=useMemo(()=>parseRoute(location.pathname),[location.pathname]);
+  const screen=route.screen;
   const [cat,setCat]=useState<Catalog>({packages:[],trips:[],hotels:[],transports:[]});
   const [loading,setLoading]=useState(true);
   const [langOpen,setLangOpen]=useState(false);
@@ -168,6 +176,26 @@ export function CustomerApp(){
   /** لحظة إرسال الطلب — يبدأ منها عدّاد وعد الردّ في شاشة النجاح. */
   const [submittedAt,setSubmittedAt]=useState<number|null>(null);
   const [errMsg,setErrMsg]=useState("");
+
+  /* مرآة pkg في مرجع — حتى لا تُعاد صناعة setScreen مع كل تغيّر باقة
+     فتُبطل كل مُعالِج مبنيّ عليها. مرآةٌ لحالة، فالكتابة أثناء الرسم
+     لا تُنشئ حقيقةً ثانية. */
+  const pkgRef=useRef<Pkg|null>(null);
+  pkgRef.current=pkg;
+  /** معرّف رحلة أتت من مسوّدة مستعادة — يُستهلك مرّة فلا تُصفَّر مقاعدها. */
+  const restoredTrip=useRef<string|null>(null);
+
+  /* الانتقال بين الشاشات = تغيير المسار. الباقة تُمرَّر صراحةً حين
+     تُختار في نفس المُعالِج (setPkg ثم setScreen): حالة React لم تكن
+     قد تحدّثت بعد، فقراءة pkg هنا تعطي الباقة السابقة. */
+  const setScreen=useCallback((s:Screen,pkgId?:string)=>{
+    navigate(pathOf(s,pkgId??pkgRef.current?.id??route.packageId));
+  },[navigate,route.packageId]);
+  /* الاستبدال لا الإضافة: إعادة توجيه من مسار ناقص لا تُترك في تاريخ
+     المتصفّح، وإلا أعاد زر الرجوع المستفيد إليه فوراً في حلقة. */
+  const replaceScreen=useCallback((s:Screen,pkgId?:string)=>{
+    navigate(pathOf(s,pkgId??pkgRef.current?.id??route.packageId),{replace:true});
+  },[navigate,route.packageId]);
 
   /* ── الجلسة والهوية ──
      الجلسة الحقيقية تُقرأ بوعد (قد تُجدّد رمزاً عبر الشبكة)، فنبدأ
@@ -217,7 +245,19 @@ export function CustomerApp(){
   useEffect(()=>{ setSplit(s=>(s&&s.capacity>=persons&&s.rooms.length<=persons?s:null)); },[persons]);
   /* المقاعد المحجوزة: الفشل يعني كروكياً بلا حجوزات — أفضل من شاشة معطّلة،
      والقاعدة ترفض المقعد المأخوذ في آخر خطوة على أي حال. */
-  useEffect(()=>{ if(trip){ setPax(a=>a.map(x=>({...x,seat:null}))); fetchTakenSeats(trip.id).then(setTakenSeats).catch(e=>{ console.error("[fetchTakenSeats]",e); setTakenSeats([]); }); } },[trip?.id]);
+  useEffect(()=>{ if(!trip) return;
+    /* رحلةٌ استُعيدت من مسوّدة تحتفظ بمقاعدها؛ وتبديل الرحلة يصفّرها. */
+    if(restoredTrip.current===trip.id) restoredTrip.current=null;
+    else setPax(a=>a.map(x=>({...x,seat:null})));
+    fetchTakenSeats(trip.id).then(list=>{
+      setTakenSeats(list);
+      /* مقعد في مسوّدة قد حجزه غيره أثناء الغياب. إسقاطه هنا يُظهر
+         «اختر مقعداً» بدل أن يصل الطلب للقاعدة فتردّه في آخر خطوة. */
+      const taken=new Set(list);
+      setPax(a=>a.some(x=>x.seat!=null&&taken.has(x.seat))
+        ? a.map(x=>x.seat!=null&&taken.has(x.seat)?{...x,seat:null}:x) : a);
+    }).catch(e=>{ console.error("[fetchTakenSeats]",e); setTakenSeats([]); });
+  },[trip?.id]);
   useEffect(()=>()=>{ if(resendTimer.current) clearInterval(resendTimer.current); },[]);
 
   const activePkgs=cat.packages.filter(p=>p.status==="active" && (p.settings?.allowOnlineBooking!==false));
@@ -242,7 +282,69 @@ export function CustomerApp(){
   const total=split?splitTotal(split,nights):(trip?.price??0)*persons;
   const takenSet=useMemo(()=>new Set(takenSeats),[takenSeats]);
 
-  function reset(){ setPkg(null);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+  /* ── مزامنة الباقة مع المسار ──
+     المسار قد يتغيّر بلا نقرة: زر الرجوع، رابط مُلصق، إعادة تحميل.
+     البحث في activePkgs لا في cat.packages: رابط مُسرَّب لباقة مسودة
+     أو موقوفة أو مُقفلة عن الحجز الإلكتروني لا يفتحها لأحد. */
+  useEffect(()=>{
+    if(loading) return;
+    const pid=route.packageId;
+    if(!pid||pkg?.id===pid) return;
+    const found=activePkgs.find(p=>p.id===pid);
+    if(found) setPkg(found);
+  },[loading,route.packageId,activePkgs,pkg?.id]);
+
+  /* ── استعادة المسوّدة ──
+     مرّة واحدة عند أول جهوز للكتالوج: بعدها الحالة في الذاكرة أحدث من
+     المسوّدة، فإعادة تطبيقها تُرجع المستفيد خطوةً إلى الوراء. */
+  const restoreOnce=useRef(false);
+  const [routeReady,setRouteReady]=useState(false);
+  useEffect(()=>{
+    if(loading||restoreOnce.current) return;
+    restoreOnce.current=true;
+    const pid=route.packageId;
+    const d=pid?readDraft():null;
+    if(d&&d.packageId===pid){
+      const tr=d.tripId?cat.trips.find(x=>x.id===d.tripId)??null:null;
+      /* الرحلة المستعادة لا تُصفَّر مقاعدها — أثر [trip?.id] أدناه يصفّرها
+         عند كل تبديل رحلة، وهو صحيح للتبديل خطأٌ للاستعادة. */
+      if(tr) restoredTrip.current=tr.id;
+      setTrip(tr); setPersons(d.persons); setSplit(d.split);
+      setPax(d.pax); setAgreed(d.agreed); setActivePax(d.activePax);
+    }
+    setRouteReady(true);
+  },[loading,route.packageId,cat.trips]);
+
+  /* ── حفظ المسوّدة ──
+     بعد الإرسال لا تُحفظ: رقم الطلب صار في القاعدة، ومسوّدةٌ باقية
+     تعيد المستفيد إلى نموذج مملوء لطلبٍ أرسله فعلاً. */
+  useEffect(()=>{
+    if(!routeReady||!pkg||bookingNo) return;
+    if(!draftHasInput(pax,trip?.id??null,split)) return;
+    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,pax,agreed,activePax});
+  },[routeReady,pkg?.id,trip?.id,persons,split,pax,agreed,activePax,bookingNo]);
+
+  /* ── حرّاس المسار ──
+     مسار لا يمكن رسمه كان يُعيد لا شيء: صفحة بيضاء صامتة. الآن
+     يُستبدل بأقرب مسار صالح — استبدالاً لا إضافةً حتى لا يعيده زر
+     الرجوع في حلقة. */
+  useEffect(()=>{
+    if(loading||!routeReady) return;
+    const pid=route.packageId;
+    if(pid&&!activePkgs.some(p=>p.id===pid)){ replaceScreen("packages",""); return; }
+    if(NEEDS_PACKAGE.includes(screen)&&!pkg){ replaceScreen("packages",""); return; }
+    if((screen==="seats"||screen==="review")&&!trip){ replaceScreen("listing"); return; }
+    /* شاشة النجاح بلا رقم طلب: تحديثٌ بعد الإرسال. الطلب محفوظ فعلاً،
+       فالوجهة «طلباتي» لا نموذج فارغ. */
+    if(screen==="success"&&!bookingNo){ replaceScreen(session?"track":"packages",""); return; }
+    if(screen==="otp"&&!validPhone(loginPhone)){ replaceScreen("login"); return; }
+    /* الجلسة تُقرأ بوعد — قبل جهوزها لا يُطرد أحد من مسار محمي. */
+    if(!sessionReady) return;
+    if(!session&&(screen==="passengers"||screen==="seats"||screen==="review")){ setIntent("flow"); replaceScreen("login"); return; }
+    if(!session&&screen==="account"){ replaceScreen("login"); return; }
+  },[loading,routeReady,screen,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
+
+  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
   // ── تحقق خطوة بيانات المعتمرين ──
   const paxErrs=useMemo(()=>pax.map((p,i)=>paxErrors(p,i===0,t,lang)),[pax,t,lang]);
@@ -278,6 +380,53 @@ export function CustomerApp(){
     });
   }
 
+  /* ── دفتر المسافرين داخل خطوة بيانات المعتمرين ──
+     الدفتر كان يُقرأ ويُكتب في صفحة «حسابي» وحدها، وهي أبعد مكان عن
+     الحاجة إليه: المستفيد يكتب أسماء مرافقيه وأرقام هوياتهم من جديد في
+     كل حجز، والدفتر يملأ بلا أن يوفّر إدخالاً واحداً. */
+  const [book,setBook]=useState<Traveller[]>([]);
+  useEffect(()=>{
+    if(screen!=="passengers"||!session) return;
+    let alive=true;
+    fetchTravellers().then(r=>{ if(alive) setBook(r); })
+      .catch(e=>{ console.error("[travellers] تعذّر جلب الدفتر:",e); });
+    return ()=>{ alive=false; };
+  },[screen,session?.userId]);
+
+  /** تعبئة بطاقة معتمر من الدفتر. جوال المعتمر الأول هو الموثّق فلا يُستبدل. */
+  const applyTraveller=(i:number,tr:Traveller)=>{
+    setPax(a=>a.map((x,j)=>j===i?{...x,
+      name:tr.name, docType:tr.docType??"", idNumber:tr.idNumber,
+      nationality:tr.nationality, gender:tr.gender, ageGroup:tr.ageGroup,
+      birthDate:tr.birthDate, phone:i===0?x.phone:tr.phone,
+      /* المقعد ملكُ البطاقة لا ملكُ الشخص في الدفتر — لا يُنقل. */
+    }:x));
+    /* الحقول تُعدّ ملموسة: بياناتٌ جاءت جاهزة يجب أن يُرى خطؤها فوراً
+       (وثيقة منتهية الشكل مثلاً) لا عند محاولة المتابعة. */
+    setPaxTouched(s=>({...s,[`${i}.name`]:true,[`${i}.docType`]:true,[`${i}.idNumber`]:true,
+      [`${i}.nationality`]:true,[`${i}.birthDate`]:true}));
+  };
+
+  /** يغذّي الدفتر من الحجز. المطابقة برقم الوثيقة — الاسم يُكتب بصيغ
+      مختلفة في كل مرة، فالمطابقة به تُنشئ نسخاً للشخص نفسه. */
+  const rememberTravellers=useCallback(async(list:Pax[])=>{
+    if(!session) return;
+    try{
+      const known=new Set((await fetchTravellers()).map(x=>x.idNumber.trim()).filter(Boolean));
+      for(const p of list){
+        const idn=p.idNumber.trim();
+        if(!idn||known.has(idn)) continue;
+        known.add(idn);
+        await saveTraveller({id:"",name:p.name.trim(),docType:p.docType||undefined,idNumber:idn,
+          nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,
+          birthDate:p.birthDate,phone:p.phone.replace(/\s/g,"")});
+      }
+    }catch(e){
+      /* فشل الدفتر لا يُبلَّغ للمستفيد: الحجز نجح، وهذا تحسينٌ لحجزه القادم. */
+      console.error("[travellers] تعذّر تحديث الدفتر:",e);
+    }
+  },[session?.userId]);
+
   async function doSubmit(){
     if(submitting||!trip||!pkg) return;
     setErrMsg("");
@@ -299,7 +448,12 @@ export function CustomerApp(){
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
           phone:p.phone.replace(/\s/g,""),seat:p.seat??undefined})),
       });
+      /* المسوّدة تُمحى قبل الانتقال: الطلب صار في القاعدة، وبقاؤها
+         يعيد المستفيد إلى نموذج مملوء لطلب أرسله. */
+      clearDraft();
       setBookingNo(id); setSubmittedAt(Date.now()); setScreen("success");
+      /* دفتر المسافرين يتغذّى من كل حجز — لا يُنتظر ولا يُعطّل النجاح. */
+      void rememberTravellers(pax);
     }catch(e){
       /* أي خطأ آخر كان يُعرض كـ«لم تعد المقاعد كافية» فيضيّع سببه الحقيقي
          (رحلة محذوفة، صلاحية، شبكة). نعرض نصّه كما هو ونسجّله. */
@@ -494,7 +648,9 @@ export function CustomerApp(){
           packages={activePkgs}
           hotels={cat.hotels}
           tripsOf={pkgTrips}
-          onOpen={p=>{setPkg(p);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setScreen("listing");}}
+          /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
+             وتوزيع غرفها إلى نموذج باقة أخرى. */
+          onOpen={p=>{clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
           onCustom={()=>setScreen("custom")}
           t={t} lang={lang} setLang={setLang}
         />
@@ -540,12 +696,38 @@ export function CustomerApp(){
             const ist=(bad?:string)=>({borderColor:bad?C.danger:C.border,borderRadius:R.chip,height:52,
               fontSize:16,fontFamily:"inherit",background:C.white,color:C.ink} as const);
             const ltr={direction:"ltr",textAlign:(dir==="rtl"?"right":"left")} as const;
+            /* الدفتر يستثني من عُبّئ في بطاقة أخرى: رقم وثيقة واحد لا
+               يسافر في مقعدين، وعرضه يدعو إلى خطأ ترفضه القاعدة. */
+            const usedIds=new Set(pax.filter((_,j)=>j!==i).map(o=>o.idNumber.trim()).filter(Boolean));
+            const bookAvail=book.filter(tr=>tr.idNumber.trim()&&!usedIds.has(tr.idNumber.trim()));
             return (
               <div key={i} className="p-4 flex flex-col gap-4" style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:R.card}}>
                 <div className="flex items-center justify-between" style={{...T.h3,color:C.ink}}>
                   {t("person")} {i+1}
                   {p.ageGroup==="child"&&<span style={{...T.small,background:C.fill,color:C.ink2,border:`1px solid ${C.border}`,borderRadius:R.pill,padding:"2px 10px"}}>{t("child")}</span>}
                 </div>
+
+                {/* دفتر المسافرين — ضغطةٌ تُعبّئ البطاقة بدل إعادة كتابة
+                    اسم ورقم هوية وجنسية وتاريخ ميلاد لكل مرافق. */}
+                {bookAvail.length>0&&
+                  <div className="flex flex-col gap-2">
+                    <span style={{...T.small,fontWeight:500,color:C.ink}}>{t("fromBook")}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {bookAvail.map(tr=>{
+                        const on=!!p.idNumber.trim()&&p.idNumber.trim()===tr.idNumber.trim();
+                        return (
+                          <button key={tr.id} type="button" onClick={()=>applyTraveller(i,tr)}
+                            style={{...T.small,fontWeight:500,padding:"7px 12px",borderRadius:R.pill,
+                              cursor:"pointer",fontFamily:"inherit",
+                              background:on?C.greenTint:C.white,border:`1px solid ${on?C.green:C.border}`,
+                              color:on?C.green:C.ink}}>
+                            {on?"✓ ":""}{tr.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span style={{...T.small,fontWeight:400,color:C.ink2}}>{t("fromBookHint")}</span>
+                  </div>}
 
                 {/* الاسم */}
                 <LField label={t("name")} hint={t("nameHint")} error={errOf(i,"name")}>

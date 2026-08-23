@@ -41,3 +41,12 @@ export function notifyLoadError(e: unknown): void {
   console.error("[hydrate] فشل جلب البيانات:", e);
   toast.error("تعذّر جلب البيانات", { description: syncErrorMessage(e), duration: 9000 });
 }
+
+/** حساب موقوف حاول الدخول. رسالة صريحة لا شاشة فارغة: القاعدة ترفض كل
+    استعلاماته بعد الإيقاف، فبلا هذه الرسالة يرى لوحةً بيضاء ويظنّها عطلاً. */
+export function notifyAccountSuspended(): void {
+  toast.error("حسابك موقوف", {
+    description: "أوقف مدير النظام هذا الحساب. راجعه لإعادة تفعيله.",
+    duration: 12000,
+  });
+}

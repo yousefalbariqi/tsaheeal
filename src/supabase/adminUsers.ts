@@ -30,6 +30,21 @@ export async function updateProfile(id: string, name: string, role: string) {
   await supabase.from("profiles").update({ name, role }).eq("id", id);
 }
 
+/* إيقاف/تفعيل حساب. الحالة تُكتب في profiles لا في users وحده: is_staff()
+   في القاعدة تُبنى على profiles، وجدول users سجلٌّ إداري لا تقرأه أي
+   سياسة RLS. الزر كان يكتب users فقط، فالموقوف يواصل الدخول والكتابة.
+
+   يُرجع رسالة خطأ أو undefined. الحارس trg_profiles_guard يرفض إيقاف
+   آخر مدير نشط، ويرفض تغيير غير المدير لحالة أحد — بما فيها حالته. */
+export async function setProfileStatus(id: string, status: "active" | "inactive"): Promise<string | undefined> {
+  if (!supabase) return;
+  const { error } = await supabase.from("profiles").update({ status }).eq("id", id);
+  if (!error) return;
+  if (/last_admin/.test(error.message)) return "لا يمكن إيقاف آخر مدير نشط في النظام.";
+  if (/forbidden/.test(error.message)) return "لا تملك صلاحية إيقاف الحسابات — المدير وحده.";
+  return error.message;
+}
+
 /** حذف صف profiles (حساب Auth نفسه يُحذف من لوحة Supabase — يحتاج صلاحية إدارية) */
 export async function deleteProfile(id: string) {
   if (!supabase) return;

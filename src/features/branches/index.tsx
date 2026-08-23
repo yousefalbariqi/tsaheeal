@@ -10,6 +10,8 @@ import { DeleteDialog } from "@/components/DeleteDialog";
 import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
 import { newId } from "@/lib/utils";
+import { useRole } from "@/lib/useRole";
+import { toast } from "sonner";
 
 const EMPTY: Omit<Branch,"id"> = { name:"", city:"", address:"", gmapUrl:"", phone:"", managerId:"", isActive:true };
 const NONE = "__none__";
@@ -108,6 +110,17 @@ function BranchModal({branch,managers,onSave,onClose}:{
 }
 
 export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
+  /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
+     نموذج التعديل تمرّ من هنا، فالموظف لا يملأ نموذجاً ليُرفض في آخره. */
+  const { canWrite } = useRole();
+  const mayWrite = canWrite("branches");
+  const openForm = (t: any) => {
+    if (!mayWrite) {
+      toast.error("لا تملك صلاحية التعديل", { description: "هذه الشاشة يكتبها مدير النظام وحده." });
+      return;
+    }
+    setEditTarget(t); setShowModal(true);
+  };
   const branches = useStore(s=>s.branches);
   const setBranches = useStore(s=>s.setBranches);
   const users = useStore(s=>s.users);
@@ -159,10 +172,13 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         </div>
         <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
           <span className="text-sm" style={{color:B.muted}}>{filtered.length} فرع</span>
-          <button onClick={()=>{setEditTarget(null);setShowModal(true);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+          {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+          {mayWrite && (
+          <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
             <Plus size={14}/>إضافة فرع جديد
           </button>
+          )}
         </div>
         <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
@@ -198,7 +214,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                   </td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex gap-2">
-                      <button onClick={()=>{setEditTarget(b);setShowModal(true);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
+                      <button onClick={()=>{openForm(b);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
                       <button onClick={()=>toggleActive(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:b.isActive?"#FBF3D6":"#E3F3E8",color:b.isActive?"#8A6A08":"#1E7A44",border:"none"}}>{b.isActive?"تعطيل":"تفعيل"}</button>
                       <button onClick={()=>setDelId(b.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>حذف</button>
                     </div>
@@ -228,7 +244,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                   {gmapCell(b.gmapUrl)}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={()=>{setEditTarget(b);setShowModal(true);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
+                  <button onClick={()=>{openForm(b);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
                   <button onClick={()=>setDelId(b.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>حذف</button>
                 </div>
               </div>

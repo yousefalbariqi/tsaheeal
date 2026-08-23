@@ -14,6 +14,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
+import { useRole } from "@/lib/useRole";
+import { toast } from "sonner";
 
 const HOTEL_FEATURE_ICONS: Record<string, React.FC<{size?:number;style?:React.CSSProperties}>> = {
   wifi:Wifi, breakfast:Coffee, restaurant:UtensilsCrossed,
@@ -423,6 +425,17 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
 
 /* ─── Hotels Page ─── */
 export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
+  /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
+     نموذج التعديل تمرّ من هنا، فالموظف لا يملأ نموذجاً ليُرفض في آخره. */
+  const { canWrite } = useRole();
+  const mayWrite = canWrite("hotels");
+  const openForm = (t: any) => {
+    if (!mayWrite) {
+      toast.error("لا تملك صلاحية التعديل", { description: "هذه الشاشة يكتبها مدير النظام وحده." });
+      return;
+    }
+    setEditTarget(t); setShowModal(true);
+  };
   const hotels=useStore(s=>s.hotels); const setHotels=useStore(s=>s.setHotels);
   const [showModal,setShowModal]=useState(false);
   const [editTarget,setEditTarget]=useState<Hotel|null>(null);
@@ -459,10 +472,13 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm" style={{color:B.muted}}><b style={{color:B.black}}>{filtered.length}</b> / {hotels.length}</span>
-            <button onClick={()=>{setEditTarget(null);setShowModal(true);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+            {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+            {mayWrite && (
+            <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
               style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.35)"}}>
               <Plus size={15}/>إضافة فندق
             </button>
+            )}
           </div>
         </div>
         <div className="mt-5" style={{height:1,background:B.border}}/>
@@ -473,7 +489,7 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
             <Building2 size={44} style={{opacity:0.2,color:B.gold,marginBottom:12}}/><p className="font-bold" style={{color:B.black}}>لا توجد فنادق مطابقة</p>
           </motion.div>
           :<motion.div layout className="grid gap-5" style={{gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
-            <AnimatePresence>{filtered.map(h=><HotelCard key={h.id} hotel={h} onEdit={()=>{setEditTarget(h);setShowModal(true);}}/>)}</AnimatePresence>
+            <AnimatePresence>{filtered.map(h=><HotelCard key={h.id} hotel={h} onEdit={()=>{openForm(h);}}/>)}</AnimatePresence>
           </motion.div>
         }
       </main>

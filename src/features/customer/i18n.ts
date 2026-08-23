@@ -117,6 +117,8 @@ const D: Record<Lang, Dict> = {
     // ── صفحة حسابي ──
     sentTo:"أُرسل إلى", myDetails:"بياناتي", editDetails:"تعديل البيانات", travellers:"المسافرون",
     travellersHint:"المعتمرون الذين سافروا معك — تُستخدم بياناتهم لتسريع الحجز",
+    // ── الدفتر داخل خطوة بيانات المعتمرين ──
+    fromBook:"من دفتر المسافرين", fromBookHint:"اضغط اسماً لتعبئة بياناته",
     noTravellers:"لا يوجد مسافرون محفوظون بعد", noTravellersHint:"يُضافون تلقائياً بعد أول حجز، أو أضفهم يدوياً",
     addTraveller:"إضافة مسافر", editTraveller:"تعديل بيانات المسافر", deleteTraveller:"حذف المسافر",
     deleteTravellerAsk:"حذف {name} من قائمة المسافرين؟", deleteTravellerNote:"لا يؤثّر على حجوزاتك السابقة",
@@ -211,6 +213,7 @@ const D: Record<Lang, Dict> = {
     guestReviews:"Pilgrim reviews", showAllReviews:"Show all reviews", noReviews:"No reviews yet",
     sentTo:"Sent to", myDetails:"My details", editDetails:"Edit details", travellers:"Travellers",
     travellersHint:"People who travelled with you — used to speed up booking",
+    fromBook:"From your travellers", fromBookHint:"Tap a name to fill their details",
     noTravellers:"No saved travellers yet", noTravellersHint:"They are added automatically after your first booking, or add them manually",
     addTraveller:"Add traveller", editTraveller:"Edit traveller", deleteTraveller:"Delete traveller",
     deleteTravellerAsk:"Remove {name} from your travellers?", deleteTravellerNote:"Your past bookings are not affected",
