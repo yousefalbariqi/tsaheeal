@@ -1,4 +1,4 @@
-/* الباقة المخصّصة — ليست حجزاً بل طلب تصميم رحلة.
+/* رحلة حسب الطلب — ليست حجزاً بل طلب تنسيق رحلة.
    لا مقاعد ولا غرف ولا فندق: يجمع رغبة العميل ويتولّى الفريق الباقي.
    الحقول مقسومة كتلتين: الرحلة ثم مقدّم الطلب، وكلٌّ في بطاقة مستقلة. */
 import { useState, type ReactNode } from "react";
@@ -7,13 +7,14 @@ import { Check } from "lucide-react";
 import { B } from "@/lib/theme";
 import { BirthDateSelect } from "@/components/BirthDateSelect";
 import { SearchSelect } from "@/components/SearchSelect";
+import { Spinner } from "@/components/Spinner";
 import { submitCustomRequest } from "../data";
 
 const G = { deep: "#0B5A41", green: B.primary, gold: B.gold };
 
 const TXT = {
   ar: {
-    title: "الباقة المخصّصة", lead: "لم تجد ما يناسبك؟ أخبرنا برحلتك ونجهّز لك العرض ونتواصل معك.",
+    title: "رحلة حسب الطلب", lead: "نسّق رحلتك كما تريد: نحجز الفنادق ونرتّب الطيران ونجهّز العرض ثم نتواصل معك.",
     tripInfo: "معلومات الرحلة", myInfo: "بياناتك",
     depart: "تاريخ الذهاب", ret: "تاريخ العودة", persons: "عدد المعتمرين",
     dest: "المدينة المطلوبة", room: "نوع السكن المطلوب", hotel: "مستوى الفندق",
@@ -29,7 +30,7 @@ const TXT = {
     pick: "اختر…",
   },
   en: {
-    title: "Custom package", lead: "Nothing fits? Tell us about your trip and we'll prepare an offer and contact you.",
+    title: "Tailor-made trip", lead: "Plan your trip your way: we book the hotels, arrange the flights, prepare the offer and get back to you.",
     tripInfo: "Trip details", myInfo: "Your details",
     depart: "Departure date", ret: "Return date", persons: "Number of pilgrims",
     dest: "Destination", room: "Preferred room type", hotel: "Hotel level",
@@ -50,7 +51,7 @@ const DESTS = ["مكة", "مكة والمدينة"];
 const ROOMS = ["سكن مشترك", "غرفة خاصة — شخصان", "غرفة خاصة — ٣ أفراد", "غرفة خاصة — ٤ أفراد"];
 const LEVELS = ["٣ نجوم", "٤ نجوم", "٥ نجوم", "حسب الأنسب سعراً"];
 
-const validPhone = (p: string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
+const validPhone = (p: string) => /^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
 
 function Field({ label, error, optional, children }: {
   label: string; error?: string; optional?: string; children: ReactNode;
@@ -115,7 +116,9 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
       });
       setReqNo(id);
     } catch {
-      setFailed(x.fillFirst);
+      /* الحقول صحيحة أصلاً — الفحص فوق منع الوصول هنا. فالفشل شبكة أو
+         قاعدة، و«أكمل الحقول الناقصة» يُرسل المستخدم يبحث عن حقل سليم. */
+      setFailed(x.sendFailed ?? x.fillFirst);
     } finally { setBusy(false); }
   }
 
@@ -134,7 +137,7 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
       <div className="text-sm" style={{ color: B.text2 }}>{x.doneMsg}</div>
       <div className="rounded-xl px-6 py-3" style={card}>
         <div className="text-xs" style={{ color: B.muted }}>{x.reqNo}</div>
-        <div className="font-extrabold text-lg" style={{ color: G.green, fontFamily: "'IBM Plex Mono',monospace" }}>{reqNo}</div>
+        <div className="font-extrabold text-lg" style={{ color: G.green, fontFamily: "var(--font-app)" }}>{reqNo}</div>
       </div>
       <button onClick={onDone} className="mt-2 px-6 py-3 rounded-xl font-extrabold text-sm"
         style={{ background: G.gold, color: B.black, border: "none", cursor: "pointer" }}>{x.home}</button>
@@ -221,8 +224,7 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
 
       <button onClick={send} disabled={busy} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm"
         style={{ background: busy ? "#d6cfc6" : G.gold, color: busy ? "#a09688" : B.black, border: "none", cursor: busy ? "not-allowed" : "pointer" }}>
-        {busy && <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
-          style={{ width: 15, height: 15, border: "2px solid rgba(0,0,0,0.3)", borderTopColor: B.black, borderRadius: "50%", display: "inline-block" }} />}
+        {busy && <Spinner size={15} color={B.black} />}
         {busy ? x.sending : x.send}
       </button>
     </div>

@@ -28,14 +28,14 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
             <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
             <div className="flex items-start justify-between gap-6">
               <div>
-                <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:11,fontWeight:700,color:B.gold,letterSpacing:3}}>TASAHEEL AL-UMRAH</div>
-                <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:20,fontWeight:800,color:"#fff",marginTop:4,lineHeight:1.2}}>تساهيل العمرة</div>
+                <div style={{fontFamily:"var(--font-app)",fontSize:11,fontWeight:700,color:B.gold,letterSpacing:3}}>TASAHEEL AL-UMRAH</div>
+                <div style={{fontFamily:"var(--font-app)",fontSize:20,fontWeight:800,color:"#fff",marginTop:4,lineHeight:1.2}}>تساهيل العمرة</div>
                 <div className="mt-4 text-xs" style={{color:"#86A8A4"}}>تذكرة سفر معتمدة</div>
               </div>
               <div className="text-left">
                 <div className="text-xs font-bold mb-1" style={{color:"#86A8A4"}}>رقم التذكرة</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:24,fontWeight:800,color:B.gold}}>{ticket.ticketNo}</div>
-                <div className="text-xs mt-1" style={{color:"#86A8A4"}}>حجز: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>{ticket.bookingId}</span></div>
+                <div style={{fontFamily:"var(--font-app)",fontSize:24,fontWeight:800,color:B.gold}}>{ticket.ticketNo}</div>
+                <div className="text-xs mt-1" style={{color:"#86A8A4"}}>حجز: <span style={{fontFamily:"var(--font-app)"}}>{ticket.bookingId}</span></div>
               </div>
             </div>
           </div>
@@ -43,7 +43,7 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
           {/* Route strip */}
           <div className="px-8 py-5 flex items-center gap-4" style={{background:B.cream,borderBottom:`1px solid ${B.border}`}}>
             <div className="text-center">
-              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"'Noto Kufi Arabic',serif"}}>الرياض</div>
+              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"var(--font-app)"}}>الرياض</div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>نقطة الانطلاق</div>
             </div>
             <div className="flex-1 flex items-center gap-2">
@@ -52,7 +52,7 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
               <div className="flex-1 h-px" style={{background:B.border}}/>
             </div>
             <div className="text-center">
-              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"'Noto Kufi Arabic',serif"}}>مكة المكرمة</div>
+              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"var(--font-app)"}}>مكة المكرمة</div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>الوجهة</div>
             </div>
           </div>
@@ -102,7 +102,7 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
                   </div>
                   <div className="flex-1">
                     <div className="font-bold text-sm" style={{color:B.black}}>{pg.name}</div>
-                    <div className="text-xs mt-0.5" style={{color:B.muted,fontFamily:"'IBM Plex Mono',monospace"}}>{pg.idNumber||"—"}</div>
+                    <div className="text-xs mt-0.5" style={{color:B.muted,fontFamily:"var(--font-app)"}}>{pg.idNumber||"—"}</div>
                   </div>
                   <div className="text-xs font-bold" style={{color:B.muted}}>{pg.gender==="male"?"ذكر":"أنثى"}</div>
                 </div>
@@ -180,16 +180,16 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <tbody>
               {filtered.map((t,i)=>(
                 <tr key={t.ticketNo} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                  <td style={{padding:"14px 16px",fontWeight:800,fontFamily:"'IBM Plex Mono',monospace",color:B.gold}}>{t.ticketNo}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text2,fontSize:13}}>{t.bookingId}</td>
+                  <td style={{padding:"14px 16px",fontWeight:800,fontFamily:"var(--font-app)",color:B.gold}}>{t.ticketNo}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{t.bookingId}</td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="font-bold text-sm" style={{color:B.black}}>{t.clientName}</div>
                     <div className="text-xs" style={{color:B.muted}}>{t.persons} معتمر</div>
                   </td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text2,fontSize:13,direction:"ltr"}}>{t.clientPhone}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13,direction:"ltr"}}>{t.clientPhone}</td>
                   <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>{t.packageName}</td>
                   <td style={{padding:"14px 16px",color:B.text3,fontSize:13}}>{t.roomType}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text3,fontSize:13}}>{t.tripDate} · {t.tripTime}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text3,fontSize:13}}>{t.tripDate} · {t.tripTime}</td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex gap-2">
                       <button onClick={()=>setTicketId(t.ticketNo)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -208,8 +208,8 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <motion.div key={t.ticketNo} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
               className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="px-4 py-3 flex items-center justify-between" style={{background:B.primary}}>
-                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:800,fontSize:15,color:B.gold}}>{t.ticketNo}</span>
-                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#9DBAB6"}}>{t.bookingId}</span>
+                <span style={{fontFamily:"var(--font-app)",fontWeight:800,fontSize:15,color:B.gold}}>{t.ticketNo}</span>
+                <span style={{fontFamily:"var(--font-app)",fontSize:12,color:"#9DBAB6"}}>{t.bookingId}</span>
               </div>
               <div className="p-4">
                 <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{t.clientName}</div>

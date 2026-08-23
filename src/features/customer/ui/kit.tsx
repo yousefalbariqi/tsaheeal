@@ -1,9 +1,9 @@
 /* عناصر واجهة المستفيد — نظام Airbnb مطبّقاً على تساهيل.
    كلها RTL-aware: تعتمد الخصائص المنطقية (insetInlineStart / textAlign:start)
    ولا تعكس إلا الأيقونات الاتجاهية عبر flipRTL. */
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images, Globe } from "lucide-react";
 import { C, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
 
 /* ── اتجاه الصفحة ─────────────────────────────────────────────── */
@@ -29,6 +29,33 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
+/** يمشّي نبضةً واحدة على عناصر شبكة بالتتابع: الأولى ثم الثانية ثم الثالثة…
+    ثم يعاد. يُرجِع فهرس العنصر النابض حالياً، أو -1 فلا ينبض أحد.
+
+    مؤقّت واحد للشبكة كلها لا مؤقّت لكل بطاقة: بعشرين باقة كانت تصير عشرين
+    مؤقّتاً تعمل معاً (وهي العلّة التي أُسقط من أجلها النصّ المتناوب من هذه
+    الشاشة). وما يُعاد رسمه عند كل خطوة هو سمة واحدة على بطاقتين — الخارجة
+    والداخلة.
+
+    وفي الدورة خانة زائدة عن عدد البطاقات تُرجِع -1: راحة قصيرة بعد آخر
+    بطاقة قبل أن تبدأ الموجة من جديد. بلا هذه الراحة تلتفّ الموجة على
+    نفسها بلا فاصل فلا يُدرَك أنها «تُعاد» من الأول. */
+export function useSequencePulse(count: number, step = MOTION.sweep): number {
+  const reduced = useReducedMotion();
+  const slots = count + 1;
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    if (reduced || count < 1) return;
+    const id = setInterval(() => setI(n => (n + 1) % slots), step);
+    return () => clearInterval(id);
+  }, [reduced, count, slots, step]);
+
+  if (reduced || count < 1) return -1;
+  const at = i % slots;
+  return at < count ? at : -1;      // الخانة الأخيرة = راحة
+}
+
 /* أنماط عامة تُحقن مرة واحدة لا مع كل مكوّن. */
 const GLOBAL_STYLE_ID = "ts-customer-style";
 if (typeof document !== "undefined" && !document.getElementById(GLOBAL_STYLE_ID)) {
@@ -36,15 +63,60 @@ if (typeof document !== "undefined" && !document.getElementById(GLOBAL_STYLE_ID)
   el.id = GLOBAL_STYLE_ID;
   el.textContent = `
 .ts-hscroll::-webkit-scrollbar,.ts-hgallery::-webkit-scrollbar{display:none}
-@keyframes ts-pulse{
-  0%,100%{ border-color:${C.border}; box-shadow:0 0 0 0 rgba(31,111,107,0); }
-  50%    { border-color:${C.green};  box-shadow:0 0 0 3px rgba(31,111,107,.13); }
+/* نبض حدود البطاقة — حدٌّ وهالة فقط بلا transform: تكبير البطاقة يزحزح
+   جيرانها في الشبكة فيُقرأ اهتزازاً لا نبضاً، والحدّ وحده كافٍ للإيحاء
+   بالحياة. وبانتقال CSS لا keyframes: الإضاءة تأتي من تبديل السمة
+   data-pulse من الخارج، والتتابع يقرّره مؤقّت واحد للشبكة كلها. */
+.ts-seq{
+  /* حدّ السكون هنا لا في style السطر: النمط السطري يتقدّم على أي قاعدة في
+     الورقة بلا !important، فكان الحدّ يبقى رمادياً ولا تنبض إلا الهالة.
+     والصنف يملك الحالتين معاً فيُقرأ الانتقال بينهما في موضع واحد.
+     وهالة السكون معلنة صفراً لا متروكة none: الانتقال من/إلى none غير
+     معرَّف جيداً في كل المتصفّحات. */
+  border: 1px solid ${C.border};
+  box-shadow: 0 0 0 0 rgba(31,111,107,0);
+  transition: border-color ${MOTION.pulseFade}ms ease-in-out,
+              box-shadow   ${MOTION.pulseFade}ms ease-in-out;
 }
-.ts-pulse{ animation: ts-pulse ${MOTION.pulse}ms ease-in-out infinite; }
+.ts-seq[data-pulse="on"]{
+  /* أخضر مخفَّف لا ${C.green} صريحاً، وهالة 2px بشفافية .09:
+     المطلوب إيحاء هادئ جداً — والحدّ الصريح يجعل البطاقة تبدو «مختارة». */
+  border-color: rgba(31,111,107,.45);
+  box-shadow: 0 0 0 2px rgba(31,111,107,.09);
+}
 .ts-card:active{ transform: scale(.985); }
+
+/* شريط زاحف بلا نهاية — المسار فيه نسختان من القائمة، والانتقال إلى
+   -50% ينتهي بالضبط على بداية النسخة الثانية فلا تُرى نقطة الالتفاف.
+   transform وحده: يعمل على المُركِّب بلا إعادة تخطيط ولا مؤقّت JS. */
+@keyframes ts-marquee{ from{ transform: translateX(0) } to{ transform: translateX(-50%) } }
+.ts-ticker{
+  overflow: hidden;
+  /* LTR على الحاوية نفسها لا على المسار وحده: في RTL يُسنِد المتصفّح حافّة
+     المسار اليمنى إلى حافّة الحاوية اليمنى ويمدّه يساراً خارجها، فإزاحته
+     -50% تخرجه من النافذة كلها ويظهر الشريط فارغاً. وبـLTR يبدأ المسار من
+     الحافّة اليسرى فتبقى النافذة مغطّاة في كل لحظة من الدورة.
+     نصوص العبارات لا تتأثر: كل عبارة تحمل dir الخاص بها. */
+  direction: ltr;
+  /* التلاشي عند الحافّتين — بدونه تُقطع الكلمة قطعاً حادّاً فيبدو الشريط معطوباً */
+  -webkit-mask-image: linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);
+          mask-image: linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);
+}
+.ts-ticker-track{
+  display: flex; width: max-content; will-change: transform;
+  animation: ts-marquee var(--ts-dur,40s) linear infinite;
+}
+/* في RTL يزحف مع اتجاه القراءة (يميناً) — عكس المسار نفسه لا مجموعة keyframes ثانية */
+.ts-ticker[data-dir="rtl"] .ts-ticker-track{ animation-direction: reverse; }
+/* من أراد قراءة عبارة يلمسها فتقف — هو ما يجعل الشريط بلا «جهد» */
+.ts-ticker:hover .ts-ticker-track,
+.ts-ticker:active .ts-ticker-track{ animation-play-state: paused; }
+
 @media (prefers-reduced-motion: reduce){
-  .ts-pulse{ animation: none; border-color:${C.border}; }
+  /* الهالة تُلغى بالسمة نفسها من الخطّاف، وهذا يمنع أي انتقال لو بقيت */
+  .ts-seq{ transition: none; }
   .ts-card:active{ transform: none; }
+  .ts-ticker-track{ animation: none; }
 }`;
   document.head.appendChild(el);
 }
@@ -92,6 +164,122 @@ export function RotatingText({ items, delay = 0, style }: {
           </motion.div>
         </AnimatePresence>
       )}
+    </div>
+  );
+}
+
+/* ── شريط الثقة الزاحف ────────────────────────────────────────── */
+/** عبارات ثقة تزحف بلا نهاية كشريط الأخبار.
+
+    لماذا زحف لا تبديل (RotatingText): التبديل يُمسك كل عبارة 3.2 ثانية،
+    فأحد عشرة عبارة تحتاج 35 ثانية ولا يرى الواقف عشر ثوان إلا ثلاثاً.
+    الزحف يعرضها متّصلةً بلا وقفات — أكثر كلمات في نفس الزمن — وبمؤقّت
+    واحد في CSS لا مؤقّت JS لكل عبارة.
+
+    والقياس هو بيت القصيد: المدة تُحسب من العرض لا تُثبَّت، وإلا صارت
+    السرعة تابعة لطول النص فزحف التركي (عبارات أطول) أسرع من العربي. */
+export function TrustTicker({ items, speed = 64, style }: {
+  items: string[];
+  /** بكسل في الثانية — 64 يُقرأ بمرور العين ولا يُتعب. */
+  speed?: number;
+  style?: CSSProperties;
+}) {
+  const dir = useDir();
+  const reduced = useReducedMotion();
+  const boxRef  = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);   // نسخة واحدة من القائمة
+  const halfRef = useRef<HTMLDivElement>(null);   // نصف المسار = reps نسخة
+  const [dur, setDur] = useState(0);
+  /* تكرار القائمة داخل كل نصف: لو كانت نسخة واحدة أضيق من الشاشة لظهرت
+     فجوة بيضاء تعبر الشريط في كل دورة. */
+  const [reps, setReps] = useState(1);
+
+  useLayoutEffect(() => {
+    if (reduced) return;
+    const box = boxRef.current, copy = copyRef.current, halfEl = halfRef.current;
+    if (!box || !copy || !halfEl) return;
+
+    const measure = () => {
+      const copyW = copy.scrollWidth;
+      if (!copyW) return;                        // الخط لم يُحمَّل بعد
+      setReps(Math.max(1, Math.ceil(box.clientWidth / copyW)));
+      // المدة من عرض النصف مقيساً لا محسوباً: النصف هو ما تقطعه ‎-50%‎
+      setDur(halfEl.scrollWidth / speed);
+    };
+    measure();
+    // إعادة القياس عند تغيّر اللغة أو تحميل الخط أو دوران الجهاز
+    const ro = new ResizeObserver(measure);
+    ro.observe(box); ro.observe(halfEl);
+    return () => ro.disconnect();
+  }, [items, speed, reduced]);
+
+  /* في RTL يُقلب الترتيب. المسار LTR فعنصره الأول أقصى اليسار، والنافذة
+     تتقدّم يساراً — فلولا القلب لمرّت العبارات بترتيب معكوس عن المكتوب في
+     i18n. لا يُحسّ ذلك للقارئ (العبارات مستقلة لا جملة) لكنه يخدع من
+     يحرّر القائمة لاحقاً: يرتّبها فتُعرض مقلوبة. */
+  const seq = dir === "rtl" ? [...items].reverse() : items;
+
+  /* المسافة كلها من الحاشية لا من gap: الـgap لا يفصل بين نصفَي المسار
+     (هما ابنا flex متلاصقان) فكانت مسافة نقطة الالتفاف أضيق من غيرها.
+     `dot` تُطفأ لأول عنصر في السطر الساكن وحده: النقطة فاصلة بين عبارتين،
+     وفي حلقة لا نهاية لها كل عبارة مسبوقة بأخرى — أما سطر له بداية فنقطته
+     الأولى تتدلّى وحدها. */
+  const item = (x: string, dot = true) => (
+    <span key={x} className="inline-flex items-center" style={{ gap: 10, paddingInlineEnd: 20 }}>
+      {dot && <span aria-hidden style={{
+        width: 5, height: 5, borderRadius: "50%", background: C.gold,
+        display: "inline-block", flexShrink: 0,
+      }} />}
+      <span dir={dir} style={{ ...T.meta, color: C.ink2, whiteSpace: "nowrap" }}>{x}</span>
+    </span>
+  );
+
+  /* عند تقليل الحركة: نفس الشريط بسطر واحد لكن يُمرَّر باليد — لا حركة
+     ذاتية. ولا لفّ في أسطر: اثنتا عشرة عبارة ملفوفة تصير خمسة أسطر تدفع
+     الباقات خارج الشاشة الأولى، فيُعاقب من أوقف الحركة بتخطيط أسوأ.
+     وبترتيب items لا seq: هذا السطر يرث RTL من الصفحة فيبدأ من اليمين
+     أصلاً، والقلب هنا كان سيعكسه مرتين. */
+  if (reduced) {
+    return (
+      // الحاشية تعيد هامش الصفحة الذي ألغاه الهامش السالب في المُستدعي:
+      // الشريط الزاحف يتلاشى عند الحافّة فلا يحتاجها، والساكن يلتصق بها.
+      <div className="ts-hscroll flex items-center"
+        style={{ overflowX: "auto", scrollbarWidth: "none", paddingInline: SPACE.page, ...style }}>
+        {items.map((x, i) => item(x, i > 0))}
+      </div>
+    );
+  }
+
+  /* نصف واحد = reps نسخة. النسخة الأولى وحدها مقروءة؛ الباقي — وكل
+     النصف الثاني — aria-hidden حتى لا يكرّرها قارئ الشاشة. */
+  const half = (first: boolean) => (
+    <div ref={first ? halfRef : undefined} className="flex items-center"
+      aria-hidden={first ? undefined : true}>
+      {Array.from({ length: reps }).map((_, r) => (
+        <div key={r} className="flex items-center"
+          ref={first && r === 0 ? copyRef : undefined}
+          aria-hidden={first && r === 0 ? undefined : true}>
+          {/* لا map(item) مباشرةً: map يمرّر الفهرس كوسيط ثانٍ فيصير `dot` رقماً */}
+          {seq.map(x => item(x))}
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div ref={boxRef} className="ts-ticker" data-dir={dir} style={style}>
+      {/* المسار يرث LTR من .ts-ticker، فحساب translateX واحد في الاتجاهين
+          واتجاه الزحف يتغيّر بـanimation-direction وحده — والقلب المنطقي
+          يتولّاه seq أعلاه. */}
+      <div className="ts-ticker-track" style={{
+        ["--ts-dur" as string]: dur ? `${dur}s` : undefined,
+        // قبل أول قياس: موقوف، وإلا زحف بمدة الافتراضي ثم وثب عند ضبطها
+        animationPlayState: dur ? undefined : "paused",
+      }}>
+        {/* النصفان متطابقان — شرط انسيابية الالتفاف */}
+        {half(true)}
+        {half(false)}
+      </div>
     </div>
   );
 }
@@ -267,16 +455,38 @@ export function IconBubble({ children, onClick, label }: { children: ReactNode; 
 /* ── مبدّل اللغة ──────────────────────────────────────────────── */
 /** شريحة `ع | e` تبدّل مباشرة بين العربية والإنجليزية، وسهم يفتح باقي اللغات.
     الكرة الأرضية وحدها غامضة؛ والشريحة وحدها تُسقط الأردية والتركية — فالاثنان معاً. */
-export function LangSwitch<L extends string>({ lang, setLang, langs, label }: {
+export function LangSwitch<L extends string>({ lang, setLang, langs, label, compact }: {
   lang: L;
   setLang: (l: L) => void;
   langs: { code: L; label: string }[];
   label: string;
+  /** زرّ واحد بكرة أرضية + اللغة المقابلة، يفتح القائمة الكاملة عند النقر.
+      الشريحة المقسومة تأكل عرضاً لا يستحقّه رأسٌ متمركز. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const primary = langs.filter(l => l.code === ("ar" as L) || l.code === ("en" as L));
   const rest = langs.filter(l => !primary.includes(l));
   const mark: Record<string, string> = { ar: "ع", en: "e" };
+  /* يُعرض اسم اللغة التي سينتقل إليها — لا الحالية؛ فالصفحة نفسها تدلّ على الحالية. */
+  const nextLabel = lang === ("ar" as L) ? "EN" : "ع";
+
+  if (compact) {
+    return (
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button onClick={() => setOpen(v => !v)} aria-label={label}
+          className="flex items-center"
+          style={{
+            gap: 8, height: 44, paddingInline: 16, borderRadius: R.pill,
+            border: `1px solid ${C.border}`, background: C.white, cursor: "pointer",
+            fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, color: C.ink,
+          }}>
+          <Globe size={17} />{nextLabel}
+        </button>
+        {open && <LangMenu langs={langs} lang={lang} onPick={l => { setLang(l); setOpen(false); }} onClose={() => setOpen(false)} />}
+      </div>
+    );
+  }
 
   const seg = (on: boolean): CSSProperties => ({
     minWidth: 30, height: 32, borderRadius: R.pill, border: "none", cursor: "pointer",
@@ -302,21 +512,28 @@ export function LangSwitch<L extends string>({ lang, setLang, langs, label }: {
         )}
       </div>
 
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
-          <div style={{ position: "absolute", top: 50, insetInlineEnd: 0, zIndex: 31, background: C.white, border: `1px solid ${C.border}`, borderRadius: R.card, overflow: "hidden", minWidth: 150, boxShadow: "0 10px 30px -8px rgba(0,0,0,.25)" }}>
-            {langs.map(l => (
-              <button key={l.code} onClick={() => { setLang(l.code); setOpen(false); }}
-                className="flex items-center justify-between gap-2 w-full"
-                style={{ padding: "12px 14px", background: lang === l.code ? C.fill : C.white, border: "none", cursor: "pointer", textAlign: "start", ...T.meta, fontWeight: lang === l.code ? 600 : 400, color: C.ink }}>
-                {l.label}{lang === l.code && <Check size={15} color={C.green} />}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open && <LangMenu langs={langs} lang={lang} onPick={l => { setLang(l); setOpen(false); }} onClose={() => setOpen(false)} />}
     </div>
+  );
+}
+
+/** قائمة اللغات المنسدلة — مشتركة بين الشكلين. */
+function LangMenu<L extends string>({ langs, lang, onPick, onClose }: {
+  langs: { code: L; label: string }[]; lang: L; onPick: (l: L) => void; onClose: () => void;
+}) {
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 30 }} />
+      <div style={{ position: "absolute", top: 50, insetInlineStart: 0, zIndex: 31, background: C.white, border: `1px solid ${C.border}`, borderRadius: R.card, overflow: "hidden", minWidth: 150, boxShadow: "0 10px 30px -8px rgba(0,0,0,.25)" }}>
+        {langs.map(l => (
+          <button key={l.code} onClick={() => onPick(l.code)}
+            className="flex items-center justify-between gap-2 w-full"
+            style={{ padding: "12px 14px", background: lang === l.code ? C.fill : C.white, border: "none", cursor: "pointer", textAlign: "start", ...T.meta, fontWeight: lang === l.code ? 600 : 400, color: C.ink }}>
+            {l.label}{lang === l.code && <Check size={15} color={C.green} />}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -529,6 +746,8 @@ export function HeroGallery({ images, onBack, height = 300 }: { images: string[]
           position: "absolute", bottom: 46, insetInlineStart: 16,
           background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
           paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
+          /* بلا LTR يُقرأ «1 / 9» في سياق RTL كأنه «9 / 1» — أي الصورة التاسعة من واحدة */
+          ...LTR,
         }}>{i + 1} / {images.length}</span>
       )}
     </div>
@@ -614,7 +833,7 @@ export function MediaGallery({ items, height = 210, onOpen }: {
           <span style={{
             position: "absolute", bottom: 10, insetInlineStart: 10,
             background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
-            paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
+            paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small, ...LTR,
           }}>{i + 1} / {items.length}</span>
         )}
       </div>
@@ -813,19 +1032,39 @@ export function SelectRow({ image, title, note, price, priceNote, selected, onCl
 const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const AR_WEEK = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
 
-/** تقويم شهري بنمطهم: المتاح أسود قابل للضغط، المختار دائرة خضراء، غير المتاح مشطوب. */
+/** تقويم شهري: المتاح أخضر محاط، المختار دائرة خضراء ممتلئة، المكتمل مشطوب،
+    واليوم بلا رحلة باهت بلا حدّ.
+
+    التمييز بين «مكتمل» و«لا رحلة» مقصود: كانا يُرسمان خليةً رمادية واحدة، فمن
+    رأى يومه فارغاً لم يعرف أهو غير مطروح أصلاً أم فاته. والمكتمل يبقى ظاهراً
+    لأن اختفاءه يوحي بأن الباقة لا تسير ذلك اليوم.
+
+    `isFull` يأتي من المستدعي لا يُحسب هنا: قواعد الإتاحة (حالة الرحلة والمقاعد
+    المتبقية ووضع التجربة) شأن طبقة البيانات، والتقويم يرسم ما يُقال له. */
 export function TripCalendar<Tr extends { id: string; departureDate: string }>({
-  trips, valueId, onPick, onClear, clearLabel,
+  trips, valueId, onPick, onClear, clearLabel, isFull, month, onMonthChange, legend,
 }: {
   trips: Tr[]; valueId?: string; onPick: (t: Tr) => void; onClear?: () => void; clearLabel?: string;
+  /** اليوم موجود لكن لا يُحجز — يُرسم مشطوباً. */
+  isFull?: (t: Tr) => boolean;
+  /** الشهر المعروض — يُرفع للمستدعي كي لا يُفقد عند طيّ الخطوة وإعادة فتحها. */
+  month?: { y: number; m: number };
+  onMonthChange?: (ym: { y: number; m: number }) => void;
+  /** أسماء الحالات في المفتاح أسفل الشبكة. بلا هذا لا يُقرأ الترميز اللوني. */
+  legend?: { available: string; full: string };
 }) {
   const dir = useDir();
   const byDate = new Map<string, Tr>();
-  trips.forEach(t => { if (!byDate.has(t.departureDate)) byDate.set(t.departureDate, t); });
+  /* المتاح يغلب المكتمل على اليوم الواحد: يومٌ فيه رحلتان إحداهما مفتوحة قابل للحجز. */
+  trips.forEach(t => {
+    const cur = byDate.get(t.departureDate);
+    if (!cur || (isFull?.(cur) && !isFull?.(t))) byDate.set(t.departureDate, t);
+  });
 
   const first = trips.map(t => t.departureDate).sort()[0];
   const initial = first ? new Date(first + "T00:00:00") : new Date();
-  const [ym, setYm] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
+  const [ownYm, setOwnYm] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
+  const ym = month ?? ownYm;
 
   const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate();
   const firstCol = (new Date(ym.y, ym.m, 1).getDay() + 1) % 7;
@@ -834,11 +1073,12 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  const move = (delta: number) => setYm(s => {
-    let m = s.m + delta, y = s.y;
+  const move = (delta: number) => {
+    let m = ym.m + delta, y = ym.y;
     if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
-    return { y, m };
-  });
+    const next = { y, m };
+    if (month) onMonthChange?.(next); else { setOwnYm(next); onMonthChange?.(next); }
+  };
 
   const navBtn: CSSProperties = {
     width: 34, height: 34, borderRadius: R.pill, border: "none", background: "none",
@@ -865,18 +1105,22 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
           if (d === null) return <div key={"e" + i} style={{ height: 46 }} />;
           const ds = `${ym.y}-${pad(ym.m + 1)}-${pad(d)}`;
           const trip = byDate.get(ds);
-          const on = !!trip && valueId === trip.id;
+          const full = !!trip && !!isFull?.(trip);
+          const open = !!trip && !full;
+          const on = open && valueId === trip.id;
           return (
-            // عندهم الأغلب متاح والقليل مشطوب؛ عندنا العكس (رحلات بتواريخ محددة)،
-            // فالشطب على كل الشهر يصير ضجيجاً — نميّز بالتباين: المتاح داكن وعريض.
-            <button key={"d" + i} disabled={!trip} onClick={() => trip && onPick(trip)}
+            // الأخضر محاطاً لا خلفيةً فاتحة: التقويم يعيش داخل الكتلة الخضراء
+            // C.bandAction، وأي تظليل فاتح يذوب فيها بينما الحدّ يبقى.
+            <button key={"d" + i} disabled={!open} onClick={() => open && onPick(trip)}
+              aria-label={full && legend ? `${d} — ${legend.full}` : undefined}
               style={{
-                height: 46, border: "none",
-                // أبيض لا رمادي: التقويم يعيش داخل الكتلة الخضراء، والرمادي يختفي فوقها
-                background: on ? C.green : trip ? C.white : "none",
-                color: on ? C.white : trip ? C.ink : C.ink3,
-                borderRadius: R.pill, cursor: trip ? "pointer" : "default",
-                fontFamily: FONT.sans, fontSize: 15, fontWeight: on || trip ? 600 : 400,
+                height: 46, borderRadius: R.pill,
+                background: on ? C.green : open ? C.white : "none",
+                border: on ? "none" : open ? `1px solid ${C.green}` : "none",
+                color: on ? C.white : open ? C.green : C.ink3,
+                textDecoration: full ? "line-through" : "none",
+                cursor: open ? "pointer" : "default",
+                fontFamily: FONT.sans, fontSize: 15, fontWeight: open ? 600 : 400,
                 ...LTR,
               }}>
               {d}
@@ -884,6 +1128,20 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
           );
         })}
       </div>
+
+      {/* مفتاح الحالات — بدونه يبقى الترميز اللوني تخميناً */}
+      {legend && (
+        <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 12 }}>
+          <span className="inline-flex items-center" style={{ gap: 6, ...T.small, fontWeight: 400, color: C.ink2 }}>
+            <span aria-hidden style={{ width: 14, height: 14, borderRadius: R.pill, background: C.white, border: `1px solid ${C.green}` }} />
+            {legend.available}
+          </span>
+          <span className="inline-flex items-center" style={{ gap: 6, ...T.small, fontWeight: 400, color: C.ink2 }}>
+            <span aria-hidden style={{ width: 14, height: 1, background: C.ink3 }} />
+            {legend.full}
+          </span>
+        </div>
+      )}
 
       {onClear && valueId && (
         <div style={{ textAlign: "start", marginTop: 10 }}>

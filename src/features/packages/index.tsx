@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Building2, MapPin, Star, Plus, Trash2, X, Check, Wifi, UtensilsCrossed, Coffee, ShieldCheck, Package, Plane, Bus, BookOpen, Users, Ticket, Search, ChevronRight, ImagePlus, Armchair, ChevronUp, ChevronDown, Copy, ArrowRight, Repeat, CalendarDays, ListChecks, Archive, ArchiveRestore } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Hotel, Transport, PkgStatus, PkgDest, ProgramStage, RoomPrice, PkgReview, PkgFeature, Pkg, TripSettings } from "@/types";
-import { uid, distanceLabel } from "@/lib/utils";
+import { uid, distanceLabel, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -67,7 +67,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
   function handleSave(){
-    onSave({...form,id:`PKG-${String(Date.now()).slice(-4)}`,order:999,program:[],roomPrices:[],reviews:[],notes:"",policies:[]});
+    onSave({...form,id:newId("PKG"),order:999,program:[],roomPrices:[],reviews:[],notes:"",policies:[]});
   }
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
@@ -84,7 +84,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>
                 <Package size={16} style={{color:B.gold}}/>
               </div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"'Noto Kufi Arabic',serif"}}>إضافة باقة جديدة</h2>
+              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>إضافة باقة جديدة</h2>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
               style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={14}/></button>
@@ -232,7 +232,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
   const movePolicy=(i:number,dir:-1|1)=>{const arr=[...form.policies];const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("policies",arr);};
 
   // Reviews
-  const addReview=()=>set("reviews",[...form.reviews,{id:uid(),name:"",text:"",consent:false}]);
+  const addReview=()=>set("reviews",[...form.reviews,{id:uid(),name:"",text:"",consent:false,rating:9}]);
   const delReview=(id:string)=>set("reviews",form.reviews.filter(r=>r.id!==id));
   const updReview=(id:string,field:keyof PkgReview,val:any)=>set("reviews",form.reviews.map(r=>r.id===id?{...r,[field]:val}:r));
 
@@ -266,7 +266,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>
               {form.coverImage?<img src={form.coverImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"🕋"}</div>
             <div className="flex-1 min-w-0">
-              <h1 style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:20,fontWeight:800,color:"#fff",margin:0,lineHeight:1.2}}>{form.name}</h1>
+              <h1 style={{fontFamily:"var(--font-app)",fontSize:20,fontWeight:800,color:"#fff",margin:0,lineHeight:1.2}}>{form.name}</h1>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {destBadge(form.destination)}
                 {typeBadge(form.productType)}
@@ -281,7 +281,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-xs" style={{color:B.muted}}>يبدأ من</div>
-                <div className="text-2xl font-extrabold" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace",lineHeight:1}}>{form.marketPrice}<span className="text-sm font-bold mr-1" style={{color:B.gold2}}>ر.س</span></div>
+                <div className="text-2xl font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)",lineHeight:1}}>{form.marketPrice}<span className="text-sm font-bold mr-1" style={{color:B.gold2}}>ر.س</span></div>
               </div>
               <button onClick={()=>onSave(form)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
                 style={{background:B.gold,color:B.black,border:"none"}}><Check size={13}/>حفظ</button>
@@ -497,7 +497,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <div className="rounded-2xl p-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                   <div className="flex items-center gap-2 mb-4">
                     <span className="text-lg" style={{color:B.gold}}>〰</span>
-                    <span className="font-extrabold" style={{color:B.black,fontFamily:"'Noto Kufi Arabic',serif",fontSize:15}}>برنامج الرحلة اليومي</span>
+                    <span className="font-extrabold" style={{color:B.black,fontFamily:"var(--font-app)",fontSize:15}}>برنامج الرحلة اليومي</span>
                   </div>
                   {activeStages.map((s,idx)=>(
                     <div key={s.id} className="flex gap-3">
@@ -529,7 +529,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <p className="text-xs" style={{color:B.muted}}>سعر تسويقي يظهر للعميل كنقطة بداية — لا يؤثر على حساب الأسعار الفعلية أدناه.</p>
               </div>
               <input type="number" min={0} className="border rounded-xl px-3.5 py-2.5 text-lg font-extrabold text-center focus:outline-none"
-                style={{borderColor:B.gold,background:"#FFF7EA",color:B.gold,fontFamily:"'IBM Plex Mono',monospace",width:140}}
+                style={{borderColor:B.gold,background:"#FFF7EA",color:B.gold,fontFamily:"var(--font-app)",width:140}}
                 value={form.marketPrice} onChange={e=>set("marketPrice",Number(e.target.value))}/>
             </div>
 
@@ -543,7 +543,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   {selTransport
                     ? <div className="flex items-center justify-between gap-2 text-sm">
                         <span className="font-bold" style={{color:B.black}}>{selTransport.mode==="bus"?"🚌":"✈️"} {selTransport.name}</span>
-                        <span className="font-bold" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace"}}>{selTransport.seatCost} ر.س<span className="text-xs font-normal" style={{color:B.muted}}> /مقعد</span></span>
+                        <span className="font-bold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{selTransport.seatCost} ر.س<span className="text-xs font-normal" style={{color:B.muted}}> /مقعد</span></span>
                       </div>
                     : <div className="text-xs" style={{color:B.muted}}>لم تُربط مواصلة بعد.</div>}
                 </div>
@@ -554,7 +554,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     ? <div className="flex flex-col gap-1">{selHotel.roomTypes.map(rt=>(
                         <div key={rt.id} className="flex items-center justify-between gap-2 text-xs">
                           <span style={{color:B.text2}}>{rt.kind==="shared"?"سكن مشترك":"غرفة خاصة"} · {rt.beds} سرير</span>
-                          <span className="font-bold" style={{color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.pricePerNight} ر.س</span>
+                          <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{rt.pricePerNight} ر.س</span>
                         </div>
                       ))}</div>
                     : <div className="text-xs" style={{color:B.muted}}>لا فندق مرتبط أو لا توجد غرف.</div>}
@@ -593,9 +593,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       style={{borderColor:B.border,color:B.gold,fontFamily:"inherit"}} value={r.perNight} onChange={e=>updRoom(r.id,"perNight",Number(e.target.value))}/></div>
                     <div className="px-3 py-2 text-xs font-bold text-center" style={{color:B.text2}}>{form.nights}</div>
                     <div className="px-3 py-2"><input type="number" min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
-                      style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"'IBM Plex Mono',monospace"}} value={seatCost}
+                      style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"var(--font-app)"}} value={seatCost}
                       onChange={e=>updRoom(r.id,"seatCost",Number(e.target.value))}/></div>
-                    <div className="px-3 py-2 text-sm font-extrabold text-center" style={{color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{total.toLocaleString()} ر.س</div>
+                    <div className="px-3 py-2 text-sm font-extrabold text-center" style={{color:B.black,fontFamily:"var(--font-app)"}}>{total.toLocaleString()} ر.س</div>
                     <div className="px-2 py-2"><button onClick={()=>delRoom(r.id)} className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
                       style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={11}/></button></div>
                   </motion.div>
@@ -679,8 +679,19 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               <motion.div key={rv.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
                 className="rounded-2xl p-4 flex gap-3" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
                 <div className="flex-1 flex flex-col gap-2">
-                  <input className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
-                    value={rv.name} placeholder="الاسم الأول" onChange={e=>updReview(rv.id,"name",e.target.value)}/>
+                  <div className="flex gap-2">
+                    <input className="flex-1 border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
+                      value={rv.name} placeholder="الاسم الأول" onChange={e=>updReview(rv.id,"name",e.target.value)}/>
+                    {/* الدرجة من 10 — التقييم العام في صفحة الباقة متوسط هذه الدرجات.
+                        تركها فارغة يعرض الرأي بلا احتساب في المتوسط. */}
+                    <div className="flex items-center gap-1.5 px-3 rounded-xl" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
+                      <Star size={13} style={{color:B.gold,flexShrink:0}}/>
+                      <input type="number" min={1} max={10} step={0.1} value={rv.rating ?? ""} placeholder="—"
+                        onChange={e=>{const v=e.target.value;updReview(rv.id,"rating",v===""?undefined:Math.min(10,Math.max(1,Number(v))));}}
+                        className="text-sm focus:outline-none" style={{width:52,border:"none",background:"transparent",color:B.black,direction:"ltr",textAlign:"center",fontFamily:"inherit"}}/>
+                      <span className="text-xs" style={{color:B.muted,flexShrink:0}}>/10</span>
+                    </div>
+                  </div>
                   <textarea className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit",resize:"vertical"}}
                     rows={2} value={rv.text} placeholder="ماذا قال عن الباقة؟" onChange={e=>updReview(rv.id,"text",e.target.value)}/>
                   {rv.image&&(
@@ -772,7 +783,12 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
       const arr=[...prev].sort((a,b)=>a.order-b.order);
       const i=arr.findIndex(p=>p.id===id);const j=i+dir;
       if(j<0||j>=arr.length)return prev;
-      [arr[i].order,arr[j].order]=[arr[j].order,arr[i].order];
+      /* صفوف جديدة لا تعديل في مكانها: [...prev] نسخة ضحلة، فتبديل
+         arr[i].order كان يغيّر صفوف prev نفسها — فيرى syncDiff القديم
+         والجديد متطابقين ولا يرسل شيئاً، فيعود الترتيب عند أول تحديث. */
+      const oi=arr[i].order, oj=arr[j].order;
+      arr[i]={...arr[i],order:oj};
+      arr[j]={...arr[j],order:oi};
       return [...arr];
     });
   }
@@ -783,7 +799,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
   if(detail) return <PackageDetail pkg={detail} transports={transports} hotels={hotels} onSave={handleSaveDetail} onBack={()=>setDetailId(null)}/>;
 
   const filtered=packages
-    .filter(p=>(!search||p.name.includes(search)||p.id.toLowerCase().includes(search))&&(destFilter==="all"||p.destination===destFilter)&&(statusFilter==="all"||p.status===statusFilter))
+    .filter(p=>(!search||p.name.includes(search)||p.id.toLowerCase().includes(search.toLowerCase()))&&(destFilter==="all"||p.destination===destFilter)&&(statusFilter==="all"||p.status===statusFilter))
     .sort((a,b)=>a.order-b.order);
 
   const stats={total:packages.length,active:packages.filter(p=>p.status==="active").length,mecca:packages.filter(p=>p.destination==="مكة").length,both:packages.filter(p=>p.destination==="مكة والمدينة").length};
@@ -877,7 +893,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
                   <div className="px-4 py-3 flex gap-2" onClick={e=>e.stopPropagation()} style={{cursor:"default"}}>
                     <button onClick={()=>setDetailId(p.id)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
                       style={{background:B.primary,color:B.cream,border:"none"}}>تفاصيل <ArrowRight size={11}/></button>
-                    <button onClick={()=>{const dup={...p,id:`PKG-${String(Date.now()).slice(-4)}`,name:p.name+" (نسخة)",order:packages.length+1};setPackages(prev=>[...prev,dup]);}}
+                    <button onClick={()=>{const dup={...p,id:newId("PKG"),name:p.name+" (نسخة)",order:packages.length+1};setPackages(prev=>[...prev,dup]);}}
                       className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer"
                       style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={11}/></button>
                   </div>

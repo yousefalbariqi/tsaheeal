@@ -272,8 +272,8 @@ export function findNationality(value: string): Nationality | undefined {
 
 /** الاسم المعروض حسب لغة الواجهة — العربية للعربية/الأردية، والإنجليزية لما عداهما. */
 export function natLabel(n: Nationality, lang = "ar"): string {
-  return lang === "en" || lang === "tr" ? n.en : n.ar;
+  return lang === "en" ? n.en : n.ar;
 }
 export function natCountry(n: Nationality, lang = "ar"): string {
-  return lang === "en" || lang === "tr" ? n.enCountry : n.arCountry;
+  return lang === "en" ? n.enCountry : n.arCountry;
 }

@@ -10,8 +10,6 @@ import {
 const TXT = {
   ar: { placeholder: "اختر الجنسية", search: "ابحث عن الجنسية أو الدولة…", empty: "لا توجد نتائج مطابقة", popular: "الأكثر شيوعاً", all: "كل الجنسيات" },
   en: { placeholder: "Select nationality", search: "Search nationality or country…", empty: "No matching results", popular: "Most common", all: "All nationalities" },
-  ur: { placeholder: "قومیت منتخب کریں", search: "قومیت یا ملک تلاش کریں…", empty: "کوئی نتیجہ نہیں", popular: "سب سے عام", all: "تمام قومیتیں" },
-  tr: { placeholder: "Uyruk seçin", search: "Uyruk veya ülke ara…", empty: "Sonuç bulunamadı", popular: "En yaygın", all: "Tüm uyruklar" },
 } as const;
 
 export function NationalitySelect({

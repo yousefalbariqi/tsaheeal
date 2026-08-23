@@ -37,3 +37,7 @@ Thumbs.db
 
 # ملفات مؤقتة
 .seed-bundle.mjs
+
+# إعدادات Claude Code — لا تُرفع
+.claude/
+claude/

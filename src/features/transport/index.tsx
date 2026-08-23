@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { VehicleMode, VehicleStatus, MediaKind, HotelMedia, TransportFeature, TransportReview, Transport } from "@/types";
-import { uid } from "@/lib/utils";
+import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -76,7 +76,7 @@ function TransportCard({tr,onEdit}:{tr:Transport;onEdit:()=>void}) {
         {/* Name + ID */}
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"'Noto Kufi Arabic',serif"}}>{tr.name}</h3>
+            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{tr.name}</h3>
             <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
               <Car size={11} style={{color:B.gold}}/>
               <span>{tr.model}</span>
@@ -116,7 +116,7 @@ type TrTab="info"|"features"|"media"|"reviews";
 function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|null;onSave:(t:Transport)=>void;onClose:()=>void;onDelete?:()=>void}) {
   const isEdit=initial!==null;
   const [tab,setTab]=useState<TrTab>("info");
-  const [form,setForm]=useState<Transport>(initial?{...initial,media:initial.media??[]}:{id:`TRN-${String(Date.now()).slice(-4)}`,name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,model:"",year:"",plate:"",driver:"",supervisor:"",status:"active",notes:"",features:[],reviews:[],media:[]});
+  const [form,setForm]=useState<Transport>(initial?{...initial,media:initial.media??[]}:{id:newId("TRN"),name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,model:"",year:"",plate:"",driver:"",supervisor:"",status:"active",notes:"",features:[],reviews:[],media:[]});
   const set=<K extends keyof Transport>(k:K,v:Transport[K])=>setForm(f=>({...f,[k]:v}));
   const addFeat=()=>set("features",[...form.features,{id:uid(),text:"",icon:"ac"}]);
   const delFeat=(id:string)=>set("features",form.features.filter(f=>f.id!==id));
@@ -153,7 +153,7 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
                 {form.mode==="bus"?"🚌":"✈️"}
               </div>
               <div>
-                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"'Noto Kufi Arabic',serif"}}>{isEdit?"تعديل المواصلة":"إضافة مواصلة جديدة"}</h2>
+                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"var(--font-app)"}}>{isEdit?"تعديل المواصلة":"إضافة مواصلة جديدة"}</h2>
                 <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"}</div>
               </div>
             </div>
@@ -203,7 +203,7 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تكلفة المقعد (ر.س) <span style={{color:B.gold}}>*</span></label>
-                  <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800,fontFamily:"'IBM Plex Mono',monospace"}} value={form.seatCost} onChange={e=>set("seatCost",Number(e.target.value))}/></div>
+                  <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800,fontFamily:"var(--font-app)"}} value={form.seatCost} onChange={e=>set("seatCost",Number(e.target.value))}/></div>
                 <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>{form.mode==="bus"?"الشركة / الموديل":"شركة الطيران"}</label>
                   <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"طيران ناس"} onChange={e=>set("model",e.target.value)}/></div>
               </div>
@@ -367,7 +367,7 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
   const [statusFilter,setStatusFilter]=useState<"all"|"active"|"inactive">("all");
   const [deleteId,setDeleteId]=useState<string|null>(null);
   const filtered=transports.filter(t=>
-    (!search||t.name.includes(search)||t.id.toLowerCase().includes(search)||t.model.includes(search))&&
+    (!search||t.name.includes(search)||t.id.toLowerCase().includes(search.toLowerCase())||t.model.includes(search))&&
     (modeFilter==="all"||t.mode===modeFilter)&&
     (statusFilter==="all"||t.status===statusFilter)
   );

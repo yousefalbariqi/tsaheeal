@@ -33,7 +33,8 @@ export type PkgStatus = "active" | "draft" | "hidden" | "suspended";
 export type PkgDest   = "مكة" | "مكة والمدينة";
 export interface ProgramStage { id:string; order:number; icon:string; day:string; time:string; title:string; desc:string; archived?:boolean; }
 export interface RoomPrice    { id:string; type:string; persons:number; perNight:number; seatCost?:number; }
-export interface PkgReview    { id:string; name:string; text:string; consent:boolean; image?:string; }
+/** rating: درجة من 10. اختيارية — الآراء القديمة بلا درجة تُستثنى من المتوسط. */
+export interface PkgReview    { id:string; name:string; text:string; consent:boolean; image?:string; rating?:number; }
 export interface PkgFeature   { id:string; icon:string; text:string; }
 export interface Pkg {
   id:string; name:string; order:number;
@@ -98,19 +99,34 @@ export interface Payment {
 export interface Pilgrim { name:string; docType?:"national_id"|"iqama"|"passport"; idNumber:string; nationality:string; gender:"male"|"female"; ageGroup?:"adult"|"child"; birthDate:string; phone:string; seat?:number; }
 export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"|"awaiting_payment"|"awaiting_trip"|"paid"|"verifying"|"verified"|"confirmed"|"cancelled";
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
+/** غرفة واحدة في توزيع سكن حجز. السعر مثبَّت وقت الحجز لا مقروء من الباقة:
+    تعديل الموظف لأسعارها لاحقاً يجب ألّا يجعل الإجمالي المحفوظ غير مفسَّر. */
+export interface BookingRoom { tierId?:string; type:string; persons:number; perNight:number; }
 export interface Booking {
   id:string; tripId:string; packageId?:string;
   clientName:string; clientPhone:string;
   roomType:string; persons:number;
+  /** توزيع السكن مفصّلاً. اختياري: الحجوزات الداخلية والقديمة بلا توزيع. */
+  rooms?:BookingRoom[];
   total:number; status:BookingStatus;
   paymentStatus:PaymentStatus;
   payMethod?:string; txnNo?:string; payDate?:string;
   seats:number[];
-  createdAt:string; staff:string; sentDate:string;
+  createdAt:string;                // تاريخ بلا ساعة — للعرض والفرز
+  submittedAt?:string;            // طابع زمني كامل للطلبات العامة — منه يبدأ وعد الردّ
+  staff:string; sentDate:string;
   createdBy?:string;              // id المستخدم المنشئ (حجز داخلي)
   branchId?:string;               // فرع الطلب
   source?:string;                 // public | internal
+  customerId?:string;             // حساب المستفيد (جلسة الجوال) إن وُجد
+  payToken?:string;               // رمز رابط الدفع — يُفتح من واتساب بلا جلسة
+  customer?:CustomerAccount;      // ملف الحساب (قراءة فقط في لوحة الموظف)
   pilgrims:Pilgrim[];
+}
+
+/** ملف حساب المستفيد كما تقرأه لوحة الموظف مع الحجز. */
+export interface CustomerAccount {
+  firstName:string; lastName:string; birthDate?:string; email?:string; phone?:string;
 }
 
 export interface TicketEntry {

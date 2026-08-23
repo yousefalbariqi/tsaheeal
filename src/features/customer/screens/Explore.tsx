@@ -1,13 +1,20 @@
-/* شاشة الاستكشاف — رأس أبيض بالشعار واللغة، بنر تعريفي مضغوط، ثم شريط باقات أفقي.
-   لا مربع بحث: الباقات قليلة ومعدودة، والبحث يشغل مساحة الشاشة الأولى بلا مقابل.
-   الباقات في صف أفقي واحد بعرض بطاقة يترك طرف البطاقة التالية ظاهراً — إشارة السحب. */
-import { useMemo } from "react";
+/* شاشة الاستكشاف — رأس متمركز بالشعار، ثم فلتر مدن، ثم شبكة عمودين.
+
+   لماذا شبكة عمودين لا شريط أفقي: عدد الباقات صار يكبر، والشريط الأفقي
+   يخفي أكثر مما يعرض ويستلزم سحباً لكل وجهة. الشبكة تُظهر ست باقات في
+   الشاشة الأولى، والفلتر يقصّها بضغطة بدل التمرير.
+
+   والبطاقة هنا مبسّطة عن ListingCard: بلا نجوم ولا شارات ولا نصّ متناوب.
+   النصّ المتناوب كان يشغّل مؤقّتاً لكل بطاقة — مع عشرين باقة يصير عشرين
+   مؤقّتاً تعمل معاً. */
+import { useMemo, useState } from "react";
+import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ClipboardList, ArrowLeft } from "lucide-react";
 import type { Pkg, Trip, Hotel } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
-import { C, T, R, SPACE, STICKY_H, MOTION, money } from "../ui/tokens";
-import { ListingCard, LangSwitch, HScroll } from "../ui/kit";
-import { pkgCover } from "../gallery";
-import { LANGS, type Lang } from "../i18n";
+import { C, T, R, SPACE, SHADOW, STICKY_H, FONT, flipRTL, money } from "../ui/tokens";
+import { LangSwitch, TrustTicker, useDir, useSequencePulse } from "../ui/kit";
+import { pkgCover, CUSTOM_TRIP_COVER } from "../gallery";
+import { LANGS, trustOf, type Lang } from "../i18n";
 
 export interface ExploreProps {
   packages: Pkg[];
@@ -26,128 +33,223 @@ function minTotal(p: Pkg): number {
   return nightly.length ? Math.min(...nightly) * (p.nights || 1) : p.marketPrice;
 }
 
-/** عرض البطاقة: يترك ~٥٠px من التالية ظاهرة على شاشة الجوال. */
-const CARD_W = "min(300px, 78vw)";
+/** «مكة والمدينة» → ["مكة","المدينة"] — الباقة المشتركة تظهر في فلتر كل مدينة.
+    الفصل على « و» بمسافة قبلها لا على «و» وحدها: الثانية تشطر أسماءً
+    فيها واو أصلية مثل «الوجه» → «ال» + «جه». */
+const citiesOf = (p: Pkg): string[] =>
+  p.destination.split(" و").map(s => s.trim()).filter(Boolean);
+
+/** ترتيب المدن: مكة أولاً ثم المدينة ثم ما بقي على ترتيب البيانات.
+    لا يُترك لترتيب ورود الباقات من قاعدة البيانات: ذاك يتبع تاريخ الإضافة،
+    فباقة مدينةٍ أُدخلت أولاً كانت تتقدّم مكة في الشبكة وفي شرائح الفلتر. */
+const CITY_ORDER = ["مكة", "المدينة"];
+const cityRank = (c: string): number => {
+  const i = CITY_ORDER.findIndex(x => c.includes(x));
+  return i === -1 ? CITY_ORDER.length : i;
+};
+/** رتبة الباقة = أصغر رتبة مدينة فيها — فباقة «مكة والمدينة» تُعدّ مكّية. */
+const pkgRank = (p: Pkg): number => Math.min(...citiesOf(p).map(cityRank), CITY_ORDER.length);
 
 export function Explore({ packages, hotels, tripsOf, onOpen, onCustom, t, lang, setLang }: ExploreProps) {
-  /** المدن المغطّاة فعلياً — مشتقّة من الباقات، لا ادعاء. */
+  const [city, setCity] = useState<string>("");   // "" = الكل
+  const dir = useDir();
+
+  /** المدن المغطّاة فعلياً — مشتقّة من الباقات، لا ادعاء. مكة أولاً ثم المدينة. */
   const cities = useMemo(
-    () => [...new Set(packages.flatMap(p => p.destination.split(" و")))],
+    () => [...new Set(packages.flatMap(citiesOf))].sort((a, b) => cityRank(a) - cityRank(b)),
     [packages],
   );
 
-  /* نقاط ثقة سريعة أسفل الاسم — نصوصها في i18n لتُعدَّل بلا لمس الكود،
-     وشريحة المدن مشتقّة من الباقات الفعلية. */
-  const trust = useMemo(() => [
-    { icon: "🇸🇦", text: t("trustSaudi") },
-    ...(cities.length ? [{ icon: "🕋", text: cities.join(" و") }] : []),
-    { icon: "⭐", text: t("trustExp") },
-    { icon: "🤝", text: t("trustTrusted") },
-  ], [cities, t]);
+  /* عبارات الثقة — نصوصها في i18n لتُعدَّل بلا لمس الكود، والمدن من الباقات.
+     المدن تُدرَج ثانيةً لا في الذيل: الشريط لا يُرى كاملاً في لحظة، فما وُضع
+     آخراً قد لا يبلغه من نظر ثوانٍ ثم مرّر. */
+  const trust = useMemo(() => {
+    const base = trustOf(lang);
+    return cities.length ? [base[0], cities.join(" و"), ...base.slice(1)] : base;
+  }, [cities, lang]);
 
-  /* المتاحة أولاً: البطاقة الأولى في الشريط يجب أن تكون قابلة للحجز. */
-  const ordered = useMemo(
-    () => [...packages].sort((a, b) => (tripsOf(a).length ? 0 : 1) - (tripsOf(b).length ? 0 : 1)),
-    [packages, tripsOf],
-  );
+  /* المتاحة أولاً: أول ما تراه العين يجب أن يكون قابلاً للحجز. ثم مكة قبل
+     المدينة — فباقات المدينة تظهر مستقلةً أسفل باقات مكة حين تُضاف بياناتها. */
+  const shown = useMemo(() => {
+    const list = city ? packages.filter(p => citiesOf(p).includes(city)) : packages;
+    return [...list].sort((a, b) =>
+      (tripsOf(a).length ? 0 : 1) - (tripsOf(b).length ? 0 : 1) ||
+      pkgRank(a) - pkgRank(b));
+  }, [packages, city, tripsOf]);
 
-  /* شريط أفقي لكل وجهة — وإن كانت وجهة واحدة فهو صف أفقي واحد لكل الباقات. */
-  const groups = useMemo(() => {
-    const dests = [...new Set(ordered.map(p => p.destination))];
-    return dests.map(d => ({ dest: d, items: ordered.filter(p => p.destination === d) }))
-      .filter(g => g.items.length > 0);
-  }, [ordered]);
+  /* النبضة تمشي على البطاقات القابلة للحجز وحدها، وهي مقدّمة الشبكة بعد
+     الترتيب أعلاه. نبض بطاقة مكتملة يجذب العين إلى ما لا يمكن الضغط عليه. */
+  const bookable = useMemo(() => shown.filter(p => tripsOf(p).length > 0).length, [shown, tripsOf]);
+  const pulseAt = useSequencePulse(bookable);
 
-  const card = (p: Pkg, i: number) => {
-    const hotel = hotels.find(h => h.id === p.hotelId);
-    const trips = tripsOf(p);
-
-    /* الحقائق التي تتناوب تحت العنوان — كلها من بيانات موجودة، بلا اختلاق. */
-    const facts: string[] = [];
-    if (hotel) facts.push(`${hotel.city} · ${hotel.distanceM} ${t("meters")} ${t("fromHaram")}`);
-    p.features?.slice(0, 2).forEach(f => facts.push(f.text));
-    facts.push(`${p.days} ${t("days")} · ${p.nights} ${t("nights")}`);
-    const review = p.reviews?.find(r => r.consent);
-    if (review) facts.push(`“${review.text.slice(0, 40)}${review.text.length > 40 ? "…" : ""}”`);
-
-    return (
-      <ListingCard
-        key={p.id}
-        width={CARD_W}
-        imageAspect="4 / 3"
-        image={pkgCover(p)}
-        title={p.name}
-        stars={hotel?.stars}
-        facts={facts}
-        factsDelay={i * MOTION.stagger}
-        price={`${money(minTotal(p))} ${t("currency")}`}
-        priceNote={t("forNights").replace("{n}", String(p.nights))}
-        badge={trips.length === 0 ? t("soldOut") : p.order === 1 ? t("mostWanted") : undefined}
-        disabled={trips.length === 0}
-        pulse
-        onClick={() => onOpen(p)}
-      />
-    );
-  };
+  /* ثلاث شرائح تتقاسم العرض بالتساوي؛ وأقلّ من ذلك تأخذ عرض نصّها
+     (شريحتان بنصف الشاشة لكلٍّ تبدوان منتفختين)، وأكثر تُمرَّر أفقياً. */
+  const tabs = [{ key: "", label: t("all") }, ...cities.map(c => ({ key: c, label: c }))];
+  const spread = tabs.length === 3;
+  const scroll = tabs.length > 3;
 
   return (
     <div className="flex flex-col flex-1" style={{ background: C.white, paddingBottom: STICKY_H }}>
-      {/* ── الرأس: الشعار هو العنصر الرئيسي + اللغة، بلا صورة ولا بنر ── */}
-      <div style={{ position: "sticky", top: 0, zIndex: 20, background: C.white }}>
-        <div className="flex items-center justify-between gap-3" style={{ padding: `10px ${SPACE.page}px 8px` }}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <TasaheelMark size={52} />
-            <span className="truncate" style={{ fontFamily: "'Noto Kufi Arabic',serif", fontSize: 20, fontWeight: 800, color: C.ink }}>
-              {t("brand")}
-            </span>
+
+      {/* ═══ الرأس ═══ */}
+      <div style={{ paddingInline: SPACE.page, paddingTop: 10 }}>
+        {/* اللغة في الطرف، والشعار متمركز فوقها لا بجانبها */}
+        <div className="flex">
+          <LangSwitch compact lang={lang} setLang={setLang} langs={LANGS} label={t("language")} />
+        </div>
+
+        <div className="flex flex-col items-center text-center" style={{ marginTop: -8 }}>
+          <TasaheelMark size={92} plain />
+          <h1 style={{ fontFamily: "var(--font-app)", fontSize: 30, fontWeight: 800, color: C.ink, margin: "10px 0 0" }}>
+            {t("brand")}
+          </h1>
+          <p style={{ ...T.body, color: C.ink2, margin: "8px 0 0" }}>{t("tagline")}</p>
+
+          {/* شريط الثقة — ممتدّ لحافّتي الشاشة بهامش سالب يلغي هامش الصفحة:
+              التلاشي عند الحافّة الحقيقية هو ما يجعله يُقرأ شريطاً زاحفاً لا
+              سطراً مقصوصاً في منتصف الصفحة. */}
+          <div style={{ alignSelf: "stretch", marginInline: -SPACE.page, marginTop: 14 }}>
+            <TrustTicker items={trust} />
           </div>
-          <LangSwitch lang={lang} setLang={setLang} langs={LANGS} label={t("language")} />
         </div>
       </div>
 
-      {/* ── سطر تعريفي قصير + نقاط ثقة سريعة — بديل البنر ── */}
-      <section style={{ paddingInline: SPACE.page, paddingBottom: 4 }}>
-        <p style={{ ...T.meta, color: C.ink2, margin: 0 }}>{t("tagline")}</p>
-        <div className="flex flex-wrap gap-1.5" style={{ marginTop: 10 }}>
-          {trust.map(x => (
-            <span key={x.text} className="inline-flex items-center gap-1.5"
-              style={{ ...T.small, color: C.ink, background: C.band, border: `1px solid ${C.line}`, borderRadius: R.pill, paddingInline: 10, height: 28 }}>
-              <span style={{ fontSize: 13, lineHeight: 1 }}>{x.icon}</span>{x.text}
-            </span>
-          ))}
+      {/* ═══ العنوان + فلتر المدن ═══ */}
+      <div style={{ paddingInline: SPACE.page, marginTop: 28 }}>
+        <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("choosePackage")}</h2>
+        <div className="flex" style={{ gap: 10, marginTop: 14, overflowX: scroll ? "auto" : "visible", scrollbarWidth: "none" }}>
+          {tabs.map(tab => {
+            const on = city === tab.key;
+            return (
+              <button key={tab.key || "all"} onClick={() => setCity(tab.key)} aria-pressed={on}
+                style={{
+                  flex: spread ? "1 1 0" : "0 0 auto", minWidth: 0, height: 46,
+                  paddingInline: spread ? 8 : 24, borderRadius: R.chip, cursor: "pointer",
+                  background: on ? C.greenDeep : C.white,
+                  border: `1px solid ${on ? C.greenDeep : C.green}`,
+                  color: on ? C.white : C.green,
+                  fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, whiteSpace: "nowrap",
+                }}>
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
-      </section>
+      </div>
 
-      {/* ── الباقات: شريط أفقي (لكل وجهة شريط) ── */}
-      <div className="flex-1">
-        {groups.length === 0 ? (
-          <div style={{ padding: `64px ${SPACE.page}px`, textAlign: "center", ...T.body, color: C.ink2 }}>
-            {t("noPackages")}
+      {/* ═══ شبكة الباقات ═══ */}
+      <div className="flex-1" style={{ paddingInline: SPACE.page, marginTop: 14 }}>
+        {shown.length === 0 ? (
+          <div style={{ padding: "64px 0", textAlign: "center", ...T.body, color: C.ink2 }}>{t("noPackages")}</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {shown.map((p, i) => {
+              const hotel = hotels.find(h => h.id === p.hotelId);
+              const sold = tripsOf(p).length === 0;
+              return (
+                <button key={p.id} onClick={() => { if (!sold) onOpen(p); }} disabled={sold}
+                  className="ts-seq flex flex-col text-start"
+                  data-pulse={!sold && i === pulseAt ? "on" : undefined}
+                  style={{
+                    // الحدّ في .ts-seq لا هنا: النمط السطري يتقدّم على الورقة
+                    // فيمنع نبضه (انظر تعليق .ts-seq في ui/kit.tsx)
+                    background: C.white, borderRadius: R.card,
+                    padding: 8, gap: 8, cursor: sold ? "not-allowed" : "pointer",
+                    opacity: sold ? 0.55 : 1, fontFamily: FONT.sans,
+                  }}>
+                  <img src={pkgCover(p)} alt="" loading="lazy"
+                    style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 10, display: "block" }} />
+                  <span className="block w-full text-center" style={{ ...T.h3, fontSize: 16, color: C.ink, paddingInline: 2 }}>
+                    {p.name}
+                  </span>
+                  <span className="flex items-center justify-between w-full" style={{ gap: 6, paddingInline: 2, paddingBottom: 2 }}>
+                    {/* اسم المدينة أولاً ثم الدبوس — كترتيب اللقطة في RTL */}
+                    <span className="inline-flex items-center min-w-0" style={{ gap: 3, ...T.small, fontWeight: 400, color: C.ink2 }}>
+                      <span className="truncate">{hotel?.city ?? p.destination}</span>
+                      <MapPin size={13} style={{ flexShrink: 0 }} />
+                    </span>
+                    {sold
+                      ? <span style={{ ...T.small, color: C.ink2, flexShrink: 0 }}>{t("soldOut")}</span>
+                      : <span className="inline-flex items-baseline" style={{ gap: 3, flexShrink: 0, whiteSpace: "nowrap" }}>
+                          {/* «يبدأ من» أخفت وأصغر من الرقم: هو تحفّظ على السعر
+                              لا جزء منه، ولو ساواه وزناً لتنافس العنصران على العين
+                              والرقم هو المقصود. */}
+                          <span style={{ ...T.small, fontSize: 11, fontWeight: 400, color: C.ink2 }}>{t("from")}</span>
+                          <span style={{ ...T.small, fontWeight: 600, color: C.green }}>
+                            {money(minTotal(p))} {t("currency")}
+                          </span>
+                        </span>}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ) : groups.map((g, gi) => (
-          <section key={g.dest} style={{ paddingTop: 18, paddingBottom: 6 }}>
-            <h2 style={{ ...T.h2, fontSize: 20, color: C.ink, margin: "0 0 12px", paddingInline: SPACE.page }}>
-              {groups.length === 1 ? t("choosePackage") : t("packagesIn").replace("{city}", g.dest)}
-            </h2>
-            <HScroll>
-              {g.items.map((p, i) => card(p, gi * 3 + i))}
-            </HScroll>
-          </section>
-        ))}
+        )}
 
-        {/* ── الباقة المخصّصة — مسار مختلف: طلب يجهّزه الفريق، لا حجز فوري ── */}
-        <section style={{ paddingInline: SPACE.page, paddingTop: 8, paddingBottom: 20 }}>
-          <button onClick={onCustom}
-            className="w-full flex items-center gap-3 text-start"
-            style={{ background: C.band, border: `1px dashed ${C.green}`, borderRadius: R.sheet, padding: 16, cursor: "pointer" }}>
-            <span style={{ fontSize: 26, lineHeight: 1 }}>✨</span>
-            <span className="flex-1 min-w-0">
-              <span className="block" style={{ ...T.h3, color: C.ink }}>{t("customPkg")}</span>
-              <span className="block" style={{ ...T.meta, color: C.ink2 }}>{t("customLead")}</span>
+        {/* ═══ رحلة حسب الطلب — مسار مختلف: طلب يجهّزه الفريق، لا حجز فوري ═══
+
+           بطاقة كبيرة بصورة لا شريطاً صغيراً: الشريط السابق كان أخفت عنصر في الشاشة
+           فيُقرأ ملاحظةً هامشية، مع أنه الخيار الوحيد لمن لا تناسبه الباقات الجاهزة.
+
+           والبطاقة كلها هي الزر — كبطاقة الباقة أعلاه — لا div يحتوي زراً صغيراً،
+           وإلا كانت المنطقة القابلة للضغط أصغر بكثير من العنصر الذي تراه العين.
+           ولذلك «زر» الإجراء في الأسفل span بمظهر زر: زر داخل زر HTML باطل. */}
+        <button onClick={onCustom} className="ts-card flex flex-col"
+          style={{
+            position: "relative", overflow: "hidden", width: "100%",
+            marginTop: 28, marginBottom: 24, padding: 20, minHeight: 268,
+            border: "none", borderRadius: R.sheet, boxShadow: SHADOW.card,
+            justifyContent: "flex-end", textAlign: "start",
+            fontFamily: FONT.sans, cursor: "pointer",
+          }}>
+          <img src={CUSTOM_TRIP_COVER} alt="" aria-hidden loading="lazy"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+
+          {/* تعتيم متدرّج بلون C.greenDeep (#154C48): يثقل عند الأسفل حيث النصّ
+              ويخفّ عند الأعلى فتبقى الصورة مرئية بدل أن تصير خلفية لونية. */}
+          <span aria-hidden style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(to top, rgba(21,76,72,.95) 0%, rgba(21,76,72,.80) 45%, rgba(21,76,72,.38) 100%)",
+          }} />
+
+          <span className="flex flex-col" style={{ position: "relative", gap: 12 }}>
+            <span className="inline-flex items-center self-start" style={{
+              gap: 6, height: 28, paddingInline: 10, borderRadius: R.pill,
+              background: "rgba(255,255,255,.20)", color: C.white, ...T.small,
+            }}>
+              <Sparkles size={14} style={{ flexShrink: 0 }} />
+              {t("customEyebrow")}
             </span>
-            <span style={{ ...T.small, color: C.green, fontWeight: 700, flexShrink: 0 }}>{t("customCta")}</span>
-          </button>
-        </section>
+
+            <span className="block" style={{ ...T.h1, color: C.white }}>{t("customPkg")}</span>
+            <span className="block" style={{ ...T.body, fontSize: 15, color: "rgba(255,255,255,.90)" }}>{t("customLead")}</span>
+
+            {/* الخدمات الثلاث صريحة: «تنسيق» وحدها لا تقول إن الفنادق والطيران داخلة فيها. */}
+            <span className="flex flex-wrap" style={{ gap: 8 }}>
+              {[
+                { Icon: HotelIcon, label: t("customPerkHotels") },
+                { Icon: Plane, label: t("customPerkFlights") },
+                { Icon: ClipboardList, label: t("customPerkPlan") },
+              ].map(({ Icon, label }) => (
+                <span key={label} className="inline-flex items-center" style={{
+                  gap: 6, height: 30, paddingInline: 10, borderRadius: R.pill,
+                  background: "rgba(255,255,255,.16)", color: C.white, ...T.small,
+                }}>
+                  <Icon size={14} style={{ flexShrink: 0 }} />
+                  {label}
+                </span>
+              ))}
+            </span>
+
+            <span className="flex items-center justify-center" style={{
+              gap: 8, marginTop: 4, height: 50, width: "100%", borderRadius: R.pill,
+              background: C.white, color: C.greenDeep, fontSize: 16, fontWeight: 600,
+            }}>
+              {t("customCta")}
+              <ArrowLeft size={18} style={{ flexShrink: 0, ...flipRTL(dir) }} />
+            </span>
+          </span>
+        </button>
       </div>
     </div>
   );

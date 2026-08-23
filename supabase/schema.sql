@@ -1,7 +1,31 @@
+-- ⛔⛔⛔ لا تُشغّل هذا الملف على قاعدة الإنتاج. ⛔⛔⛔
+--
 -- ════════════════════════════════════════════════════════════
--- تساهيل العمرة — مخطط قاعدة بيانات Supabase (تطبيع كامل)
--- الصقه في: Supabase → SQL Editor → Run. آمن لإعادة التشغيل.
--- القراءة عبر PostgREST embedding · الكتابة عبر دوال upsert_* الذرّية.
+-- تساهيل العمرة — مخطط قاعدة البيانات: **وثيقة تاريخية**، لا سكربت تشغيل.
+--
+-- كان يُقصد به «الصقه في SQL Editor → Run»، ولم يعد يصلح لذلك:
+--
+-- ١) يبدأ بـ`drop table ... cascade` — تشغيله يمحو قاعدة الإنتاج كاملة.
+--
+-- ٢) وصفه لم يعد يطابق القاعدة الحيّة (يقف عند حالة 20260804 تقريباً).
+--    ينقصه ٤ جداول تعتمد عليها الواجهة — custom_requests و
+--    customer_profiles و customer_travellers — وعمودان في bookings هما
+--    customer_id و pay_token، ونحو عشر دوال منها customer_bootstrap و
+--    booking_for_pay و my_travellers و auth_phone. قاعدة مبنية منه وحده
+--    تكسر اللوحة فوراً: repository.ts يطلب customer_profiles و
+--    custom_requests في نفس Promise.all.
+--
+-- ٣) الأخطر: يعيد فتح ثغرات أغلقتها ترحيلات 20260805/20260806. أبرزها
+--    confirm_payment(text) أدناه — ممنوحة لـanon بلا أي فحص ملكية، أي أن
+--    أي مجهول يعلّم أي حجز مدفوعاً. وكذلك create_public_booking بلا جلسة
+--    و my_public_bookings(text) و lookup_public_booking (تعداد بالجوال).
+--
+-- ٤) لا يُعاد تشغيله أصلاً: `create policy` المجرّدة في آخره تفشل على
+--    قاعدة قائمة (السياسة موجودة) فتُجهض الكتلة.
+--
+-- المصدر الحقيقي لحالة القاعدة: supabase/migrations/ بالترتيب الزمني،
+-- وجدول public.schema_migrations يسجّل ما طُبِّق فعلاً (20260814).
+-- لإنشاء قاعدة جديدة: pg_dump --schema-only من القاعدة الحيّة.
 -- ════════════════════════════════════════════════════════════
 
 -- تنظيف (لإعادة الإنشاء النظيف)
@@ -9,7 +33,7 @@ drop table if exists
   hotel_room_photos, hotel_room_types, hotel_features, hotel_reviews, hotel_media,
   transport_features, transport_reviews, transport_media,
   package_features, package_program_stages, package_room_prices, package_reviews, package_policies, package_gallery,
-  trip_drivers, booking_pilgrims, booking_seats, payment_pilgrims, ticket_pilgrims, beneficiary_bookings,
+  trip_drivers, booking_pilgrims, booking_seats, booking_rooms, payment_pilgrims, ticket_pilgrims, beneficiary_bookings,
   hotels, transports, packages, branches, trips, bookings, payments, tickets, beneficiaries, users, support
   cascade;
 
@@ -106,7 +130,9 @@ create table package_room_prices (
 create table package_reviews (
   id bigint generated always as identity primary key,
   package_id text references packages(id) on delete cascade,
-  item_id text, name text, text text, consent boolean, image text, sort int
+  -- rating: درجة من 10، اختيارية. التقييم العام في صفحة الباقة متوسطها.
+  item_id text, name text, text text, consent boolean, image text, rating numeric, sort int,
+  constraint package_reviews_rating_range check (rating is null or (rating >= 1 and rating <= 10))
 );
 create table package_policies (
   id bigint generated always as identity primary key,
@@ -168,7 +194,9 @@ create table bookings (
   client_name text, client_phone text, room_type text, persons int,
   total numeric, status text, payment_status text,
   pay_method text, txn_no text, pay_date text,
-  created_at text, staff text,
+  created_at text,               -- تاريخ بلا ساعة (عرض وفرز)
+  submitted_at timestamptz,      -- لحظة الإرسال — منها يبدأ عدّاد وعد الردّ
+  staff text,
   created_by text,                 -- id المستخدم المنشئ (حجز داخلي)
   branch_id text,                  -- فرع الطلب
   source text,                     -- public | internal
@@ -184,8 +212,17 @@ create table booking_seats (
   booking_id text references bookings(id) on delete cascade,
   seat_no int, sort int
 );
+/* توزيع السكن — غرفة لكل صفّ. bookings.room_type يبقى ملخّصه المقروء،
+   وهذه هي المصدر: «كم غرفة ثلاثية نحتاج؟» سؤال group by لا تحليل نصّ.
+   per_night مثبَّت وقت الحجز فلا يفسده تعديل أسعار الباقة لاحقاً. */
+create table booking_rooms (
+  id bigint generated always as identity primary key,
+  booking_id text references bookings(id) on delete cascade,
+  tier_id text, type text, persons int, per_night numeric, sort int
+);
 create index on booking_pilgrims(booking_id);
 create index on booking_seats(booking_id);
+create index on booking_rooms(booking_id);
 create index on bookings(trip_id);
 
 -- ═══════════════ الفواتير ═══════════════
@@ -254,6 +291,36 @@ create or replace function public.is_admin() returns boolean
   select exists (select 1 from profiles where id = auth.uid() and role in ('مدير عام','مدير النظام'));
 $$;
 
+/* هل هذا الحساب من فريق العمل أصلاً؟ — المستفيد الذي يدخل بجواله
+   لا صفَّ له في profiles، فيفصله هذا عن الموظفين في كل السياسات. */
+create or replace function public.is_staff() returns boolean
+  language sql security definer stable set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid());
+$$;
+
+/* دور الطلب من الـJWT — null في سياق service_role/psql/SQL Editor. */
+create or replace function public.jwt_role() returns text
+  language sql stable as $$
+  select nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role';
+$$;
+
+/* قاعدة الكتابة الموحّدة. لا تستخدم `auth.uid() is not null` كشرط:
+   للمجهول auth.uid() = null فيمرّ الشرط — وهي الثغرة التي كانت تسمح
+   لـ anon باستدعاء upsert_* وإعادة كتابة الكتالوج.
+     anon → ممنوع · authenticated → لا بد من صف في profiles
+     service_role / psql / seed.sql → مسموح */
+create or replace function public.can_write_staff() returns boolean
+  language sql stable set search_path = public as $$
+  select case coalesce(public.jwt_role(), 'service')
+           when 'anon' then false when 'authenticated' then public.is_staff() else true end;
+$$;
+
+create or replace function public.can_write_admin() returns boolean
+  language sql stable set search_path = public as $$
+  select case coalesce(public.jwt_role(), 'service')
+           when 'anon' then false when 'authenticated' then public.is_admin() else true end;
+$$;
+
 -- ════════════════════════════════════════════════════════════
 -- دوال الكتابة الذرّية upsert_<entity>(doc jsonb)
 -- ════════════════════════════════════════════════════════════
@@ -261,7 +328,7 @@ create or replace function public.upsert_hotel(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id'; rt jsonb; ord int; v_rt bigint;
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into hotels(id,name,city,stars,distance_m,district,phone,map_url,status,notes,tasaheel_note)
   values(v,doc->>'name',doc->>'city',(doc->>'stars')::smallint,(doc->>'distanceM')::int,doc->>'district',
          doc->>'phone',doc->>'mapUrl',doc->>'status',doc->>'notes',doc->>'tasaheelNote')
@@ -296,7 +363,7 @@ create or replace function public.upsert_transport(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into transports(id,name,mode,vehicle_type,seats,seat_cost,model,year,plate,driver,supervisor,status,notes)
   values(v,doc->>'name',doc->>'mode',doc->>'vehicleType',(doc->>'seats')::int,(doc->>'seatCost')::numeric,
          doc->>'model',doc->>'year',doc->>'plate',doc->>'driver',doc->>'supervisor',doc->>'status',doc->>'notes')
@@ -320,7 +387,7 @@ create or replace function public.upsert_package(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id'; s jsonb := doc->'settings';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into packages(id,name,order_no,product_type,destination,audience,days,nights,status,market_price,
     seat_cost_override,cover_image,recurring,recur_day,start_date,transport_id,hotel_id,notes,
     set_allow_online_booking,set_manual_confirm,set_waitlist_enabled,set_require_payment_first,
@@ -353,8 +420,9 @@ begin
     select v,e->>'id',e->>'type',(e->>'persons')::int,(e->>'perNight')::numeric,(e->>'seatCost')::numeric,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'roomPrices','[]')) with ordinality t(e,o);
   delete from package_reviews where package_id=v;
-  insert into package_reviews(package_id,item_id,name,text,consent,image,sort)
-    select v,e->>'id',e->>'name',e->>'text',(e->>'consent')::boolean,e->>'image',(o-1)::int
+  insert into package_reviews(package_id,item_id,name,text,consent,image,rating,sort)
+    select v,e->>'id',e->>'name',e->>'text',(e->>'consent')::boolean,e->>'image',
+           nullif(e->>'rating','')::numeric,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'reviews','[]')) with ordinality t(e,o);
   delete from package_policies where package_id=v;
   insert into package_policies(package_id,value,sort)
@@ -368,7 +436,8 @@ create or replace function public.upsert_trip(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id'; s jsonb := doc->'settings';
 begin
-  -- الطلبات/الرحلات: مسموحة لأي مستخدم مصادَق (الصلاحية عبر grant) وسياق الخادم
+  -- الطلبات/الرحلات: مسموحة لأي موظف وسياق الخادم — لا للمستفيد ولا للمجهول
+  if not public.can_write_staff() then raise exception 'forbidden'; end if;
   insert into trips(id,package_id,transport_id,hotel_id,departure_date,return_date,departure_time,
     departure_point,departure_map_url,branch_id,bus_plate,bus_code,seats,booked_seats,waiting_seats,status,price,
     set_allow_online_booking,set_manual_confirm,set_waitlist_enabled,set_require_payment_first,
@@ -398,7 +467,8 @@ create or replace function public.upsert_booking(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id';
 begin
-  -- الطلبات/الرحلات: مسموحة لأي مستخدم مصادَق (الصلاحية عبر grant) وسياق الخادم
+  -- الطلبات/الرحلات: مسموحة لأي موظف وسياق الخادم — لا للمستفيد ولا للمجهول
+  if not public.can_write_staff() then raise exception 'forbidden'; end if;
   insert into bookings(id,trip_id,package_id,client_name,client_phone,room_type,persons,total,status,payment_status,
     pay_method,txn_no,pay_date,created_at,staff,created_by,branch_id,source,sent_date)
   values(v,nullif(doc->>'tripId',''),nullif(doc->>'packageId',''),doc->>'clientName',doc->>'clientPhone',doc->>'roomType',(doc->>'persons')::int,
@@ -422,7 +492,7 @@ create or replace function public.upsert_payment(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into payments(id,booking_id,client_name,client_phone,package_name,trip_date,total,pay_method,pay_status,
     txn_no,pay_date,created_at,room_type)
   values(v,nullif(doc->>'bookingId',''),doc->>'clientName',doc->>'clientPhone',doc->>'packageName',doc->>'tripDate',
@@ -440,7 +510,7 @@ create or replace function public.upsert_ticket(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'ticketNo';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into tickets(ticket_no,booking_id,client_name,client_phone,package_name,room_type,trip_date,trip_time,
     departure_point,persons,total)
   values(v,nullif(doc->>'bookingId',''),doc->>'clientName',doc->>'clientPhone',doc->>'packageName',doc->>'roomType',
@@ -459,7 +529,7 @@ create or replace function public.upsert_beneficiary(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into beneficiaries(id,name,phone,id_number,nationality,gender,birth_date,rating,notes,suspended)
   values(v,doc->>'name',doc->>'phone',doc->>'idNumber',doc->>'nationality',doc->>'gender',doc->>'birthDate',
     (doc->>'rating')::numeric,doc->>'notes',(doc->>'suspended')::boolean)
@@ -474,7 +544,7 @@ end $$;
 create or replace function public.upsert_user(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into users(id,name,email,role,status,last_login)
   values(doc->>'id',doc->>'name',doc->>'email',doc->>'role',doc->>'status',doc->>'lastLogin')
   on conflict(id) do update set name=excluded.name,email=excluded.email,role=excluded.role,
@@ -484,7 +554,8 @@ end $$;
 create or replace function public.upsert_support(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 begin
-  -- الدعم: مسموح لأي مستخدم مصادَق وسياق الخادم
+  -- الدعم: مسموح لأي موظف وسياق الخادم
+  if not public.can_write_staff() then raise exception 'forbidden'; end if;
   insert into support(id,category,title,descr,priority,status,date)
   values(doc->>'id',doc->>'category',doc->>'title',doc->>'desc',doc->>'priority',doc->>'status',doc->>'date')
   on conflict(id) do update set category=excluded.category,title=excluded.title,descr=excluded.descr,
@@ -495,7 +566,7 @@ create or replace function public.upsert_branch(doc jsonb) returns void
 language plpgsql security definer set search_path=public as $$
 declare v text := doc->>'id';
 begin
-  if auth.uid() is not null and not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.can_write_admin() then raise exception 'forbidden'; end if;
   insert into branches(id,name,city,address,gmap_url,phone,manager_id,is_active,created_at,updated_at)
   values(v,doc->>'name',doc->>'city',doc->>'address',doc->>'gmapUrl',doc->>'phone',
     nullif(doc->>'managerId',''),coalesce((doc->>'isActive')::boolean,true),
@@ -505,11 +576,17 @@ begin
     is_active=excluded.is_active,updated_at=excluded.updated_at;
 end $$;
 
--- منح تنفيذ الدوال للمصادَقين
+/* منح تنفيذ الدوال للمصادَقين — مع سحبها من المجهول صراحةً.
+   PostgreSQL يمنح EXECUTE للجميع افتراضياً على دوال public، فبلا الـrevoke
+   يستطيع anon استدعاء upsert_* مباشرة (الحرس داخل الجسم هو الحماية
+   الأولى، وهذا خط ثانٍ يمنع الوصول أصلاً). */
 do $$ declare fn text; begin
   foreach fn in array array['upsert_hotel','upsert_transport','upsert_package','upsert_trip','upsert_booking',
     'upsert_payment','upsert_ticket','upsert_beneficiary','upsert_user','upsert_support','upsert_branch']
-  loop execute format('grant execute on function public.%I(jsonb) to authenticated;', fn); end loop;
+  loop
+    execute format('revoke execute on function public.%I(jsonb) from public, anon;', fn);
+    execute format('grant  execute on function public.%I(jsonb) to authenticated;', fn);
+  end loop;
 end $$;
 
 -- ════════════════════════════════════════════════════════════
@@ -587,26 +664,37 @@ $$;
 grant execute on function public.confirm_payment(text) to anon, authenticated;
 
 -- ════════════════════════════════════════════════════════════
--- RLS: قراءة للمصادَقين على الكل · الكتابة عبر الدوال · الحذف حسب الدور
+-- RLS · الكتابة عبر الدوال · الحذف حسب الدور
+--
+-- مهم: «مصادَق» لم يعد يعني «موظف» — المستفيد يدخل بجواله فيحمل
+-- دور authenticated أيضاً. لذلك تُقسَّم الجداول قسمين: كتالوج عام
+-- يقرأه الجميع، وبيانات حسّاسة (حجوزات، هويات معتمرين، مدفوعات)
+-- يقرأها من له صف في profiles فقط. المستفيد يصل لبياناته عبر دوال
+-- security definer لا عبر قراءة الجدول.
 -- ════════════════════════════════════════════════════════════
 do $$
-declare t text; child boolean; staff_writable text[] := array['trips','trip_drivers','bookings','booking_pilgrims','booking_seats'];
-begin
-  foreach t in array array[
+declare t text;
+  public_tables text[] := array[
     'hotels','hotel_features','hotel_reviews','hotel_media','hotel_room_types','hotel_room_photos',
     'transports','transport_features','transport_reviews','transport_media',
     'packages','package_features','package_program_stages','package_room_prices','package_reviews','package_policies','package_gallery',
-    'branches','trips','trip_drivers','bookings','booking_pilgrims','booking_seats',
-    'payments','payment_pilgrims','tickets','ticket_pilgrims','beneficiaries','beneficiary_bookings','users','support'
-  ]
-  loop
+    'branches','trips','trip_drivers'];
+  staff_tables text[] := array[
+    'bookings','booking_pilgrims','booking_seats','booking_rooms',
+    'payments','payment_pilgrims','tickets','ticket_pilgrims',
+    'beneficiaries','beneficiary_bookings','users','support'];
+begin
+  foreach t in array public_tables loop
     execute format('alter table %I enable row level security;', t);
-    execute format('create policy "read all" on %I for select to authenticated using (true);', t);
-    if t = any(staff_writable) then
-      execute format('create policy "delete staff" on %I for delete to authenticated using (true);', t);
-    else
-      execute format('create policy "delete admin" on %I for delete to authenticated using (public.is_admin());', t);
-    end if;
+    execute format('create policy "read auth"    on %I for select to authenticated using (true);', t);
+    execute format('create policy "delete staff" on %I for delete to authenticated using (public.is_staff());', t);
+  end loop;
+
+  foreach t in array staff_tables loop
+    execute format('alter table %I enable row level security;', t);
+    execute format('create policy "read staff"   on %I for select to authenticated using (public.is_staff());', t);
+    execute format('create policy "write staff"  on %I for all    to authenticated using (public.is_staff()) with check (public.is_staff());', t);
+    execute format('revoke all on %I from anon;', t);
   end loop;
 end $$;
 
@@ -626,9 +714,9 @@ begin
   end loop;
 end $$;
 
--- profiles
+-- profiles — الموظف يرى الفريق؛ ومن لا صفَّ له (مستفيد) لا يرى شيئاً
 alter table profiles enable row level security;
-create policy "profiles read"        on profiles for select to authenticated using (true);
+create policy "profiles read"        on profiles for select to authenticated using (public.is_staff() or id = auth.uid());
 create policy "profiles admin all"   on profiles for all    to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "profiles self update" on profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 create policy "profiles self insert" on profiles for insert to authenticated with check (id = auth.uid());

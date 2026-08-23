@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Plus, Copy as CopyIcon } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, Payment, Pilgrim, BookingStatus, Booking } from "@/types";
-import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph } from "@/lib/utils";
+import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Spinner } from "@/components/Spinner";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
@@ -68,7 +69,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primary}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
-          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"'Noto Kufi Arabic',serif"}}>إضافة طلب جديد</h3>
+          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>إضافة طلب جديد</h3>
           <button onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
         </div>
 
@@ -120,7 +121,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
         <div className="px-6 pb-6 flex gap-3">
           <button onClick={submit} disabled={busy} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-extrabold text-sm"
             style={{background:busy?"#d6cfc6":B.gold,color:busy?"#a09688":B.black,border:"none",cursor:busy?"not-allowed":"pointer"}}>
-            {busy&&<motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}} style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:B.black,borderRadius:"50%",display:"inline-block"}}/>}
+            {busy&&<Spinner size={14} color={B.black}/>}
             {busy?"جارٍ الحفظ…":"تأكيد الحجز"}
           </button>
           <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
@@ -189,7 +190,7 @@ function PilgrimCard({pilgrim,index}:{pilgrim:Pilgrim;index:number}) {
         ].map(f=>(
           <div key={f.l} className={f.col?"col-span-2 sm:col-span-3":""}>
             <div className="text-xs mb-0.5 font-semibold" style={{color:B.muted}}>{f.l}</div>
-            <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.l==="رقم الهوية"||f.l==="الجوال"?"'IBM Plex Mono',monospace":"inherit"}}>{f.v}</div>
+            <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.l==="رقم الهوية"||f.l==="الجوال"?"var(--font-app)":"inherit"}}>{f.v}</div>
           </div>
         ))}
       </div>
@@ -220,7 +221,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"'Noto Kufi Arabic',serif"}}>{(booking.status==="new"||booking.status==="reviewing")?"اختيار المقاعد قبل القبول":"تعديل المقاعد"}</h2>
+              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>{(booking.status==="new"||booking.status==="reviewing")?"اختيار المقاعد قبل القبول":"تعديل المقاعد"}</h2>
               <div className="text-xs mt-1" style={{color:"#CDE7E4"}}>{booking.clientName} · رحلة {trip?.departureDate??"—"} — اختر {need} مقعد</div>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
@@ -281,7 +282,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
 /* ─── Payment link card (admin) ─── */
 function PaymentLinkCard({booking,trip,pkg}:{booking:Booking;trip:Trip|undefined;pkg:Pkg|undefined}) {
   const [copied,setCopied]=useState(false);
-  const link=payLinkFor(booking.id);
+  const link=payLinkFor(booking.id,booking.payToken);
   const hours=trip?.settings?.paymentDeadlineHours??pkg?.settings?.paymentDeadlineHours??24;
   const amount=booking.total.toLocaleString("en-US")+" ر.س";
   const sent=booking.status==="awaiting_payment";
@@ -301,7 +302,7 @@ function PaymentLinkCard({booking,trip,pkg}:{booking:Booking;trip:Trip|undefined
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{background:B.bg,border:`1px solid ${B.border}`}}>
           <Link2 size={13} style={{color:B.muted,flexShrink:0}}/>
-          <span className="text-sm font-bold truncate" style={{color:B.black,direction:"ltr",fontFamily:"'IBM Plex Mono',monospace"}}>{link}</span>
+          <span className="text-sm font-bold truncate" style={{color:B.black,direction:"ltr",fontFamily:"var(--font-app)"}}>{link}</span>
         </div>
         <button onClick={copy} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer flex-shrink-0" style={{background:B.gold,color:B.black,border:"none"}}>
           {copied?<Check size={14}/>:<CopyIcon size={14}/>}{copied?"تم النسخ":"نسخ الرابط"}
@@ -321,7 +322,7 @@ function PaymentLinkCard({booking,trip,pkg}:{booking:Booking;trip:Trip|undefined
             <div className="flex flex-col gap-1 text-xs">
               <div className="flex gap-2"><span style={{color:B.muted,minWidth:60}}>المؤسسة</span><span className="font-bold" style={{color:B.black}}>{PAY_ACCOUNT.org}</span></div>
               <div className="flex gap-2"><span style={{color:B.muted,minWidth:60}}>البنك</span><span className="font-bold" style={{color:B.black}}>{PAY_ACCOUNT.bank}</span></div>
-              <div className="flex gap-2 items-center"><span style={{color:B.muted,minWidth:60}}>الآيبان</span><span className="font-bold" style={{color:B.black,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:.5,direction:"ltr"}}>{PAY_ACCOUNT.iban}</span>
+              <div className="flex gap-2 items-center"><span style={{color:B.muted,minWidth:60}}>الآيبان</span><span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)",letterSpacing:.5,direction:"ltr"}}>{PAY_ACCOUNT.iban}</span>
                 <button onClick={()=>copyText(PAY_ACCOUNT.iban.replace(/\s/g,""))} className="cursor-pointer" style={{background:"none",border:"none",color:B.gold}} title="نسخ الآيبان"><CopyIcon size={12}/></button></div>
             </div>
           </div>
@@ -402,7 +403,7 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
-          <div className="font-extrabold mb-0.5" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,color:B.black}}>{booking.id}</div>
+          <div className="font-extrabold mb-0.5" style={{fontFamily:"var(--font-app)",fontSize:22,color:B.black}}>{booking.id}</div>
           <div className="text-xs" style={{color:B.muted}}>أُنشئ {booking.createdAt} · موظف: {booking.staff}</div>
         </div>
         <StatusBadge status={booking.status}/>
@@ -449,7 +450,12 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
               const disabled=a.disabled||gated;
               return (
               <button key={a.next}
-                onClick={()=>{ if(disabled) return; if(a.next==="accepted"){setSeatOpen(true);} else {onStatusChange(booking.id,a.next);} }}
+                /* الرفض لا رجعة فيه ويقع بنقرة واحدة بجوار «قبول» — تأكيد
+                   واحد يفصل الخطأ عن القرار. */
+                onClick={()=>{ if(disabled) return;
+                  if(a.next==="accepted"){setSeatOpen(true);return;}
+                  if(a.next==="rejected"&&!window.confirm(`رفض الطلب ${booking.id} للعميل ${booking.clientName}؟ لا يمكن التراجع.`)) return;
+                  onStatusChange(booking.id,a.next); }}
                 className="px-5 py-2.5 rounded-xl font-bold text-sm"
                 style={{background:disabled?"#EEECEA":a.bg,color:disabled?B.muted:a.fg,border:`1px solid ${disabled?B.border:a.br}`,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.7:1}}>
                 {a.label}
@@ -479,10 +485,30 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
               </div>
             ))}
           </div>
+
+          {/* توزيع الغرف مفصّلاً — ما يحتاجه التسكين فعلاً: «غرفة ثلاثية
+              وغرفة ثنائية» لا جملة واحدة. يظهر للحجوزات العامة الجديدة
+              وحدها؛ القديمة والداخلية بلا صفوف توزيع. */}
+          {!!booking.rooms?.length&&(
+            <div className="mt-4">
+              <div className="text-xs font-semibold mb-1.5" style={{color:B.muted}}>توزيع الغرف</div>
+              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
+                {booking.rooms.map((r,i)=>(
+                  <div key={i} className="flex items-center justify-between px-3 py-2 text-xs"
+                    style={{borderTop:i?`1px solid ${B.border}`:"none",background:"#fff"}}>
+                    <span style={{color:B.text2}}>غرفة {i+1} · {r.type} · {r.persons} أفراد</span>
+                    <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>
+                      {r.perNight} ر.س / للفرد / الليلة
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="rounded-2xl p-5 flex flex-col justify-center" style={{background:B.primary}}>
           <div className="text-xs font-semibold mb-1" style={{color:"#9DBAB6"}}>المبلغ الإجمالي</div>
-          <div className="font-extrabold" style={{color:B.gold,fontSize:32,fontFamily:"'Noto Kufi Arabic',serif",lineHeight:1.2}}>{booking.total.toLocaleString("en-US")}</div>
+          <div className="font-extrabold" style={{color:B.gold,fontSize:32,fontFamily:"var(--font-app)",lineHeight:1.2}}>{booking.total.toLocaleString("en-US")}</div>
           <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>ريال سعودي</div>
           {booking.paymentStatus!=="none"&&(
             <div className="mt-3 pt-3" style={{borderTop:"1px solid rgba(255,255,255,0.14)"}}>
@@ -575,7 +601,7 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
                       ].map(f=>(
                         <div key={f.l}>
                           <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                          <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"'IBM Plex Mono',monospace":"inherit"}}>{f.v}</div>
+                          <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit"}}>{f.v}</div>
                         </div>
                       ))}
                     </div>
@@ -633,14 +659,20 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
 
 export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:Trip[];onMenuOpen?:()=>void}) {
   const bookings=useStore(s=>s.bookings); const setBookings=useStore(s=>s.setBookings);
-  const setTrips=useStore(s=>s.setTrips);
+  const refreshTrips=useStore(s=>s.refreshTrips);
   const currentUser=useStore(s=>s.currentUser);
   const [search,setSearch]=useState("");
   const [statusFilter,setStatusFilter]=useState<"all"|BookingStatus>("all");
   const [detailId,setDetailId]=useState<string|null>(null);
   const [showNew,setShowNew]=useState(false);
 
-  function changeStatus(id:string,s:BookingStatus){setBookings(p=>p.map(b=>b.id===id?{...b,status:s}:b));}
+  /* الإلغاء والرفض يحرّران المقاعد في القاعدة (حارس trg_booking_seats_sync)،
+     فتُعاد قراءة الرحلات بعده — لا تُحسب محلياً. كان تغيير الحالة لا يُنقص
+     bookedSeats إطلاقاً، فتظهر الرحلة ممتلئة وهي فارغة. */
+  function changeStatus(id:string,s:BookingStatus){
+    setBookings(p=>p.map(b=>b.id===id?{...b,status:s}:b));
+    void refreshTrips();
+  }
 
   // إنشاء حجز داخلي — إعادة التحقق من المقاعد وخصمها وإسناد الموظف/الفرع
   function createInternalOrder(d:{clientName:string;clientPhone:string;tripId:string;persons:number;payMethod:string}):string|null {
@@ -648,7 +680,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     if(!trip) return "الرحلة غير متاحة";
     const avail=Math.max(0,trip.seats-trip.bookedSeats);
     if(d.persons>avail) return `عذراً، المقاعد المتبقية ${avail} فقط.`;
-    const id=`TSH-${String(Date.now()).slice(-4)}`;
+    const id=newId("TSH");
     const booking:Booking={
       id, tripId:trip.id, packageId:trip.packageId,
       clientName:d.clientName, clientPhone:d.clientPhone, roomType:"", persons:d.persons,
@@ -657,7 +689,9 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
       staff:currentUser?.name??"—", createdBy:currentUser?.id, branchId:currentUser?.branch, source:"internal", sentDate:"", pilgrims:[],
     };
     setBookings(p=>[booking,...p]);
-    setTrips(p=>p.map(t=>t.id===trip.id?{...t,bookedSeats:t.bookedSeats+d.persons}:t));
+    /* لا زيادة محلية لـbookedSeats: صارت مشتقّة في القاعدة و upsert_trip
+       يتجاهل ما ترسله الواجهة. نقرأ القيمة الصحيحة بدل تخمينها. */
+    void refreshTrips();
     return null;
   }
   function updatePilgrims(id:string,pilgrims:Pilgrim[]){setBookings(p=>p.map(b=>b.id===id?{...b,pilgrims}:b));}
@@ -736,14 +770,14 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                       return (
                         <tr key={b.id} onClick={()=>setDetailId(b.id)} title="فتح مراجعة الطلب"
                           className="hover:brightness-95" style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA",cursor:"pointer",transition:"filter 0.12s"}}>
-                          <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",color:B.black,fontSize:13}}>{b.id}</td>
+                          <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.black,fontSize:13}}>{b.id}</td>
                           <td style={{padding:"14px 16px"}}>
                             <div className="font-bold text-sm" style={{color:B.black}}>{b.clientName}</div>
                             <div className="text-xs font-mono" style={{color:B.muted,direction:"ltr"}}>{b.clientPhone}</div>
                           </td>
                           <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>{pkg?.name??"—"}</td>
                           <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{b.persons}</td>
-                          <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{b.total.toLocaleString("en-US")} ر.س</td>
+                          <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{b.total.toLocaleString("en-US")} ر.س</td>
                           <td style={{padding:"14px 16px"}}><StatusBadge status={b.status}/></td>
                           <td style={{padding:"14px 16px"}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>setDetailId(b.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -769,7 +803,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                     className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`,cursor:"pointer"}}>
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div>
-                        <div className="font-extrabold text-sm" style={{color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{b.id}</div>
+                        <div className="font-extrabold text-sm" style={{color:B.black,fontFamily:"var(--font-app)"}}>{b.id}</div>
                         <div className="text-xs mt-0.5" style={{color:B.muted}}>{b.createdAt}</div>
                       </div>
                       <StatusBadge status={b.status}/>
@@ -777,7 +811,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                     <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{b.clientName}</div>
                     <div className="text-xs mb-3" style={{color:B.muted}}>{pkg?.name??"—"} · {b.persons} معتمر · {b.roomType}</div>
                     <div className="flex items-center justify-between">
-                      <div className="font-extrabold" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace"}}>{b.total.toLocaleString("en-US")} ر.س</div>
+                      <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{b.total.toLocaleString("en-US")} ر.س</div>
                       <button onClick={e=>{e.stopPropagation();setDetailId(b.id);}} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
                         style={{background:B.primary,color:B.cream,border:"none"}}>مراجعة</button>
                     </div>

@@ -53,7 +53,8 @@ function supaEntity<T>(table: string, idKey: string, select: string, upsertFn: s
 /* ─── مساعدات التحويل (snake → camel) ─── */
 const sortBy = (arr: any[] = []) => [...(arr || [])].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
 const mMedia = (r: any) => ({ id: r.item_id, kind: r.kind, url: r.url, primary: !!r.is_primary, category: r.category });
-const mReview = (r: any) => ({ id: r.item_id, name: r.name, text: r.text, consent: !!r.consent, image: r.image ?? undefined });
+/* rating موجود في package_reviews وحده؛ في جداول الفنادق والنقل يعود undefined بلا ضرر. */
+const mReview = (r: any) => ({ id: r.item_id, name: r.name, text: r.text, consent: !!r.consent, image: r.image ?? undefined, rating: r.rating ?? undefined });
 const mIconFeat = (r: any) => ({ id: r.item_id, icon: r.icon, text: r.text });
 const mPilgrim = (r: any) => ({ name: r.name, docType: r.doc_type ?? undefined, idNumber: r.id_number, nationality: r.nationality, gender: r.gender, ageGroup: r.age_group ?? undefined, birthDate: r.birth_date, phone: r.phone, seat: r.seat_no ?? undefined });
 const tripSettings = (r: any) => ({
@@ -109,8 +110,21 @@ const bookingFrom = (r: any): Booking => ({
   id: r.id, tripId: r.trip_id ?? "", packageId: r.package_id ?? undefined, clientName: r.client_name, clientPhone: r.client_phone, roomType: r.room_type, persons: r.persons,
   total: r.total, status: r.status, paymentStatus: r.payment_status, payMethod: r.pay_method ?? undefined, txnNo: r.txn_no ?? undefined, payDate: r.pay_date ?? undefined,
   seats: sortBy(r.booking_seats).map((s: any) => s.seat_no),
-  createdAt: r.created_at, staff: r.staff, sentDate: r.sent_date,
+  /* undefined لا [] عند الغياب: upsert_booking لا يمسّ الغرف إلا إذا حمل
+     المستند مفتاح rooms، ومصفوفة فارغة كانت ستُقرأ «امسح التوزيع». */
+  rooms: r.booking_rooms?.length
+    ? sortBy(r.booking_rooms).map((x: any) => ({ tierId: x.tier_id ?? undefined, type: x.type, persons: x.persons, perNight: x.per_night }))
+    : undefined,
+  createdAt: r.created_at, submittedAt: r.submitted_at ?? undefined, staff: r.staff, sentDate: r.sent_date,
   createdBy: r.created_by ?? undefined, branchId: r.branch_id ?? undefined, source: r.source ?? undefined,
+  customerId: r.customer_id ?? undefined, payToken: r.pay_token ?? undefined,
+  /* ملف الحساب مضمَّن عبر المفتاح الأجنبي customer_id — للقراءة فقط.
+     upsert_booking لا يكتب customer_id، فتعديل الموظف لا يفصل الربط. */
+  customer: r.customer ? {
+    firstName: r.customer.first_name ?? "", lastName: r.customer.last_name ?? "",
+    birthDate: r.customer.birth_date ?? undefined, email: r.customer.email ?? undefined,
+    phone: r.customer.phone ?? undefined,
+  } : undefined,
   pilgrims: sortBy(r.booking_pilgrims).map(mPilgrim),
 });
 const branchFrom = (r: any): Branch => ({
@@ -156,7 +170,8 @@ export const repo = {
   trips: make<Trip>(SEED_TRIPS, "id", () => supaEntity("trips", "id",
     "*, trip_drivers(*)", "upsert_trip", tripFrom)),
   bookings: make<Booking>(SEED_BOOKINGS, "id", () => supaEntity("bookings", "id",
-    "*, booking_pilgrims(*), booking_seats(*)", "upsert_booking", bookingFrom)),
+    "*, booking_pilgrims(*), booking_seats(*), booking_rooms(*), customer:customer_profiles(first_name,last_name,birth_date,email,phone)",
+    "upsert_booking", bookingFrom)),
   payments: make<Payment>(SEED_PAYMENTS, "id", () => supaEntity("payments", "id",
     "*, payment_pilgrims(*)", "upsert_payment", paymentFrom)),
   tickets: make<TicketEntry>(SEED_TICKETS, "ticketNo", () => supaEntity("tickets", "ticket_no",

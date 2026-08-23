@@ -1,1 +1,35 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+/* خطّ التطبيق الوحيد — DG Shamael.
+   استُبدل به استيراد Google Fonts الذي كان يجلب ثلاث عائلات
+   (IBM Plex Sans Arabic / Noto Kufi Arabic / IBM Plex Mono)، فسقطت معه
+   ثلاثة طلبات شبكة من المسار الحَرِج. */
+
+@font-face {
+  font-family: 'DG Shamael';
+  src: url('/DGShamael-Regular.ttf') format('truetype');
+  /* 400 لا نطاق 100–900: الملف وزن واحد (Regular). ولو أُعلن نطاقاً لطابق
+     كل وزن مطلوب فامتنع المتصفّح عن التثخين الاصطناعي، وضاع كل تمييز
+     العناوين والأزرار عن النصّ العادي. بإعلان 400 وحده تُطابَق الأوزان
+     الأعلى تقريبياً فيُثخّنها المتصفّح — حلٌّ وسط حتى يتوفّر ملف Bold. */
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* الاحتياطي ليس عائلةً ثانية للتصميم بل شبكة أمان للمحارف التي لا يملكها
+     الملف (٢٧٠ محرفاً فقط): الرموز التعبيرية والنجوم — وهذه لم تُرسم بخطّ
+     الواجهة يوماً — والترقيم الطباعي: الشرطة الطويلة — والقطع … والنقطة •
+     ونحو سبعة أحرف لاتينية مركّبة في أسماء الجنسيات (Burkinabé، Côte
+     d'Ivoire). بلا احتياطي تُرسم مربّعات فارغة مكانها.
+
+     وهو أيضاً سبب إزالة الأردية والتركية من التطبيق: الاحتياطي ينجّي حرفاً
+     منفرداً، أما لغةٌ كل حروفها الخاصة ناقصة فيتقطّع وصلها الكتابي — انظر
+     التعليق في src/features/customer/i18n.ts. */
+  --font-app: 'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* عناصر النماذج لا ترث الخطّ من body افتراضياً — ولهذا كان الكود مبثوثاً
+   بـfontFamily:"inherit". تُضمّ هنا مرّة واحدة. */
+html, body, button, input, select, textarea, optgroup {
+  font-family: var(--font-app);
+}

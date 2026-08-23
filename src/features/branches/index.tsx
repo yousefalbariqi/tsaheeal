@@ -4,10 +4,12 @@ import { Plus, X, Building, MapPin, Phone } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Branch } from "@/types";
 import { StatCard } from "@/components/StatCard";
+import { Spinner } from "@/components/Spinner";
 import { PageHeader } from "@/components/PageHeader";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
+import { newId } from "@/lib/utils";
 
 const EMPTY: Omit<Branch,"id"> = { name:"", city:"", address:"", gmapUrl:"", phone:"", managerId:"", isActive:true };
 const NONE = "__none__";
@@ -51,7 +53,7 @@ function BranchModal({branch,managers,onSave,onClose}:{
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primary}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
-          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"'Noto Kufi Arabic',serif"}}>{branch.id?"تعديل فرع":"إضافة فرع جديد"}</h3>
+          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>{branch.id?"تعديل فرع":"إضافة فرع جديد"}</h3>
           <button onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
@@ -95,7 +97,7 @@ function BranchModal({branch,managers,onSave,onClose}:{
         <div className="px-6 pb-6 flex gap-3">
           <button onClick={handleSave} disabled={busy} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
             style={{background:busy?"#d6cfc6":B.gold,color:busy?"#a09688":B.black,border:"none",cursor:busy?"not-allowed":"pointer"}}>
-            {busy && <motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}} style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:B.black,borderRadius:"50%",display:"inline-block"}}/>}
+            {busy && <Spinner size={14} color={B.black}/>}
             {busy?"جارٍ الحفظ…":"حفظ الفرع"}
           </button>
           <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
@@ -133,7 +135,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     if(b.id){
       setBranches(prev=>prev.map(x=>x.id===b.id?{...x,...b} as Branch:x));
     } else {
-      const id=`BR-${String(Date.now()).slice(-4)}`;
+      const id=newId("BR");
       setBranches(prev=>[...prev,{...EMPTY,...b,id} as Branch]);
     }
     setShowModal(false); setEditTarget(null);
@@ -188,7 +190,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                   <td style={{padding:"14px 16px",color:B.text3}}>{b.city}</td>
                   <td style={{padding:"14px 16px",color:B.text2,fontSize:13,maxWidth:220}}>{b.address}</td>
                   <td style={{padding:"14px 16px"}}>{gmapCell(b.gmapUrl)}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text2,fontSize:13,direction:"ltr",textAlign:"right"}}>{b.phone||"—"}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13,direction:"ltr",textAlign:"right"}}>{b.phone||"—"}</td>
                   <td style={{padding:"14px 16px",color:B.text3}}>{b.managerId?managerName(b.managerId):"—"}</td>
                   <td style={{padding:"14px 16px"}}>
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"

@@ -16,6 +16,10 @@ const LANDMARKS = [
   `${G}/quba.jpg`,
 ];
 
+/** خلفية بطاقة «رحلة حسب الطلب» في الاستكشاف — لقطة جوية عريضة تصلح شريطاً بعرض
+    الشاشة، وهي نفس صورة خلفية شاشة الطلب فيتّصل المسار بصرياً من البطاقة إلى الشاشة. */
+export const CUSTOM_TRIP_COVER = `${G}/haram-drone.jpg`;
+
 const HOTEL_SHOTS = [
   `${G}/hotel-elaf-1.jpg`,
   `${G}/hotel-qunwan.jpg`,

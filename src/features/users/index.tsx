@@ -4,6 +4,7 @@ import { X, Plus } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { UserRole, SystemUser } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Spinner } from "@/components/Spinner";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { DeleteDialog } from "@/components/DeleteDialog";
@@ -47,7 +48,7 @@ function UserModal({user,onSave,onClose}:{user:Partial<SystemUser>;onSave:(u:Par
           <div>
             <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>البريد الإلكتروني</label>
             <input value={form.email} onChange={e=>f("email")(e.target.value)} placeholder="name@tasahheel.com" type="email" disabled={isEdit}
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"'IBM Plex Mono',monospace",background:isEdit?B.bg:"#fff",opacity:isEdit?0.7:1}}/>
+              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"var(--font-app)",background:isEdit?B.bg:"#fff",opacity:isEdit?0.7:1}}/>
           </div>
           {!isEdit && isSupabaseEnabled && (
             <div>
@@ -73,8 +74,10 @@ function UserModal({user,onSave,onClose}:{user:Partial<SystemUser>;onSave:(u:Par
         <div className="px-6 pb-6 flex flex-col gap-3">
           {err && <div className="text-xs font-bold rounded-lg px-3 py-2" style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>{err}</div>}
           <div className="flex gap-3">
-            <button onClick={submit} disabled={busy} className="px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>{busy?"جارٍ الحفظ…":isEdit?"حفظ التعديلات":"إضافة المستخدم"}</button>
+            <button onClick={submit} disabled={busy} className="px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer inline-flex items-center gap-2"
+              style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>
+              {busy&&<Spinner size={14} color={B.black}/>}
+              {busy?"جارٍ الحفظ…":isEdit?"حفظ التعديلات":"إضافة المستخدم"}</button>
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
               style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
           </div>
@@ -167,7 +170,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                         <span className="font-bold" style={{color:B.black}}>{u.name}</span>
                       </div>
                     </td>
-                    <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.muted,fontSize:13}}>{u.email}</td>
+                    <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.muted,fontSize:13}}>{u.email}</td>
                     <td style={{padding:"14px 16px"}}>
                       <span className="px-3 py-1 rounded-full text-xs font-bold" style={{background:rc.bg,color:rc.fg}}>{u.role}</span>
                     </td>

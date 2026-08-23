@@ -35,7 +35,7 @@ export function AppSelect({
         style={{
           borderColor: invalid ? "#E1A3A3" : B.border,
           background: disabled ? B.bg : "#fff",
-          color: value ? B.black : B.muted,
+          color: value ? B.black : B.placeholder,
           fontFamily: "inherit",
           cursor: disabled ? "not-allowed" : "pointer",
         }}
@@ -57,7 +57,7 @@ export function AppSelect({
             boxShadow: "0 16px 40px -12px rgba(21,76,72,.35)",
             minWidth: "var(--radix-select-trigger-width)",
             maxHeight: "min(320px, var(--radix-select-content-available-height))",
-            fontFamily: "'IBM Plex Sans Arabic',system-ui,sans-serif",
+            fontFamily: "var(--font-app)",
           }}
         >
           <RS.ScrollUpButton className="flex items-center justify-center py-1" style={{ color: B.muted }}>

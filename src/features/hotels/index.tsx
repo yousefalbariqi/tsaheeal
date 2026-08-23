@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { MediaKind, HotelFeature, HotelReview, HotelMedia, RoomType, Hotel } from "@/types";
-import { uid, formatKmValue, parseKmToMeters, distanceLabel } from "@/lib/utils";
+import { uid, formatKmValue, parseKmToMeters, distanceLabel, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -32,7 +32,7 @@ function HotelCardHero({name,city,stars,status,cover}:{name:string;city:string;s
             <div className="absolute inset-0" style={{backgroundImage:`repeating-linear-gradient(45deg,rgba(192,134,44,0.045) 0px,rgba(192,134,44,0.045) 1px,transparent 1px,transparent 18px),repeating-linear-gradient(-45deg,rgba(192,134,44,0.045) 0px,rgba(192,134,44,0.045) 1px,transparent 1px,transparent 18px)`}}/>
             <div className="absolute inset-0" style={{background:"radial-gradient(ellipse at 30% 50%,rgba(60,40,10,0.5) 0%,rgba(21,76,72,0.92) 70%)"}}/>
             <div className="absolute inset-0 flex items-center justify-center" style={{userSelect:"none"}}>
-              <span style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:88,fontWeight:800,color:"rgba(192,134,44,0.1)",lineHeight:1}}>{name.charAt(0)}</span>
+              <span style={{fontFamily:"var(--font-app)",fontSize:88,fontWeight:800,color:"rgba(192,134,44,0.1)",lineHeight:1}}>{name.charAt(0)}</span>
             </div>
           </>}
       <div className="absolute top-0 inset-x-0" style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
@@ -64,7 +64,7 @@ function HotelCard({hotel,onEdit}:{hotel:Hotel;onEdit:()=>void}) {
       <div className="flex flex-col flex-1 px-5 pt-4 pb-4 gap-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"'Noto Kufi Arabic',serif"}}>فندق {hotel.name}</h3>
+            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>فندق {hotel.name}</h3>
             <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
               <MapPin size={11} style={{color:B.gold}}/>
               <span>{hotel.district}</span>
@@ -107,7 +107,7 @@ type HotelTab="info"|"features"|"rooms"|"media"|"reviews";
 function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave:(h:Hotel)=>void;onClose:()=>void;onDelete?:()=>void}) {
   const isEdit=initial!==null;
   const [tab,setTab]=useState<HotelTab>("info");
-  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:`HTL-${String(Date.now()).slice(-4)}`,name:"",city:"مكة",stars:4,distanceM:500,district:"",phone:"",mapUrl:"",status:"active",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
+  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:500,district:"",phone:"",mapUrl:"",status:"active",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
   const [distanceKmInput,setDistanceKmInput]=useState(()=>formatKmValue(initial?.distanceM??500));
   const set=<K extends keyof Hotel>(k:K,v:Hotel[K])=>setForm(f=>({...f,[k]:v}));
   const handleDistanceChange = (value:string) => {
@@ -166,7 +166,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                 <Building2 size={18} style={{color:B.gold}}/>
               </div>
               <div>
-                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"'Noto Kufi Arabic',serif"}}>{isEdit?"تعديل الفندق":"إضافة فندق جديد"}</h2>
+                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"var(--font-app)"}}>{isEdit?"تعديل الفندق":"إضافة فندق جديد"}</h2>
                 <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"}</div>
               </div>
             </div>
@@ -430,7 +430,7 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
   const [cityFilter,setCityFilter]=useState<"all"|"مكة"|"المدينة">("all");
   const [statusFilter,setStatusFilter]=useState<"all"|"active"|"inactive">("all");
   const [deleteId,setDeleteId]=useState<string|null>(null);
-  const filtered=hotels.filter(h=>(!search||h.name.includes(search)||h.id.toLowerCase().includes(search)||h.district.includes(search))&&(cityFilter==="all"||h.city===cityFilter)&&(statusFilter==="all"||h.status===statusFilter));
+  const filtered=hotels.filter(h=>(!search||h.name.includes(search)||h.id.toLowerCase().includes(search.toLowerCase())||h.district.includes(search))&&(cityFilter==="all"||h.city===cityFilter)&&(statusFilter==="all"||h.status===statusFilter));
   const stats={total:hotels.length,active:hotels.filter(h=>h.status==="active").length,mecca:hotels.filter(h=>h.city==="مكة").length,medina:hotels.filter(h=>h.city==="المدينة").length};
   function handleSave(h:Hotel){setHotels(p=>editTarget?p.map(x=>x.id===h.id?h:x):[h,...p]);setShowModal(false);}
   const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s"});

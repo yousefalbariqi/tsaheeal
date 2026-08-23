@@ -24,17 +24,20 @@ export const NAV_ITEMS = [
 ];
 
 export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSignOut}:{active:string;onNav:(v:string)=>void;mobileOpen?:boolean;onMobileClose?:()=>void;currentUser?:{name:string;role:string}|null;onSignOut?:()=>void}) {
-  const uName = currentUser?.name || "سالم أحمد";
-  const uRole = currentUser?.role || "مدير النظام";
-  const uInitial = uName.trim().charAt(0) || "س";
+  /* الافتراضي أدنى صلاحية لا أعلاها: currentUser فارغ يعني «لم نعرف بعد»،
+     وترجمته إلى «مدير النظام» تجعل الواجهة تفشل مفتوحةً — تعرض للمجهول ما
+     لا يعرضه إلا للمدير. واسم تجريبي ثابت هنا يظهر لمستخدم حقيقي. */
+  const uName = currentUser?.name || "مستخدم";
+  const uRole = currentUser?.role || "موظف";
+  const uInitial = uName.trim().charAt(0) || "م";
   const inner = (
     <aside className="flex flex-col h-full flex-shrink-0"
       style={{width:256,background:B.primaryDeep,borderLeft:`1px solid ${B.border2}`}}>
       <div style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
       <div className="flex items-center gap-3 px-5 py-5">
-        <TasaheelMark size={44}/>
+        <TasaheelMark size={48}/>
         <div>
-          <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.3}}>تساهيل العمرة</div>
+          <div style={{fontFamily:"var(--font-app)",fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.3}}>تساهيل العمرة</div>
           <div style={{fontSize:9,color:B.gold,letterSpacing:3,marginTop:2}}>ADMIN PANEL</div>
         </div>
         {onMobileClose&&<button onClick={onMobileClose} className="mr-auto p-1.5 cursor-pointer rounded-lg" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>}

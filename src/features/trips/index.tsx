@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from "motion/react";
 import { Building2, Plus, Trash2, X, Plane, Bus, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ArrowRight } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Hotel, Transport, Pkg, TripStatus, Trip, Branch } from "@/types";
-import { uid, parseYMD, ymd, tripDayColor } from "@/lib/utils";
+import { uid, parseYMD, ymd, tripDayColor, newId} from "@/lib/utils";
 import { DEFAULT_TRIP_SETTINGS } from "@/data/trips";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Spinner } from "@/components/Spinner";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
@@ -67,7 +68,7 @@ function LaunchTripModal({
   function handleSave(){
     if(!canSave||returnInvalid||busy) return;
     setBusy(true);
-    onSave({...form,id:`TRP-${String(Date.now()).slice(-4)}`,bookedSeats:0,waitingSeats:0});
+    onSave({...form,id:newId("TRP"),bookedSeats:0,waitingSeats:0});
   }
 
   return (
@@ -82,7 +83,7 @@ function LaunchTripModal({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>🚌</div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"'Noto Kufi Arabic',serif"}}>إطلاق رحلة جديدة</h2>
+              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>إطلاق رحلة جديدة</h2>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={14}/></button>
           </div>
@@ -159,7 +160,7 @@ function LaunchTripModal({
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
           <button onClick={handleSave} disabled={!canSave||returnInvalid||busy} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold"
             style={{background:canSave&&!returnInvalid?B.gold:"#d6cfc6",color:canSave&&!returnInvalid?B.black:"#a09688",border:"none",cursor:canSave&&!returnInvalid&&!busy?"pointer":"not-allowed"}}>
-            {busy&&<motion.span animate={{rotate:360}} transition={{repeat:Infinity,duration:0.9,ease:"linear"}} style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:B.black,borderRadius:"50%",display:"inline-block"}}/>}
+            {busy&&<Spinner size={14} color={B.black}/>}
             <Plane size={14}/>{busy?"جارٍ الإطلاق…":"إطلاق الرحلة"}
           </button>
           <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
@@ -208,7 +209,7 @@ function TripDetailsModal({trip,pkgName,hotelName,branch,onToggleStatus,onCancel
   const isFull=trip.status==="full"||available<=0;
   const mapUrl=trip.departureMapUrl||branch?.gmapUrl||"";
   const rows:[string,React.ReactNode][]=[
-    ["الباقة",pkgName||"—"],["رقم الرحلة",<span style={{fontFamily:"'IBM Plex Mono',monospace"}}>{trip.id}</span>],
+    ["الباقة",pkgName||"—"],["رقم الرحلة",<span style={{fontFamily:"var(--font-app)"}}>{trip.id}</span>],
     ["حالة الرحلة",<StatusBadge status={trip.status}/>],
     ["تاريخ الذهاب",trip.departureDate||"—"],["تاريخ العودة",trip.returnDate||"—"],
     ["وقت الانطلاق",trip.departureTime||"—"],
@@ -225,7 +226,7 @@ function TripDetailsModal({trip,pkgName,hotelName,branch,onToggleStatus,onCancel
         <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
-            <h2 className="font-extrabold text-white" style={{fontSize:15,fontFamily:"'Noto Kufi Arabic',serif"}}>تفاصيل الرحلة – {tripLabel(trip,pkgName)}</h2>
+            <h2 className="font-extrabold text-white" style={{fontSize:15,fontFamily:"var(--font-app)"}}>تفاصيل الرحلة – {tripLabel(trip,pkgName)}</h2>
             <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#CDE7E4"}}><X size={14}/></button>
           </div>
         </div>
@@ -506,7 +507,7 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
               <div className="flex items-center gap-4 flex-wrap mb-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{background:B.primary,border:"1px solid rgba(192,134,44,0.25)"}}>📦</div>
                 <div className="flex-1">
-                  <div className="font-extrabold" style={{color:B.black,fontSize:15,fontFamily:"'Noto Kufi Arabic',serif"}}>{pkg.name}</div>
+                  <div className="font-extrabold" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{pkg.name}</div>
                   <div className="text-xs mt-0.5" style={{color:B.text2}}>{pkgTrips.length} رحلة مُطلقة · {pkg.days} أيام · {destBadge(pkg.destination)}</div>
                 </div>
                 <button onClick={()=>{setLaunchPkgId(pkg.id);setShowLaunch(true);}} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}><Plus size={11}/>إطلاق رحلة</button>

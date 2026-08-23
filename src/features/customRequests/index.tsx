@@ -63,7 +63,7 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
         <div className="flex items-center flex-wrap gap-3 mb-4">
           <Sparkles size={18} style={{ color: B.gold }} />
           <span className="font-extrabold" style={{ color: B.black, fontSize: 16 }}>{req.name}</span>
-          <span className="text-sm" style={{ color: B.muted, fontFamily: "'IBM Plex Mono',monospace", direction: "ltr" }}>{req.phone}</span>
+          <span className="text-sm" style={{ color: B.muted, fontFamily: "var(--font-app)", direction: "ltr" }}>{req.phone}</span>
           <Badge s={req.status} />
           <span className="text-xs mr-auto" style={{ color: B.muted }}>{req.createdAt}</span>
         </div>

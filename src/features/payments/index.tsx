@@ -40,7 +40,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
         <div id="invoice-sheet" className="relative rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(21,76,72,.45)"}}>
           {pay.payStatus!=="verified"&&(
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{zIndex:0}}>
-              <span style={{fontSize:90,fontWeight:800,color:"rgba(180,83,12,.07)",transform:"rotate(-24deg)",whiteSpace:"nowrap",fontFamily:"'Noto Kufi Arabic',serif"}}>فاتورة أولية</span>
+              <span style={{fontSize:90,fontWeight:800,color:"rgba(180,83,12,.07)",transform:"rotate(-24deg)",whiteSpace:"nowrap",fontFamily:"var(--font-app)"}}>فاتورة أولية</span>
             </div>
           )}
           <div style={{position:"relative",zIndex:1}}>
@@ -49,13 +49,13 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
             <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
             <div className="flex items-start justify-between gap-6">
               <div>
-                <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:22,fontWeight:800,color:"#fff",lineHeight:1.2}}>تساهيل العمرة</div>
+                <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff",lineHeight:1.2}}>تساهيل العمرة</div>
                 <div style={{fontSize:11,color:B.gold,letterSpacing:3,marginTop:4}}>TASAHEEL AL-UMRAH</div>
                 <div className="mt-3 text-xs" style={{color:"#9DBAB6"}}>السجل التجاري: 1010537391 · الرياض</div>
               </div>
               <div className="text-left">
                 <div className="text-xs font-bold mb-1" style={{color:"#9DBAB6"}}>فاتورة رقم</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:700,color:B.gold}}>{pay.id}</div>
+                <div style={{fontFamily:"var(--font-app)",fontSize:20,fontWeight:700,color:B.gold}}>{pay.id}</div>
                 <div className="text-xs mt-2" style={{color:"#9DBAB6"}}>تاريخ الإصدار: {pay.createdAt}</div>
                 <div className="mt-2">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
@@ -77,7 +77,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
             <div className="px-8 py-5">
               <div className="text-xs font-extrabold mb-3" style={{color:B.primary}}>تفاصيل الحجز</div>
               <div className="font-bold text-sm mb-0.5" style={{color:"#000"}}>{pay.packageName}</div>
-              <div className="text-xs" style={{color:B.muted}}>رقم الطلب: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>{pay.bookingId}</span></div>
+              <div className="text-xs" style={{color:B.muted}}>رقم الطلب: <span style={{fontFamily:"var(--font-app)"}}>{pay.bookingId}</span></div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>تاريخ الرحلة: {pay.tripDate}</div>
               {pay.roomType&&<div className="text-xs mt-0.5" style={{color:B.muted}}>نوع السكن: {pay.roomType}</div>}
             </div>
@@ -94,7 +94,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
               <tbody>
                 <tr style={{borderBottom:`1px solid ${B.border}`}}>
                   <td style={{padding:"12px 0",color:B.text3}}>باقة العمرة — {pay.packageName}</td>
-                  <td style={{padding:"12px 0",fontWeight:700,color:B.black,textAlign:"left",fontFamily:"'IBM Plex Mono',monospace"}}>{pay.total.toLocaleString("en-US")} ر.س</td>
+                  <td style={{padding:"12px 0",fontWeight:700,color:B.black,textAlign:"left",fontFamily:"var(--font-app)"}}>{pay.total.toLocaleString("en-US")} ر.س</td>
                 </tr>
               </tbody>
             </table>
@@ -104,11 +104,11 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
             return (
             <div className="mx-8 mb-5 flex justify-start">
               <div className="flex flex-col gap-2" style={{width:300}}>
-                <div className="flex items-center justify-between text-sm"><span style={{color:"#000"}}>الإجمالي</span><span className="font-bold" style={{fontFamily:"'IBM Plex Mono',monospace",color:"#000"}}>{pay.total.toLocaleString("en-US")} ر.س</span></div>
-                <div className="flex items-center justify-between text-sm"><span style={{color:"#000"}}>المدفوع</span><span className="font-bold" style={{fontFamily:"'IBM Plex Mono',monospace",color:"#1E7A44"}}>{paid.toLocaleString("en-US")} ر.س</span></div>
+                <div className="flex items-center justify-between text-sm"><span style={{color:"#000"}}>الإجمالي</span><span className="font-bold" style={{fontFamily:"var(--font-app)",color:"#000"}}>{pay.total.toLocaleString("en-US")} ر.س</span></div>
+                <div className="flex items-center justify-between text-sm"><span style={{color:"#000"}}>المدفوع</span><span className="font-bold" style={{fontFamily:"var(--font-app)",color:"#1E7A44"}}>{paid.toLocaleString("en-US")} ر.س</span></div>
                 <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{background:settled?"#EEECEA":"#FBE6E6",border:`1px solid ${settled?B.border:"#F3C9C9"}`}}>
                   <span className="font-bold text-sm" style={{color:settled?"#5C554E":"#BE2626"}}>المتبقّي</span>
-                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:800,color:settled?"#5C554E":"#BE2626"}}>{remaining.toLocaleString("en-US")} ر.س</span>
+                  <span style={{fontFamily:"var(--font-app)",fontSize:20,fontWeight:800,color:settled?"#5C554E":"#BE2626"}}>{remaining.toLocaleString("en-US")} ر.س</span>
                 </div>
               </div>
             </div>
@@ -128,7 +128,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
             <div>
               <div className="text-xs font-bold mb-1" style={{color:B.black}}>امسح باركود التحقق</div>
               <div className="text-xs leading-relaxed" style={{color:B.muted,maxWidth:250}}>ينقلك إلى صفحة التحقق الرسمية لعرض معلومات الفاتورة والطلب.</div>
-              <div className="text-xs font-bold mt-1.5" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
+              <div className="text-xs font-bold mt-1.5" style={{color:B.gold,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
             </div>
           </div>
           {/* Footer */}
@@ -178,7 +178,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <div key={k.label} className="rounded-2xl px-4 py-4 flex flex-col gap-1"
               style={{background:k.bg,border:`1px solid ${k.br}`,boxShadow:k.fg===B.gold?"0 8px 24px -8px rgba(192,134,44,0.25)":"none"}}>
               <div className="text-xs font-semibold" style={{color:k.fg===B.gold?B.muted:"#7a7168"}}>{k.label}</div>
-              <div className="font-extrabold text-2xl leading-tight" style={{color:k.fg,fontFamily:"'Noto Kufi Arabic',serif"}}>{k.value}</div>
+              <div className="font-extrabold text-2xl leading-tight" style={{color:k.fg,fontFamily:"var(--font-app)"}}>{k.value}</div>
               <div className="text-xs" style={{color:k.fg===B.gold?"#9DBAB6":B.muted}}>{k.sub}</div>
             </div>
           ))}
@@ -209,14 +209,14 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                   const ps=PAY_STATUS_MAP[p.payStatus];
                   return (
                     <tr key={p.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                      <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",color:B.gold,fontSize:13}}>{p.id}</td>
+                      <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.gold,fontSize:13}}>{p.id}</td>
                       <td style={{padding:"14px 16px"}}>
                         <div className="font-bold text-sm" style={{color:B.black}}>{p.clientName}</div>
                         <div className="text-xs font-mono" style={{color:B.muted,direction:"ltr"}}>{p.clientPhone}</div>
                       </td>
-                      <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text2,fontSize:13}}>{p.bookingId}</td>
+                      <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{p.bookingId}</td>
                       <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>{p.packageName}</td>
-                      <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{p.total.toLocaleString("en-US")} ر.س</td>
+                      <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{p.total.toLocaleString("en-US")} ر.س</td>
                       <td style={{padding:"14px 16px",color:B.text3}}>{p.payMethod||"—"}</td>
                       <td style={{padding:"14px 16px"}}>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:ps.bg,color:ps.fg}}>
@@ -245,8 +245,8 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div>
-                    <div className="font-extrabold text-sm" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace"}}>{p.id}</div>
-                    <div className="text-xs" style={{color:B.muted,fontFamily:"'IBM Plex Mono',monospace"}}>{p.bookingId}</div>
+                    <div className="font-extrabold text-sm" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{p.id}</div>
+                    <div className="text-xs" style={{color:B.muted,fontFamily:"var(--font-app)"}}>{p.bookingId}</div>
                   </div>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:ps.bg,color:ps.fg}}>
                     <span className="w-1.5 h-1.5 rounded-full" style={{background:ps.fg}}/>{ps.label}
@@ -255,7 +255,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{p.clientName}</div>
                 <div className="text-xs mb-3" style={{color:B.muted}}>{p.packageName} · {p.payMethod||"—"}</div>
                 <div className="flex items-center justify-between">
-                  <div className="font-extrabold" style={{color:B.gold,fontFamily:"'IBM Plex Mono',monospace"}}>{p.total.toLocaleString("en-US")} ر.س</div>
+                  <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{p.total.toLocaleString("en-US")} ر.س</div>
                   <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>عرض الفاتورة</button>
                 </div>
               </motion.div>

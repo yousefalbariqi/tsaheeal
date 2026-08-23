@@ -187,4 +187,21 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  /* النصّ التوضيحي — مثالٌ لا بيانات.
+     Preflight في Tailwind يضعه على 50% من لون نصّ الحقل، ومع نصٍّ شبه أسود
+     (#1B1712) يخرج رمادياً غامقاً يُقرأ قيمةً مكتوبة فعلاً — وأسوأ مواضعه
+     حقل الجوال، إذ يشبه «05XXXXXXXX» رقماً مُدخلاً لا مثالاً.
+     30% تُبقيه مقروءاً كتلميح وتُخرجه من مرتبة البيانات.
+
+     نسبةٌ من currentColor لا رمادٌ ثابت: الحقول هنا على أسطح بيضاء ورملية
+     وداكنة، والرمادي الواحد يغمق في إحداها ويتلاشى في الأخرى.
+
+     في @layer base ليبقى بإمكان أي حقل تجاوزه بصنف Tailwind، وtheme.css
+     يُستورد بعد tailwind.css في index.css فتتقدّم هذه القاعدة على preflight. */
+  input::placeholder,
+  textarea::placeholder {
+    color: color-mix(in oklab, currentColor 30%, transparent);
+    opacity: 1;              /* فَيَرفوكس يضيف عتامة .54 من عنده فيضاعف الخفوت */
+  }
 }

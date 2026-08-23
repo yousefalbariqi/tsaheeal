@@ -94,7 +94,7 @@ export function SearchSelect({
           style={{
             borderColor: invalid ? "#E1A3A3" : B.border,
             background: disabled ? B.bg : "#fff",
-            color: selected ? B.black : B.muted,
+            color: selected ? B.black : B.placeholder,
             fontFamily: "inherit",
             cursor: disabled ? "not-allowed" : "pointer",
             textAlign: dir === "rtl" ? "right" : "left",
@@ -126,7 +126,7 @@ export function SearchSelect({
             maxHeight: "min(340px, var(--radix-popover-content-available-height))",
             display: "flex",
             flexDirection: "column",
-            fontFamily: "'IBM Plex Sans Arabic',system-ui,sans-serif",
+            fontFamily: "var(--font-app)",
           }}
         >
           {searchable && (

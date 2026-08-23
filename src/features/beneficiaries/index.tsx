@@ -10,6 +10,7 @@ import { NationalitySelect } from "@/components/NationalitySelect";
 import { useStore } from "@/store/useStore";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
+import { newId } from "@/lib/utils";
 
 const EMPTY_BEN: Omit<Beneficiary,"id"|"bookingIds"> = { name:"", phone:"", idNumber:"", nationality:"", gender:"male", birthDate:"", rating:0, notes:"", suspended:false };
 
@@ -111,8 +112,8 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
           <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div>
-              <div style={{fontFamily:"'Noto Kufi Arabic',serif",fontSize:18,fontWeight:800,color:"#fff"}}>إشعار إلغاء</div>
-              <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>رقم الطلب: <span style={{fontFamily:"'IBM Plex Mono',monospace"}}>{booking.id}</span></div>
+              <div style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#fff"}}>إشعار إلغاء</div>
+              <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>رقم الطلب: <span style={{fontFamily:"var(--font-app)"}}>{booking.id}</span></div>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
           </div>
@@ -128,7 +129,7 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
           </div>
           <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{background:B.bg,border:`1px solid ${B.border}`}}>
             <span className="font-bold text-sm" style={{color:"#000"}}>المبلغ المسترد</span>
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:800,color:"#000"}}>{booking.total.toLocaleString("en-US")} ر.س</span>
+            <span style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#000"}}>{booking.total.toLocaleString("en-US")} ر.س</span>
           </div>
           <div className="text-center text-xs font-bold pt-2" style={{color:B.text2,borderTop:`1px solid ${B.border}`}}>تساهيل العمرة · السجل التجاري: 1010537391 · tasaaheel.sa</div>
         </div>
@@ -162,7 +163,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     if(editTarget) {
       setBens(p=>p.map(b=>b.id===editTarget.id?{...b,...form}:b));
     } else {
-      const nb:Beneficiary={...EMPTY_BEN,...form,id:`BEN-${String(bens.length+1).padStart(3,"0")}`,bookingIds:[]};
+      const nb:Beneficiary={...EMPTY_BEN,...form,id:newId("BEN"),bookingIds:[]};
       setBens(p=>[...p,nb]);
     }
     setShowModal(false); setEditTarget(null);
@@ -201,7 +202,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
               {detail.name[0]}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-extrabold text-lg" style={{color:B.black,fontFamily:"'Noto Kufi Arabic',serif"}}>{detail.name}</div>
+              <div className="font-extrabold text-lg" style={{color:B.black,fontFamily:"var(--font-app)"}}>{detail.name}</div>
               <div className="text-sm font-mono mt-0.5" style={{color:B.muted,direction:"ltr"}}>{detail.phone}</div>
               <div className="mt-2"><BenTag b={detail}/></div>
             </div>
@@ -218,7 +219,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
               {[{l:"الطلبات",v:detail.bookingIds.length,c:"#fff"},{l:"مكتملة",v:bookings.filter(bk=>detail.bookingIds.includes(bk.id)&&bk.status==="confirmed").length,c:"#fff"},{l:"الإنفاق",v:(bookings.filter(bk=>detail.bookingIds.includes(bk.id)&&["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0)).toLocaleString("en-US")+" ر.س",c:B.gold}].map(s=>(
                 <div key={s.l}>
                   <div className="text-xs mb-1" style={{color:"#9DBAB6",fontWeight:600}}>{s.l}</div>
-                  <div className="font-extrabold text-xl leading-tight" style={{color:s.c,fontFamily:"'Noto Kufi Arabic',serif"}}>{s.v}</div>
+                  <div className="font-extrabold text-xl leading-tight" style={{color:s.c,fontFamily:"var(--font-app)"}}>{s.v}</div>
                 </div>
               ))}
             </div>
@@ -273,9 +274,9 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                   const confirmed=bk.status==="confirmed";
                   return (
                   <tr key={bk.id} style={{borderTop:`1px solid ${B.border}`}}>
-                    <td style={{padding:"13px 16px",fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",color:B.black,fontSize:13}}>{bk.id}</td>
+                    <td style={{padding:"13px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.black,fontSize:13}}>{bk.id}</td>
                     <td style={{padding:"13px 16px",color:B.text3}}>{bk.createdAt}</td>
-                    <td style={{padding:"13px 16px",fontWeight:700,color:B.black,fontFamily:"'IBM Plex Mono',monospace"}}>{bk.total.toLocaleString("en-US")} ر.س</td>
+                    <td style={{padding:"13px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{bk.total.toLocaleString("en-US")} ر.س</td>
                     <td style={{padding:"13px 16px"}}><StatusBadge status={bk.status}/></td>
                     <td style={{padding:"10px 16px"}}>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -354,9 +355,9 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                       <span className="font-bold" style={{color:B.black}}>{b.name}</span>
                     </div>
                   </td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.text2,fontSize:13}}>{b.phone}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{b.phone}</td>
                   <td style={{padding:"14px 16px",color:B.text3}}>{b.gender==="male"?"ذكر":"أنثى"}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"'IBM Plex Mono',monospace",color:B.muted,fontSize:13}}>{b.idNumber||"—"}</td>
+                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.muted,fontSize:13}}>{b.idNumber||"—"}</td>
                   <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{b.bookingIds.length}</td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex gap-0.5">

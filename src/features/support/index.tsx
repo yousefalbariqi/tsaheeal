@@ -5,6 +5,7 @@ import type { SupportPriority, SupportStatus, SupportReq } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
+import { newId } from "@/lib/utils";
 
 const SUPPORT_CATS = ["عام","تقني — أخطاء في النظام","مالي — فواتير وتحصيل","محتوى — تعديل النصوص","باقات ورحلات","حجوزات وتذاكر","طلب ميزة جديدة"];
 
@@ -43,7 +44,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   function submit() {
     if(!title.trim()) return;
     const nr:SupportReq={
-      id:`SUP-${String(reqs.length+1).padStart(3,"0")}`,
+      id:newId("SUP"),
       category, title, desc, priority, status:"sent",
       date:new Date().toISOString().slice(0,10),
     };
@@ -73,7 +74,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* ── Form ── */}
           <div className="lg:col-span-3 rounded-2xl p-6" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="font-extrabold text-base mb-5" style={{color:B.black,fontFamily:"'Noto Kufi Arabic',serif"}}>نموذج إرسال الطلب</div>
+            <div className="font-extrabold text-base mb-5" style={{color:B.black,fontFamily:"var(--font-app)"}}>نموذج إرسال الطلب</div>
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>القسم</label>
@@ -132,7 +133,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
               </button>
               <div className="text-xs text-center" style={{color:B.muted}}>
                 سيتم إرسال الطلب إلى البريد التقني المسجّل في إعدادات النظام
-                {" "}<span style={{fontFamily:"'IBM Plex Mono',monospace",color:B.text2}}>support@tasahheel.com</span>
+                {" "}<span style={{fontFamily:"var(--font-app)",color:B.text2}}>support@tasahheel.com</span>
               </div>
             </div>
           </div>

@@ -9,7 +9,7 @@ export function StatCard({label,value,sub,accent=false}:{label:string;value:stri
         boxShadow:accent?"0 8px 24px -8px rgba(192,134,44,0.25)":"0 1px 4px rgba(21,76,72,0.06)",
       }}>
       <div className="text-xs font-semibold" style={{color:B.muted}}>{label}</div>
-      <div className="text-3xl font-extrabold" style={{color:accent?B.gold:B.black,fontFamily:"'Noto Kufi Arabic',serif",lineHeight:1}}>{value}</div>
+      <div className="text-3xl font-extrabold" style={{color:accent?B.gold:B.black,fontFamily:"var(--font-app)",lineHeight:1}}>{value}</div>
       {sub && <div className="text-xs" style={{color:accent?"#9DBAB6":B.muted}}>{sub}</div>}
     </div>
   );

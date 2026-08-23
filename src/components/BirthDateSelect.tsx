@@ -20,8 +20,6 @@ const MONTHS_HIJRI_EN = ["Muharram", "Safar", "Rabi' I", "Rabi' II", "Jumada I",
 const TXT = {
   ar: { greg: "ميلادي", hijri: "هجري", year: "السنة", month: "الشهر", day: "اليوم", pickYear: "السنة", pickMonth: "الشهر", pickDay: "اليوم", search: "ابحث…", empty: "لا نتائج" },
   en: { greg: "Gregorian", hijri: "Hijri", year: "Year", month: "Month", day: "Day", pickYear: "Year", pickMonth: "Month", pickDay: "Day", search: "Search…", empty: "No results" },
-  ur: { greg: "عیسوی", hijri: "ہجری", year: "سال", month: "مہینہ", day: "دن", pickYear: "سال", pickMonth: "مہینہ", pickDay: "دن", search: "تلاش…", empty: "کوئی نتیجہ نہیں" },
-  tr: { greg: "Miladi", hijri: "Hicri", year: "Yıl", month: "Ay", day: "Gün", pickYear: "Yıl", pickMonth: "Ay", pickDay: "Gün", search: "Ara…", empty: "Sonuç yok" },
 } as const;
 
 const calOf = (c: Cal) => (c === "hijri" ? arabic : gregorian);
@@ -69,7 +67,7 @@ function NativeSelect({ label, value, onChange, options, placeholder, disabled, 
           style={{
             borderColor: invalid ? "#E1A3A3" : B.border,
             background: disabled ? B.bg : "#fff",
-            color: value ? B.black : B.muted,
+            color: value ? B.black : B.placeholder,
             fontFamily: "inherit", fontWeight: value ? 700 : 400,
             padding: "9px 10px", paddingInlineEnd: 26, height: 40,
             cursor: disabled ? "not-allowed" : "pointer",
@@ -104,7 +102,7 @@ export function BirthDateSelect({
   yearsAhead?: number;
 }) {
   const txt = (TXT as any)[lang] ?? TXT.ar;
-  const en = lang === "en" || lang === "tr";
+  const en = lang === "en";
 
   const [cal, setCal] = React.useState<Cal>("greg");
   const [y, setY] = React.useState<number | null>(null);
