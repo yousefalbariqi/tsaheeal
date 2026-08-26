@@ -18,7 +18,7 @@ import { DOC_TYPES, docTypeDef, docText, type DocType } from "@/data/docTypes";
 import { Spinner } from "@/components/Spinner";
 import type { CustomerSession } from "../customerAuth";
 import {
-  requestPhoneChange, confirmPhoneChange, saveProfile, isFail, authErrorMessage,
+  requestPhoneChange, confirmPhoneChange, changePhoneNoOtp, SKIP_OTP, saveProfile, isFail, authErrorMessage,
 } from "../customerAuth";
 import {
   fetchTravellers, saveTraveller, deleteTraveller, emptyTraveller, type Traveller,
@@ -319,6 +319,17 @@ function PhoneChangeSheet({ open, onClose, session, onSession, t, onDone }: {
   async function send() {
     if (busy) return;
     setErr(""); setBusy(true);
+    /* راية التجربة: بلا رمز فبلا خطوة ثانية — يُبدَّل الرقم فوراً وتُغلق
+       الورقة. تركُ هذا المسار على الرمز وحده كان سيصنع حائطاً في منتصف
+       تجربةٍ لا رموز فيها: يفتح المستخدم «تغيير الرقم» فيُطلب منه رمز
+       لا يصله أبداً. */
+    if (SKIP_OTP) {
+      const r = await changePhoneNoOtp(phone);
+      setBusy(false);
+      if (isFail(r)) { setErr(authErrorMessage(r, t)); return; }
+      onSession(r.session); onClose(); onDone();
+      return;
+    }
     const r = await requestPhoneChange(phone);
     setBusy(false);
     if (isFail(r)) { setErr(authErrorMessage(r, t)); return; }

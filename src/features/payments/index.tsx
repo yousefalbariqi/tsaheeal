@@ -7,6 +7,8 @@ import { openWhatsApp, invVerifyUrl } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { QRBlock } from "@/components/QRBlock";
 import { useStore } from "@/store/useStore";
+import { Pager, usePaged } from "@/components/Pager";
+import { OrgCr } from "@/components/OrgLine";
 
 const PAY_STATUS_MAP:{[k:string]:{label:string;bg:string;fg:string}} = {
   verified:{label:"مدفوعة",     bg:"#E3F3E8",fg:"#1E7A44"},
@@ -51,7 +53,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
               <div>
                 <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff",lineHeight:1.2}}>تساهيل العمرة</div>
                 <div style={{fontSize:11,color:B.gold,letterSpacing:3,marginTop:4}}>TASAHEEL AL-UMRAH</div>
-                <div className="mt-3 text-xs" style={{color:"#9DBAB6"}}>السجل التجاري: 1010537391 · الرياض</div>
+                <div className="mt-3 text-xs" style={{color:"#9DBAB6"}}><OrgCr suffix="الرياض"/></div>
               </div>
               <div className="text-left">
                 <div className="text-xs font-bold mb-1" style={{color:"#9DBAB6"}}>فاتورة رقم</div>
@@ -155,6 +157,11 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     (!search||(p.id+p.bookingId+p.clientName).toLowerCase().includes(search.toLowerCase()))
   );
 
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, `${search}|${statusFilter}`);
+
   const kpis = [
     {label:"إجمالي الفواتير",        value:payments.length,          sub:"كل الطلبات",        bg:"#fff",   br:B.border,    fg:B.black},
     {label:"مدفوعة",                  value:payments.filter(p=>p.payStatus==="verified").length, sub:"تم التحصيل",  bg:"#E3F3E8",br:"#C4E4CE", fg:"#1E7A44"},
@@ -205,7 +212,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p,i)=>{
+                {pg.rows.map((p,i)=>{
                   const ps=PAY_STATUS_MAP[p.payStatus];
                   return (
                     <tr key={p.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
@@ -238,7 +245,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         </div>
         {/* Mobile cards */}
         <div className="md:hidden flex flex-col gap-3">
-          {filtered.map(p=>{
+          {pg.rows.map(p=>{
             const ps=PAY_STATUS_MAP[p.payStatus];
             return (
               <motion.div key={p.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
@@ -263,6 +270,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
           })}
           {filtered.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><CreditCard size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد فواتير مطابقة</p></div>}
         </div>
+        <Pager p={pg} unit="فاتورة"/>
       </main>
       <AnimatePresence>
         {curInvoice&&<InvoiceModal pay={curInvoice} onClose={()=>setInvoiceId(null)}/>}

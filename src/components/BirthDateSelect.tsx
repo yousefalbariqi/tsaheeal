@@ -89,6 +89,7 @@ function NativeSelect({ label, value, onChange, options, placeholder, disabled, 
 
 export function BirthDateSelect({
   value, onChange, lang = "ar", dir = "rtl", disabled, invalid, maxYearsBack = 110, future = false, yearsAhead = 2,
+  ...aria
 }: {
   value: string;                     // "YYYY-MM-DD" ميلادية أو ""
   onChange: (v: string) => void;
@@ -100,7 +101,10 @@ export function BirthDateSelect({
   /** تواريخ قادمة (سفر) بدل ماضية (ميلاد): السنوات تصعد من اليوم ولا يُقبل ما قبله. */
   future?: boolean;
   yearsAhead?: number;
-}) {
+  /* ثلاث قوائم لا حقل واحد، فلا id يُربط بـhtmlFor. خصائص التسمية
+     تُمرَّر إلى الحاوية لتُقرأ مجموعةً باسمها («تاريخ الميلاد») بدل
+     ثلاث قوائم مجهولة النسبة. */
+} & React.AriaAttributes & { role?: string }) {
   const txt = (TXT as any)[lang] ?? TXT.ar;
   const en = lang === "en";
 
@@ -196,7 +200,7 @@ export function BirthDateSelect({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div {...aria} className="flex flex-col gap-2">
       {/* ميلادي | هجري */}
       <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
         {(["greg", "hijri"] as Cal[]).map(c => (

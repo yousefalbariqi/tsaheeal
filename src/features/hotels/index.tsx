@@ -16,6 +16,8 @@ import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
+import { Field } from "@/components/Field";
+import { onPickMedia } from "@/lib/mediaUpload";
 
 const HOTEL_FEATURE_ICONS: Record<string, React.FC<{size?:number;style?:React.CSSProperties}>> = {
   wifi:Wifi, breakfast:Coffee, restaurant:UtensilsCrossed,
@@ -193,21 +195,27 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
         <div className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:"none"}}>
           <AnimatePresence mode="wait">
             {tab==="info"&&<motion.div key="hi" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-4">
-              <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم الفندق <span style={{color:B.gold}}>*</span></label>
-                <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند" onChange={e=>set("name",e.target.value)}/></div>
+              <div><Field label={<>اسم الفندق <span style={{color:B.gold}}>*</span></>}>
+                     <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند" onChange={e=>set("name",e.target.value)}/>
+                   </Field></div>
               <div className="grid grid-cols-3 gap-3">
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المدينة</label>
-                  <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/></div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>التصنيف</label>
-                  <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/></div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المسافة (كيلومتر)</label>
-                  <input type="text" inputMode="decimal" className={inp} style={ist} value={distanceKmInput} placeholder="0.5" onChange={e=>handleDistanceChange(e.target.value)} onBlur={handleDistanceBlur}/></div>
+                <div><Field label="المدينة">
+                       <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/>
+                     </Field></div>
+                <div><Field label="التصنيف">
+                       <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/>
+                     </Field></div>
+                <div><Field label="المسافة (كيلومتر)">
+                       <input type="text" inputMode="decimal" className={inp} style={ist} value={distanceKmInput} placeholder="0.5" onChange={e=>handleDistanceChange(e.target.value)} onBlur={handleDistanceBlur}/>
+                     </Field></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحي</label>
-                  <input className={inp} style={ist} value={form.district} placeholder="أجياد" onChange={e=>set("district",e.target.value)}/></div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم تواصل الفندق</label>
-                  <input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.phone} placeholder="مثال: +966 12 xxx xxxx" onChange={e=>set("phone",e.target.value)}/></div>
+                <div><Field label="الحي">
+                       <input className={inp} style={ist} value={form.district} placeholder="أجياد" onChange={e=>set("district",e.target.value)}/>
+                     </Field></div>
+                <div><Field label="رقم تواصل الفندق">
+                       <input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.phone} placeholder="مثال: +966 12 xxx xxxx" onChange={e=>set("phone",e.target.value)}/>
+                     </Field></div>
               </div>
               <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رابط الموقع في خرائط Google</label>
                 <div className="relative">
@@ -226,10 +234,12 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                   ))}
                 </div>
               </div>
-              <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رأي تساهيل <span className="font-normal" style={{color:B.muted}}>(يظهر للعميل)</span></label>
-                <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={form.tasaheelNote} placeholder="ملاحظة الفريق..." onChange={e=>set("tasaheelNote",e.target.value)}/></div>
-              <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>ملاحظات داخلية للإدارة <span className="font-normal" style={{color:B.muted}}>(لا تظهر للعميل)</span></label>
-                <textarea className={inp} style={{...ist,resize:"vertical",background:B.bg}} rows={2} value={form.notes} placeholder="ملاحظات خاصة بالفريق الداخلي فقط..." onChange={e=>set("notes",e.target.value)}/></div>
+              <div><Field label={<>رأي تساهيل <span className="font-normal" style={{color:B.muted}}>(يظهر للعميل)</span></>}>
+                     <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={form.tasaheelNote} placeholder="ملاحظة الفريق..." onChange={e=>set("tasaheelNote",e.target.value)}/>
+                   </Field></div>
+              <div><Field label={<>ملاحظات داخلية للإدارة <span className="font-normal" style={{color:B.muted}}>(لا تظهر للعميل)</span></>}>
+                     <textarea className={inp} style={{...ist,resize:"vertical",background:B.bg}} rows={2} value={form.notes} placeholder="ملاحظات خاصة بالفريق الداخلي فقط..." onChange={e=>set("notes",e.target.value)}/>
+                   </Field></div>
             </motion.div>}
             {tab==="features"&&<motion.div key="hf" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
@@ -275,10 +285,12 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                         ))}
                       </div>
                     </div>
-                    <div style={{width:80}}><label className="block text-xs font-bold mb-2" style={{color:B.muted}}>الأسرّة</label>
-                      <input type="number" min={1} className={inp} style={ist} value={r.beds} onChange={e=>updRoom(r.id,"beds",Number(e.target.value))}/></div>
-                    <div style={{width:120}}><label className="block text-xs font-bold mb-2" style={{color:B.muted}}>ر.س / ليلة</label>
-                      <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800}} value={r.pricePerNight} onChange={e=>updRoom(r.id,"pricePerNight",Number(e.target.value))}/></div>
+                    <div style={{width:80}}><Field label="الأسرّة" labelClass="block text-xs font-bold mb-2" labelStyle={{color:B.muted}}>
+                                              <input type="number" min={1} className={inp} style={ist} value={r.beds} onChange={e=>updRoom(r.id,"beds",Number(e.target.value))}/>
+                                            </Field></div>
+                    <div style={{width:120}}><Field label="ر.س / ليلة" labelClass="block text-xs font-bold mb-2" labelStyle={{color:B.muted}}>
+                                               <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800}} value={r.pricePerNight} onChange={e=>updRoom(r.id,"pricePerNight",Number(e.target.value))}/>
+                                             </Field></div>
                     <button onClick={()=>delRoom(r.id)} className="w-9 h-9 mb-0.5 rounded-xl flex items-center justify-center cursor-pointer"
                       style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
                   </div>
@@ -295,7 +307,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                         <div key={p.id} className="rounded-xl p-2 flex flex-col gap-1.5" style={{width:150,border:`1px solid ${p.primary?B.gold:B.border}`,background:p.primary?"rgba(192,134,44,0.05)":"#fff"}}>
                           <label className="relative rounded-lg overflow-hidden flex items-center justify-center cursor-pointer" style={{height:84,border:`1px dashed ${B.border}`,background:B.bg}}>
                             {p.url?<img src={p.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div className="flex flex-col items-center gap-0.5" style={{color:B.muted}}><ImagePlus size={18}/><span style={{fontSize:10}}>اختر صورة</span></div>}
-                            <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updRoomPhoto(r.id,p.id,"url",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                            <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("hotel-rooms",url=>updRoomPhoto(r.id,p.id,"url",url))}/>
                           </label>
                           <div className="flex items-center justify-between gap-1">
                             <span className="px-1.5 py-0.5 rounded-md text-xs font-bold" style={{background:B.bg,color:B.text2,border:`1px solid ${B.border}`}}>#{pi+1}</span>
@@ -342,7 +354,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                           ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                           : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
                       : <div className="flex flex-col items-center gap-1" style={{color:B.muted}}>{m.kind==="image"?<ImagePlus size={20}/>:<Film size={20}/>}<span style={{fontSize:10}}>اختر ملفاً</span></div>}
-                    <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updMedia(m.id,"url",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                    <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={onPickMedia("hotels",url=>updMedia(m.id,"url",url))}/>
                   </label>
                   <div className="flex-1 flex flex-col gap-2 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -400,7 +412,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                       <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                         style={{background:B.bg,color:"#8a6a08",border:`1px solid ${B.border}`}}>
                         <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"إرفاق صورة"}
-                        <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updReview(rv.id,"image",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                        <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("hotel-reviews",url=>updReview(rv.id,"image",url))}/>
                       </label>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, X, Users, CreditCard, Ticket, ArrowRight } from "lucide-react";
+import { Plus, X, Users, CreditCard, Ticket, ArrowRight, Link2 } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Beneficiary, Payment, Booking, TicketEntry } from "@/types";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -11,8 +11,12 @@ import { useStore } from "@/store/useStore";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
 import { newId } from "@/lib/utils";
+import { bookingsOf, planLink, applyLink, planIsEmpty } from "./link";
 import { toast } from "sonner";
 import { useRole } from "@/lib/useRole";
+import { Field } from "@/components/Field";
+import { Pager, usePaged } from "@/components/Pager";
+import { OrgLine } from "@/components/OrgLine";
 
 const EMPTY_BEN: Omit<Beneficiary,"id"|"bookingIds"> = { name:"", phone:"", idNumber:"", nationality:"", gender:"male", birthDate:"", rating:0, notes:"", suspended:false };
 
@@ -34,10 +38,13 @@ function StarRating({value,onChange}:{value:number;onChange?:(v:number)=>void}) 
   );
 }
 
-function BenTag({b}:{b:Beneficiary}) {
+/* العدد يُمرَّر مشتقّاً: bookingIds لا يُملأ للحجوزات الآتية من التطبيق،
+   فكان التصنيف يقول «جديد» لعميلٍ حجز أربع مرّات. */
+function BenTag({b,count}:{b:Beneficiary;count?:number}) {
+  const n=count??b.bookingIds.length;
   if(b.suspended) return <StatusBadge status="suspended"/>;
-  if(b.bookingIds.length>=3) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08"}}>⭐ وفيّ</span>;
-  if(b.bookingIds.length>=2) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#E3F3E8",color:"#1E7A44"}}>متكرر</span>;
+  if(n>=3) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08"}}>⭐ وفيّ</span>;
+  if(n>=2) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#E3F3E8",color:"#1E7A44"}}>متكرر</span>;
   return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#EAF1FE",color:"#1E52C7"}}>جديد</span>;
 }
 
@@ -57,28 +64,33 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الاسم الكامل</label>
-            <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="الاسم الكامل"
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <Field label="الاسم الكامل">
+              <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="الاسم الكامل"
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم الجوال</label>
-            <input value={form.phone} onChange={e=>f("phone")(e.target.value)} placeholder="05xxxxxxxx"
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <Field label="رقم الجوال">
+              <input value={form.phone} onChange={e=>f("phone")(e.target.value)} placeholder="05xxxxxxxx"
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم الهوية</label>
-            <input value={form.idNumber} onChange={e=>f("idNumber")(e.target.value)} placeholder="10xxxxxxxx"
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <Field label="رقم الهوية">
+              <input value={form.idNumber} onChange={e=>f("idNumber")(e.target.value)} placeholder="10xxxxxxxx"
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الجنسية</label>
-            <NationalitySelect value={form.nationality} onChange={f("nationality")} subInTrigger={false}/>
+            <Field label="الجنسية">
+              <NationalitySelect value={form.nationality} onChange={f("nationality")} subInTrigger={false}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ الميلاد</label>
-            <input type="date" value={form.birthDate} onChange={e=>f("birthDate")(e.target.value)}
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <Field label="تاريخ الميلاد">
+              <input type="date" value={form.birthDate} onChange={e=>f("birthDate")(e.target.value)}
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            </Field>
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الجنس</label>
@@ -133,7 +145,7 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
             <span className="font-bold text-sm" style={{color:"#000"}}>المبلغ المسترد</span>
             <span style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#000"}}>{booking.total.toLocaleString("en-US")} ر.س</span>
           </div>
-          <div className="text-center text-xs font-bold pt-2" style={{color:B.text2,borderTop:`1px solid ${B.border}`}}>تساهيل العمرة · السجل التجاري: 1010537391 · tasaaheel.sa</div>
+          <div className="text-center text-xs font-bold pt-2" style={{color:B.text2,borderTop:`1px solid ${B.border}`}}><OrgLine/></div>
         </div>
       </div>
     </motion.div>
@@ -188,6 +200,31 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     (!search||(b.name+b.phone+b.idNumber).includes(search))
   );
 
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, `${search}|${genderFilter}`);
+
+  /* ── ربط الحجوزات بالملفّات ──
+     ما يُعرض مشتقٌّ لحظةَ العرض (bookingsOf): يصحّ فوراً بلا كتابة،
+     فيراه كل موظف لا المدير وحده. وما يُنشأ يُطلَب صراحةً بالزرّ. */
+  const plan = useMemo(()=>planLink(bens,bookings),[bens,bookings]);
+  const benBookings = useMemo(()=>{
+    const m=new Map<string,Booking[]>();
+    for(const b of bens) m.set(b.id,bookingsOf(b,bookings));
+    return m;
+  },[bens,bookings]);
+  const countOf=(b:Beneficiary)=>benBookings.get(b.id)?.length??b.bookingIds.length;
+  function runLink(){
+    setBens(p=>applyLink(p,plan));
+    toast.success(`رُبط ${plan.bookings} طلباً`,{
+      description: plan.create.length
+        ? `أُنشئ ${plan.create.length} ملف مستفيد جديد.`
+        : "لم يلزم إنشاء ملفات جديدة.",
+      duration:7000,
+    });
+  }
+
   function saveBen(form:Partial<Beneficiary>) {
     if(editTarget) {
       setBens(p=>p.map(b=>b.id===editTarget.id?{...b,...form}:b));
@@ -206,7 +243,9 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     total:bens.length,
     male:bens.filter(b=>b.gender==="male").length,
     female:bens.filter(b=>b.gender==="female").length,
-    repeat:bens.filter(b=>b.bookingIds.length>1).length,
+    /* على العدد المشتقّ: على bookingIds وحده كان الرقم يبقى ثابتاً على
+       بيانات البذرة مهما بلغت الحجوزات الحقيقية. */
+    repeat:bens.filter(b=>countOf(b)>1).length,
   };
 
   const gBtn=(v:"all"|"male"|"female",l:string)=>({
@@ -216,6 +255,10 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     color:genderFilter===v?B.gold:B.text2,
   });
 
+  /* سجلّ الملف مشتقٌّ لا مقروءٌ من bookingIds وحده: حجزٌ وصل من التطبيق
+     ولم يُربط بعد كان يجعل ملفّ عميلٍ حجز ثلاث مرّات يقول «لا توجد
+     طلبات مسجّلة». */
+  const detailBookings = detail ? (benBookings.get(detail.id) ?? []) : [];
   if(detail) return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
       <PageHeader title="المستفيدون" crumb="ملف المستفيد" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
@@ -233,7 +276,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
             <div className="flex-1 min-w-0">
               <div className="font-extrabold text-lg" style={{color:B.black,fontFamily:"var(--font-app)"}}>{detail.name}</div>
               <div className="text-sm font-mono mt-0.5" style={{color:B.muted,direction:"ltr"}}>{detail.phone}</div>
-              <div className="mt-2"><BenTag b={detail}/></div>
+              <div className="mt-2"><BenTag b={detail} count={detailBookings.length}/></div>
             </div>
             <div className="flex flex-col gap-2 flex-shrink-0">
               <button onClick={()=>openEdit(detail)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
@@ -245,7 +288,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
           </div>
           <div className="rounded-2xl p-5" style={{background:B.primary}}>
             <div className="grid grid-cols-3 gap-4">
-              {[{l:"الطلبات",v:detail.bookingIds.length,c:"#fff"},{l:"مكتملة",v:bookings.filter(bk=>detail.bookingIds.includes(bk.id)&&bk.status==="confirmed").length,c:"#fff"},{l:"الإنفاق",v:(bookings.filter(bk=>detail.bookingIds.includes(bk.id)&&["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0)).toLocaleString("en-US")+" ر.س",c:B.gold}].map(s=>(
+              {[{l:"الطلبات",v:detailBookings.length,c:"#fff"},{l:"مكتملة",v:detailBookings.filter(bk=>bk.status==="confirmed").length,c:"#fff"},{l:"الإنفاق",v:(detailBookings.filter(bk=>["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0)).toLocaleString("en-US")+" ر.س",c:B.gold}].map(s=>(
                 <div key={s.l}>
                   <div className="text-xs mb-1" style={{color:"#9DBAB6",fontWeight:600}}>{s.l}</div>
                   <div className="font-extrabold text-xl leading-tight" style={{color:s.c,fontFamily:"var(--font-app)"}}>{s.v}</div>
@@ -283,7 +326,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
         </div>
         {/* Booking history */}
         <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="px-5 py-4 font-bold" style={{color:B.black,borderBottom:`1px solid ${B.border}`}}>سجل الطلبات ({detail.bookingIds.length})</div>
+          <div className="px-5 py-4 font-bold" style={{color:B.black,borderBottom:`1px solid ${B.border}`}}>سجل الطلبات ({detailBookings.length})</div>
           <div className="overflow-x-auto">
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
               <thead>
@@ -294,7 +337,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                 </tr>
               </thead>
               <tbody>
-                {bookings.filter(bk=>detail.bookingIds.includes(bk.id)).map(bk=>{
+                {detailBookings.map(bk=>{
                   const docBtn=(label:string,on:()=>void,icon:any)=>{const Icon=icon;return (
                     <button onClick={on} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                       style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Icon size={12}/>{label}</button>
@@ -319,7 +362,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                   </tr>
                   );
                 })}
-                {detail.bookingIds.length===0&&<tr><td colSpan={5} style={{padding:"32px 16px",textAlign:"center",color:B.muted}}>لا توجد طلبات مسجّلة</td></tr>}
+                {detailBookings.length===0&&<tr><td colSpan={5} style={{padding:"32px 16px",textAlign:"center",color:B.muted}}>لا توجد طلبات مسجّلة</td></tr>}
               </tbody>
             </table>
           </div>
@@ -362,6 +405,23 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
             )}
           </div>
         </div>
+        {/* طلبات وصلت بلا ملف مستفيد. شريطٌ يُقال لا عمل صامت: إنشاء
+            ملفات في القاعدة قرارٌ، ولغير المدير يردّه حرس الكتابة. */}
+        {!planIsEmpty(plan)&&(
+          <div className="flex flex-wrap items-center gap-3 mt-4 px-4 py-3 rounded-xl"
+            style={{background:"#FBF3D6",border:"1px solid #E8D9A8"}}>
+            <Link2 size={16} style={{color:"#8A6A08",flexShrink:0}}/>
+            <div className="flex-1 min-w-0 text-sm" style={{color:"#6b5306"}}>
+              <span className="font-bold">{plan.bookings} طلب</span>
+              {" بلا ربط بملف مستفيد"}
+              {plan.create.length>0&&<> — منها <span className="font-bold">{plan.create.length}</span> تحتاج ملفاً جديداً</>}
+            </div>
+            {mayWrite
+              ? <button onClick={runLink} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0"
+                  style={{background:B.gold,color:B.black,border:"none"}}>ربط الطلبات بالملفّات</button>
+              : <span className="text-xs flex-shrink-0" style={{color:"#8A6A08"}}>الربط لمدير النظام</span>}
+          </div>
+        )}
         <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
       {/* Desktop table */}
@@ -376,7 +436,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b,i)=>(
+              {pg.rows.map((b,i)=>(
                 <tr key={b.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex items-center gap-3">
@@ -390,13 +450,13 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                   <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{b.phone}</td>
                   <td style={{padding:"14px 16px",color:B.text3}}>{b.gender==="male"?"ذكر":"أنثى"}</td>
                   <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.muted,fontSize:13}}>{b.idNumber||"—"}</td>
-                  <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{b.bookingIds.length}</td>
+                  <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{countOf(b)}</td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex gap-0.5">
                       {[1,2,3,4,5].map(n=><span key={n} style={{color:n<=b.rating?B.gold:"#D8D0C4",fontSize:16}}>★</span>)}
                     </div>
                   </td>
-                  <td style={{padding:"14px 16px"}}><BenTag b={b}/></td>
+                  <td style={{padding:"14px 16px"}}><BenTag b={b} count={countOf(b)}/></td>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex gap-2">
                       <button onClick={()=>setDetailId(b.id)} className="px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>الملف</button>
@@ -411,7 +471,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
         </div>
         {/* Mobile cards */}
         <div className="md:hidden flex flex-col gap-3">
-          {filtered.map(b=>(
+          {pg.rows.map(b=>(
             <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
               className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="flex items-center gap-3 mb-3">
@@ -423,7 +483,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                   <div className="font-bold text-sm" style={{color:B.black}}>{b.name}</div>
                   <div className="text-xs font-mono" style={{color:B.muted}}>{b.phone}</div>
                 </div>
-                <BenTag b={b}/>
+                <BenTag b={b} count={countOf(b)}/>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex gap-0.5">{[1,2,3,4,5].map(n=><span key={n} style={{color:n<=b.rating?B.gold:"#D8D0C4",fontSize:14}}>★</span>)}</div>
@@ -436,6 +496,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
           ))}
           {filtered.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Users size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا يوجد مستفيدون مطابقون</p></div>}
         </div>
+        <Pager p={pg} unit="مستفيد"/>
       </main>
       <AnimatePresence>
         {showModal&&<BenModal ben={editTarget||{}} onSave={saveBen} onClose={()=>{setShowModal(false);setEditTarget(null);}}/>}

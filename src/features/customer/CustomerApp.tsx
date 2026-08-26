@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState,
+  type ReactElement, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Globe, ChevronLeft, Check, Users, X, Search, Heart, UserRound, ArrowLeft, Clock} from "lucide-react";
+import { Check, Users, X, Search, ArrowLeft, Clock} from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip } from "@/types";
 import { type RoomSplit, splitTotal, splitSummary } from "./roomSplit";
-import { TasaheelMark } from "@/components/TasaheelMark";
 import { Spinner } from "@/components/Spinner";
 import { Toaster, toast } from "sonner";
 import { hideBootSplash } from "@/lib/bootSplash";
@@ -22,22 +22,25 @@ import { LANGS, dirOf, makeT, type Lang } from "./i18n";
 import { SlaCountdown } from "./ui/SlaCountdown";
 import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, AuthRequiredError, SKIP_SEAT_CHECK, availSeats, type Catalog, type TrackResult } from "./data";
 import {
-  sendOtp, verifyOtp, loadSession, clearSession, onAuthChange, saveProfile,
+  sendOtp, verifyOtp, signInNoOtp, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
   cachedPhoneLocal, isWhatsappEnabled, authErrorMessage, isFail,
   type CustomerSession,
 } from "./customerAuth";
 import { DirProvider, GrayButton, CTAButton } from "./ui/kit";
 import { FlowScreen, InputStack, StackField, PhoneField, TextLink, Labeled } from "./ui/FlowScreen";
-import { C, T, R, LTR, SPACE, formatDate } from "./ui/tokens";
+import { C, T, R, G, LTR, SPACE, formatDate } from "./ui/tokens";
+import { AppBar, BottomBar } from "./ui/chrome";
+import { Timeline } from "./ui/Timeline";
 import { Explore } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
 import { Account } from "./screens/Account";
 import { parseRoute, pathOf, NEEDS_PACKAGE, type Screen } from "./routing";
+import { publicSettings } from "@/data/settings";
+import { configureSla } from "./sla";
 import { readDraft, writeDraft, clearDraft, draftHasInput, emptyPax, type Pax } from "./draft";
 import { fetchTravellers, saveTraveller, type Traveller } from "./travellers";
 
-const G = { deep:"#0B5A41", dark:"#073A2B", green:B.primary, gold:B.gold, bg:"#F5F3EE" };
 /* "listing" هي الصفحة trip + seat + room. الشاشة تُقرأ من المسار
    (routing.ts) وPax ومسوّدتها في draft.ts. */
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
@@ -63,10 +66,13 @@ function paxErrors(p:Pax,first:boolean,t:(k:string)=>string,lang:string):Partial
   return e;
 }
 
-/* اختيار من خيارين بشكل شريط مقسوم — أسرع من قائمة منسدلة لخيارين. */
-function SegPick({value,onChange,options,dir}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[];dir:"rtl"|"ltr"}){
+/* اختيار من خيارين بشكل شريط مقسوم — أسرع من قائمة منسدلة لخيارين.
+   يقبل خصائص التسمية (role/aria-*) ليمرّرها LField إلى حاويته: مجموعةٌ
+   بلا اسم تُقرأ «زرّ ذكر، زرّ أنثى» بلا ذكر أنها حقل «الجنس». */
+function SegPick({value,onChange,options,dir,...aria}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[];dir:"rtl"|"ltr"}
+  &React.AriaAttributes&{role?:string}){
   return (
-    <div className="flex gap-1 p-1" style={{background:C.fill,border:`1px solid ${C.border}`,borderRadius:R.chip,direction:dir}}>
+    <div {...aria} className="flex gap-1 p-1" style={{background:C.fill,border:`1px solid ${C.border}`,borderRadius:R.chip,direction:dir}}>
       {options.map(o=>{
         const on=value===o.value;
         return (
@@ -83,20 +89,49 @@ function SegPick({value,onChange,options,dir}:{value:string;onChange:(v:string)=
 }
 
 /* حقل معنون: عنوان فوق المربع + نص إرشادي تحته يتحوّل إلى رسالة خطأ عند الحاجة.
-   مُعرَّف خارج المكوّن الرئيسي حتى لا يفقد الإدخال التركيز عند إعادة الرسم. */
-function LField({label,hint,error,optional,children}:{label:string;hint?:string;error?:string;optional?:string;children:ReactNode}){
+   مُعرَّف خارج المكوّن الرئيسي حتى لا يفقد الإدخال التركيز عند إعادة الرسم.
+
+   العنوان مربوط بحقله (htmlFor↔id) ومعرّفه من useId: هذه البطاقة تُرسم
+   مرّةً لكل معتمر، فمعرّف ثابت يجعل «رقم الهوية» في البطاقة الثالثة
+   يشير إلى حقل البطاقة الأولى. والرسالة الخطأ مربوطة بـaria-describedby
+   حتى يقرأها قارئ الشاشة مع الحقل لا كنصّ سابح بعده.
+
+   وaria-invalid على الحقل: اللون الأحمر وحده لا يصل لمن لا يراه. */
+function LField({label,hint,error,optional,group,children}:{label:string;hint?:string;error?:string;optional?:string;
+  /** الحقل مجموعةُ عناصر لا عنصراً واحداً (شريط خيارين، ثلاث قوائم تاريخ):
+      htmlFor يُشير إلى عنصر واحد قابل للعنونة، فالمجموعة تُسمّى
+      بـaria-labelledby على حاويتها. الفرق ليس تجميلياً: htmlFor نحو
+      حاوية لا يربط شيئاً إطلاقاً. */
+  group?:boolean;children:ReactNode}){
+  const uid=useId();
+  const fieldId=`${uid}-f`, labelId=`${uid}-l`, noteId=`${uid}-n`;
+  const own=isValidElement(children)?(children.props as {id?:string}).id:undefined;
+  const forId=own??fieldId;
+  const describedBy=(error||hint)?noteId:undefined;
+  const child=isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string,unknown>>,{
+        ...(group
+          ? {role:"group","aria-labelledby":labelId}
+          : own?{}:{id:forId}),
+        ...(describedBy?{"aria-describedby":describedBy}:{}),
+        ...(error?{"aria-invalid":true}:{}),
+      })
+    : children;
+  const inner=<>
+    {label}
+    {optional
+      ? <span style={{fontWeight:400,color:C.ink2}}>({optional})</span>
+      : <span style={{color:C.danger}}>*</span>}
+  </>;
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="flex items-center gap-1" style={{...T.small,fontWeight:500,color:C.ink}}>
-        {label}
-        {optional
-          ? <span style={{fontWeight:400,color:C.ink2}}>({optional})</span>
-          : <span style={{color:C.danger}}>*</span>}
-      </label>
-      {children}
+      {group
+        ? <span id={labelId} className="flex items-center gap-1" style={{...T.small,fontWeight:500,color:C.ink}}>{inner}</span>
+        : <label htmlFor={forId} className="flex items-center gap-1" style={{...T.small,fontWeight:500,color:C.ink}}>{inner}</label>}
+      {child}
       {error
-        ? <span style={{...T.small,fontWeight:500,color:C.danger}}>{error}</span>
-        : hint ? <span style={{...T.small,fontWeight:400,color:C.ink2}}>{hint}</span> : null}
+        ? <span id={noteId} style={{...T.small,fontWeight:500,color:C.danger}}>{error}</span>
+        : hint ? <span id={noteId} style={{...T.small,fontWeight:400,color:C.ink2}}>{hint}</span> : null}
     </div>
   );
 }
@@ -107,8 +142,6 @@ const AR_WEEK=["س","ح","ن","ث","ر","خ","ج"];
    فيها شيئاً يحدث — إجراءٌ داخلي عُرض كأنه انتظار إضافي. الدفع يفضي
    إلى التذكرة مباشرة. وحالة confirmed في القاعدة باقية كما هي: هي
    الحالة التي تُصدر التذكرة، فتُطابَق على خطوتها لا على خطوة مستقلة. */
-const TRACK_STEPS=["stepReview","stepAccepted","stepAwaitPay","stepPaid","stepTicket"];
-const statusToStep=(s:string):number=>({reviewing:0,new:0,accepted:1,awaiting_payment:2,paid:3,confirmed:4,verified:4}[s] ?? 0);
 
 const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل العمرة (نموذج مبدئي يُعدّل لاحقاً)
 
@@ -157,7 +190,6 @@ export function CustomerApp(){
   const screen=route.screen;
   const [cat,setCat]=useState<Catalog>({packages:[],trips:[],hotels:[],transports:[]});
   const [loading,setLoading]=useState(true);
-  const [langOpen,setLangOpen]=useState(false);
 
   // booking state
   const [pkg,setPkg]=useState<Pkg|null>(null);
@@ -231,6 +263,10 @@ export function CustomerApp(){
       .catch(e=>{ console.error("[fetchCatalog]",e); setCatErr(true); setLoading(false); });
   },[]);
   useEffect(()=>{ loadCatalog(); },[loadCatalog]);
+  /* نافذة العمل ووعد الردّ من الإعدادات — يستعملهما عدّاد شاشة النجاح
+     وشاشة التتبّع. قبل وصولها تعمل الحسابات على الافتراضات القائمة
+     نفسها، فلا رقم خطأ يُعرض في الأثناء. */
+  useEffect(()=>{ publicSettings().then(cfg=>configureSla(cfg)).catch(()=>{}); },[]);
   /* إزالة شاشة البدء بعد رسم الصفحة الجاهزة لا قبله — التسلسل: شعار
      متحرك ← الموقع، بلا شاشة وسيطة. */
   useEffect(()=>{ if(!loading) hideBootSplash(); },[loading]);
@@ -330,6 +366,13 @@ export function CustomerApp(){
      الرجوع في حلقة. */
   useEffect(()=>{
     if(loading||!routeReady) return;
+    /* الكتالوج لم يصل: كل الباقات «غير موجودة» فيبدو رابط الباقة تالفاً
+       ويُمحى من شريط العنوان. شاشة الخطأ بزرّ الإعادة معروضة أصلاً،
+       والمسار يجب أن يبقى حتى تنجح الإعادة. */
+    if(catErr) return;
+    /* مسار مجهول: يُصحَّح العنوان إلى «/» بدل إبقاء رابط تالف في
+       شريط العنوان يُشارَك ويُحفظ كأنه صحيح. */
+    if(route.unknown){ replaceScreen("packages",""); return; }
     const pid=route.packageId;
     if(pid&&!activePkgs.some(p=>p.id===pid)){ replaceScreen("packages",""); return; }
     if(NEEDS_PACKAGE.includes(screen)&&!pkg){ replaceScreen("packages",""); return; }
@@ -342,7 +385,7 @@ export function CustomerApp(){
     if(!sessionReady) return;
     if(!session&&(screen==="passengers"||screen==="seats"||screen==="review")){ setIntent("flow"); replaceScreen("login"); return; }
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
-  },[loading,routeReady,screen,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
+  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
 
   function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
@@ -503,6 +546,16 @@ export function CustomerApp(){
   async function beginLogin(){
     if(!validPhone(loginPhone)){ setOtpErr(t("invalidPhone")); return; }
     setOtpErr(""); setSending(true);
+    /* راية التجربة: لا رمز ولا شاشة تأكيد — الجلسة تُفتح بالرقم وحده
+       ثم يمضي المستخدم إلى حيث كان ذاهباً. الجلسة حقيقية بـJWT، فما
+       بعدها من حجزٍ وتتبّع يعمل كما لو دخل بالرمز. */
+    if(SKIP_OTP){
+      const r=await signInNoOtp(loginPhone);
+      setSending(false);
+      if(isFail(r)){ setOtpErr(authErrorMessage(r,t)); return; }
+      setSession(r.session); afterAuth(r.session);
+      return;
+    }
     const r=await sendOtp(loginPhone,"sms");
     setSending(false);
     if(isFail(r)){ setOtpErr(authErrorMessage(r,t)); return; }
@@ -556,68 +609,6 @@ export function CustomerApp(){
   const isFlow=FLOW_SCREENS.includes(screen);
   const whiteBase=isFlow||screen==="packages"||screen==="listing";
 
-  const AppBar=({title,onBack}:{title?:string;onBack?:()=>void})=>(
-    <div className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{background:G.deep,color:"#fff"}}>
-      {onBack
-        ? <button onClick={onBack} className="p-1.5 rounded-lg cursor-pointer" style={{background:"rgba(255,255,255,.1)",border:"none",color:"#fff"}}><ChevronLeft size={18} style={{transform:dir==="rtl"?"scaleX(-1)":"none"}}/></button>
-        : <TasaheelMark size={40}/>}
-      <div className="flex-1 font-extrabold" style={{fontFamily:"var(--font-app)",fontSize:15}}>{title||t("brand")}</div>
-      <div className="relative">
-        <button onClick={()=>setLangOpen(v=>!v)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-bold" style={{background:"rgba(255,255,255,.12)",border:"none",color:"#fff"}}><Globe size={14}/>{LANGS.find(l=>l.code===lang)?.label}</button>
-        <AnimatePresence>
-          {langOpen&&(
-            <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}}
-              className="absolute left-0 mt-1 rounded-xl overflow-hidden z-40" style={{background:"#fff",border:`1px solid ${B.border}`,minWidth:130,boxShadow:"0 12px 30px -8px rgba(0,0,0,.3)"}}>
-              {LANGS.map(l=>(
-                <button key={l.code} onClick={()=>{setLang(l.code);setLangOpen(false);}} className="flex items-center justify-between gap-2 w-full px-3 py-2.5 text-sm cursor-pointer text-right"
-                  style={{background:lang===l.code?B.bg:"#fff",border:"none",color:B.black,fontWeight:lang===l.code?700:500}}>{l.label}{lang===l.code&&<Check size={14} style={{color:G.green}}/>}</button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
-  /* الشريط السفلي — بنمطهم: أيقونة خطية فوق نص صغير، والنشط ملوّن ومعبّأ. */
-  const BottomBar=()=>(
-    <div className="sticky bottom-0 z-30 grid grid-cols-3"
-      style={{background:C.white,borderTop:`1px solid ${C.line}`,paddingBlock:8,
-              paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))"}}>
-      {([["packages",Search,t("explore")],["track",Heart,t("myBookings")],["profile",UserRound,t("profile")]] as const).map(([sc,Icon,lbl])=>{
-        const on=screen===sc;
-        return (
-          <button key={sc} onClick={()=>setScreen(sc as Screen)}
-            className="flex flex-col items-center gap-1 cursor-pointer"
-            style={{background:"none",border:"none",paddingBlock:4,color:on?C.green:C.ink2}}>
-            <Icon size={21} strokeWidth={on?2.2:1.7} fill={on&&sc==="track"?C.green:"none"}/>
-            <span style={{fontSize:11,fontWeight:on?600:400}}>{lbl}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  const Timeline=({status}:{status:string})=>{ const step=statusToStep(status); return (
-    <div className="flex flex-col" style={{gap:2}}>
-      {TRACK_STEPS.map((s,i)=>{ const done=i<=step, last=i===TRACK_STEPS.length-1; return (
-        <div key={s} className="flex" style={{gap:12}}>
-          <div className="flex flex-col items-center flex-shrink-0">
-            <div className="flex items-center justify-center flex-shrink-0"
-              style={{width:26,height:26,borderRadius:R.pill,...T.small,
-                background:done?C.green:C.white,border:done?"none":`1px solid ${C.border}`,color:done?C.white:C.ink3}}>
-              {done?<Check size={13}/>:i+1}
-            </div>
-            {/* خط واصل يوضّح أنها مراحل متسلسلة لا قائمة */}
-            {!last&&<div style={{width:1,flex:1,minHeight:14,background:i<step?C.green:C.line}}/>}
-          </div>
-          <span style={{...T.body,paddingBottom:last?0:10,
-            color:done?C.ink:C.ink2,fontWeight:i===step?600:400}}>{t(s)}</span>
-        </div>
-      ); })}
-    </div>
-  ); };
-
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
   if(loading) return null;
@@ -654,7 +645,7 @@ export function CustomerApp(){
           onCustom={()=>setScreen("custom")}
           t={t} lang={lang} setLang={setLang}
         />
-        <BottomBar/>
+        <BottomBar screen={screen} onNav={setScreen} t={t}/>
       </>}
 
       {/* ═══ LISTING — الصفحة الواحدة (تحل محل trip + seat + room) ═══ */}
@@ -678,7 +669,8 @@ export function CustomerApp(){
 
       {/* ═══ CUSTOM — رحلة حسب الطلب: طلب لا حجز ═══ */}
       {screen==="custom"&&<>
-        <AppBar title={t("customPkg")} onBack={()=>setScreen("packages")}/>
+        <AppBar title={t("customPkg")} onBack={()=>setScreen("packages")}
+          dir={dir} lang={lang} onLang={setLang} t={t}/>
         <CustomRequestScreen lang={lang} dir={dir} onDone={()=>setScreen("packages")}/>
       </>}
 
@@ -737,12 +729,12 @@ export function CustomerApp(){
 
                 {/* الفئة العمرية والجنس — صفّان متجاوران */}
                 <div className="grid grid-cols-2 gap-3">
-                  <LField label={t("ageGroup")}>
+                  <LField group label={t("ageGroup")}>
                     <SegPick dir={dir} value={p.ageGroup}
                       onChange={v=>setPax(a=>a.map((x,j)=>j===i?{...x,ageGroup:v as Pax["ageGroup"],phone:v==="child"?"":x.phone}:x))}
                       options={[{value:"adult",label:t("adult")},{value:"child",label:t("child")}]}/>
                   </LField>
-                  <LField label={t("gender")}>
+                  <LField group label={t("gender")}>
                     <SegPick dir={dir} value={p.gender}
                       onChange={v=>setPaxField(i,"gender",v)}
                       options={[{value:"male",label:t("male")},{value:"female",label:t("female")}]}/>
@@ -798,7 +790,7 @@ export function CustomerApp(){
                 </LField>
 
                 {/* تاريخ الميلاد — قوائم لا تقويم */}
-                <LField label={t("birthDate")} hint={p.birthDate?undefined:t("birthDateHint")} error={errOf(i,"birthDate")}>
+                <LField group label={t("birthDate")} hint={p.birthDate?undefined:t("birthDateHint")} error={errOf(i,"birthDate")}>
                   <BirthDateSelect lang={lang} dir={dir} value={p.birthDate} invalid={!!errOf(i,"birthDate")}
                     onChange={v=>{ setPaxField(i,"birthDate",v); touch(i,"birthDate"); }}/>
                 </LField>
@@ -932,7 +924,7 @@ export function CustomerApp(){
               <SlaCountdown submittedAt={submittedAt??Date.now()} t={t}/>
             </div>
             <div className="w-full p-4" style={{border:`1px solid ${C.border}`,borderRadius:R.card}}>
-              <Timeline status="reviewing"/>
+              <Timeline status="reviewing" t={t}/>
             </div>
           </div>
         </FlowScreen>}
@@ -973,24 +965,55 @@ export function CustomerApp(){
                             <span style={{...T.meta,color:C.ink}}>{t("contactWithin")}</span>
                           </div>
                     )}
-                    <Timeline status={o.status}/>
+                    <Timeline status={o.status} t={t}/>
+                    {/* التذكرة بعد التأكيد — كان هنا مربّع رمزٍ وحده بلا
+                        رقم ولا موعد ولا مكان. آخر خطوة في رحلة العميل،
+                        وهي التي يفتحها صباح السفر وهو واقف يبحث عن نقطة
+                        الانطلاق، فكانت تعطيه صورة ولا تعطيه خبراً.
+
+                        الرمز يُبذر برقم التذكرة لا برقم الطلب حين يتوفّر:
+                        رقم الطلب أربعة أرقام يخمّنها العادّ، ورقم التذكرة
+                        ستّة عشرية مشتقّة من md5. وقبل ترحيل الموجة ٤ يعود
+                        ticketNo فارغاً فيبقى السلوك السابق حرفياً. */}
                     {(o.status==="confirmed"||o.status==="verified")&&
-                      <div className="flex flex-col items-center pt-4" style={{gap:8,borderTop:`1px solid ${C.line}`}}>
-                        <QRBlock seed={o.id} size={110}/>
-                        <div style={{...T.small,color:C.ink2}}>{t("ticket")}</div>
+                      <div className="flex flex-col pt-4" style={{gap:12,borderTop:`1px solid ${C.line}`}}>
+                        <div className="flex items-center justify-between" style={{gap:10}}>
+                          <span style={{...T.small,fontWeight:600,color:C.ink2}}>{t("ticket")}</span>
+                          {o.ticketNo&&<span style={{...T.body,fontWeight:700,color:C.ink,...LTR,fontFamily:"var(--font-app)"}}>{o.ticketNo}</span>}
+                        </div>
+                        <div className="flex flex-col" style={{gap:6}}>
+                          {([
+                            [t("trip"), `${o.tripDate}${o.tripTime?` · ${o.tripTime}`:""}`],
+                            [t("departurePoint"), o.departurePoint],
+                            [t("people"), `${o.persons} ${t("person")}`],
+                          ] as [string,string|undefined][])
+                            /* الحقل الغائب يُحذف لا يُعرض «—»: نقطة انطلاق
+                               فارغة على تذكرة أسوأ من سطرٍ غير موجود. */
+                            .filter(([,v])=>!!v&&v!=="—")
+                            .map(([l,v])=>(
+                              <div key={l} className="flex items-center justify-between" style={{gap:10}}>
+                                <span style={{...T.small,color:C.ink2}}>{l}</span>
+                                <span className="truncate" style={{...T.small,fontWeight:600,color:C.ink,textAlign:"end"}}>{v}</span>
+                              </div>
+                            ))}
+                        </div>
+                        <div className="flex flex-col items-center" style={{gap:6}}>
+                          <QRBlock seed={o.ticketNo||o.id} size={110}/>
+                          <div style={{...T.small,color:C.ink2}}>{t("showAtGate")}</div>
+                        </div>
                       </div>}
                   </div>
                 ))
               : <div className="text-center py-10" style={{...T.body,color:C.ink2}}>{t("noBookings")}</div>}
           <div style={{height:8}}/>
         </div>
-        <BottomBar/>
+        <BottomBar screen={screen} onNav={setScreen} t={t}/>
       </>}
 
       {/* ═══ LOGIN — الجوال ═══ */}
       {screen==="login"&&
         <FlowScreen
-          title={t("loginOrSignup")} subtitle={t("phoneLead")} step={1}
+          title={t("loginOrSignup")} subtitle={t(SKIP_OTP?"phoneLeadNoOtp":"phoneLead")} step={1}
           onClose={()=>setScreen(intent==="track"?"track":"listing")}
           cta={beginLogin} ctaLabel={t("continueBtn")} ctaBusy={sending}
           ctaDisabled={!validPhone(loginPhone)} error={otpErr}>
@@ -1073,7 +1096,7 @@ export function CustomerApp(){
 
       {/* ═══ PROFILE ═══ */}
       {screen==="profile"&&<>
-        <AppBar title={t("profile")}/>
+        <AppBar title={t("profile")} dir={dir} lang={lang} onLang={setLang} t={t}/>
         <Account
           session={session} onSession={setSession}
           lang={lang} setLang={setLang} t={t}
@@ -1081,7 +1104,7 @@ export function CustomerApp(){
           onLogout={logout}
           onBookings={()=>setScreen("track")}
         />
-        <BottomBar/>
+        <BottomBar screen={screen} onNav={setScreen} t={t}/>
       </>}
 
       </div>

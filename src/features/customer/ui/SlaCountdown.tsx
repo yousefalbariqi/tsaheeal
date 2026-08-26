@@ -99,8 +99,10 @@ export function SlaCountdown({ submittedAt, t }: {
 
       <span style={{ ...T.small, fontWeight: 400, color: C.ink3, textAlign: "center" }}>
         {t("workHours")
-          .replace("{from}", String(OPEN_HOUR))
-          .replace("{to}", String(CLOSE_HOUR - 12))}
+          .replace("{from}", String(OPEN_HOUR()))
+          /* الإغلاق يُعرض بنظام ١٢ ساعة («١٠ مساءً»)، فما بعد الظهر
+             يُنقص ١٢. ونافذةٌ تُغلق قبل الظهر تُعرض كما هي. */
+          .replace("{to}", String(CLOSE_HOUR() > 12 ? CLOSE_HOUR() - 12 : CLOSE_HOUR()))}
       </span>
     </div>
   );

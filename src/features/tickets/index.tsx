@@ -6,6 +6,9 @@ import type { TicketEntry } from "@/types";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { useStore } from "@/store/useStore";
+import { Pager, usePaged } from "@/components/Pager";
+import { OrgLine } from "@/components/OrgLine";
+import { QRBlock } from "@/components/QRBlock";
 
 /* ─── Ticket Print View ─── */
 export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void}) {
@@ -40,10 +43,20 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
             </div>
           </div>
 
-          {/* Route strip */}
+          {/* شريط المسار — من بيانات التذكرة لا نصّاً ثابتاً.
+
+              كان مكتوباً «الرياض ← مكة المكرمة» حرفياً في كل تذكرة: رحلةٌ
+              تنطلق من جدة تُصدر تذكرةً تقول الرياض، وباقة الحرمين تقول
+              مكة وحدها. ونقطة الانطلاق الحقيقية كانت مطبوعة أسفل الورقة
+              نفسها — فالتذكرة تناقض نفسها في موضعين منها.
+
+              الوجهة تُستنتج من اسم الباقة لأن جدول tickets لا يحمل عموداً
+              لها. استنتاجٌ من نصّ، وهو أضعف من عمود — لكنه أصدق من ثابت،
+              وهو نفس ما تفعله بطاقات الإحصاء أعلى هذه الصفحة. العمود
+              محلّه ensure_booking_docs متى استحقّ التغيير. */}
           <div className="px-8 py-5 flex items-center gap-4" style={{background:B.cream,borderBottom:`1px solid ${B.border}`}}>
-            <div className="text-center">
-              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"var(--font-app)"}}>الرياض</div>
+            <div className="text-center min-w-0">
+              <div className="font-extrabold text-xl truncate" style={{color:B.black,fontFamily:"var(--font-app)"}}>{ticket.departurePoint||"—"}</div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>نقطة الانطلاق</div>
             </div>
             <div className="flex-1 flex items-center gap-2">
@@ -51,8 +64,10 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{background:B.primary}}>🕋</div>
               <div className="flex-1 h-px" style={{background:B.border}}/>
             </div>
-            <div className="text-center">
-              <div className="font-extrabold text-xl" style={{color:B.black,fontFamily:"var(--font-app)"}}>مكة المكرمة</div>
+            <div className="text-center min-w-0">
+              <div className="font-extrabold text-xl truncate" style={{color:B.black,fontFamily:"var(--font-app)"}}>
+                {ticket.packageName.includes("المدينة")?"مكة والمدينة":"مكة المكرمة"}
+              </div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>الوجهة</div>
             </div>
           </div>
@@ -110,30 +125,24 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
             </div>
           </div>
 
-          {/* QR placeholder + departure */}
+          {/* رمز التحقّق + الإجمالي */}
           <div className="px-8 py-5 flex items-center gap-6 flex-wrap">
+            {/* رمز حقيقي لا نمطاً يشبهه: كان هنا خمسة وعشرون مربّعاً ثابتة
+                — نفس الشكل على كل تذكرة، لا يقرؤه ماسح، ولا يفرّق بين
+                تذكرتين. الموظف على باب الحافلة كان يحمل ورقةً بزينة.
+                QRBlock هو نفسه المستعمل في الفاتورة وواجهة المستفيد. */}
             <div className="flex flex-col items-center gap-1">
-              <div className="w-20 h-20 rounded-xl flex items-center justify-center" style={{background:B.cream,border:`1px solid ${B.border}`}}>
-                {/* QR visual placeholder — deterministic pattern */}
-                {(()=>{
-                  const P=[1,0,1,0,1,0,1,1,0,1,1,0,0,1,0,0,1,1,0,0,1,0,1,0,1];
-                  return (
-                    <div className="grid grid-cols-5 gap-0.5">
-                      {P.map((v,k)=><div key={k} className="w-3 h-3 rounded-sm" style={{background:v?B.primary:B.cream}}/>)}
-                    </div>
-                  );
-                })()}
-              </div>
+              <QRBlock seed={ticket.ticketNo} size={80}/>
               <div className="text-xs" style={{color:B.muted}}>رمز التحقق</div>
             </div>
             <div>
-              <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>نقطة الانطلاق</div>
-              <div className="font-bold text-sm" style={{color:B.black}}>{ticket.departurePoint}</div>
+              <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الإجمالي المدفوع</div>
+              <div className="font-bold text-sm" style={{color:B.black,fontFamily:"var(--font-app)"}}>{ticket.total.toLocaleString("en-US")} ر.س</div>
             </div>
           </div>
           {/* Footer — بيانات الشركة الرسمية فقط */}
           <div className="px-8 py-4 text-center" style={{borderTop:`1px solid ${B.border}`}}>
-            <div className="text-xs font-bold" style={{color:B.text2}}>تساهيل العمرة · السجل التجاري: 1010537391 · tasaaheel.sa</div>
+            <div className="text-xs font-bold" style={{color:B.text2}}><OrgLine/></div>
           </div>
         </div>
       </div>
@@ -151,6 +160,11 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const filtered = tickets.filter(t=>
     !search||(t.ticketNo+t.bookingId+t.clientName+t.clientPhone).toLowerCase().includes(search.toLowerCase())
   );
+
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, search);
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
@@ -178,7 +192,7 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t,i)=>(
+              {pg.rows.map((t,i)=>(
                 <tr key={t.ticketNo} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
                   <td style={{padding:"14px 16px",fontWeight:800,fontFamily:"var(--font-app)",color:B.gold}}>{t.ticketNo}</td>
                   <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{t.bookingId}</td>
@@ -204,7 +218,7 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         </div>
         {/* Mobile cards */}
         <div className="md:hidden flex flex-col gap-3">
-          {filtered.map(t=>(
+          {pg.rows.map(t=>(
             <motion.div key={t.ticketNo} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
               className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="px-4 py-3 flex items-center justify-between" style={{background:B.primary}}>
@@ -221,6 +235,7 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
           ))}
           {filtered.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Ticket size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد تذاكر مطابقة</p></div>}
         </div>
+        <Pager p={pg} unit="تذكرة"/>
       </main>
       <AnimatePresence>
         {curTicket&&<TicketCard ticket={curTicket} onClose={()=>setTicketId(null)}/>}

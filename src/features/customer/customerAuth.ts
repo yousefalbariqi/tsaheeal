@@ -118,12 +118,103 @@ export function authErrorMessage(f: AuthFail, t: (k: string) => string): string 
     case "wrong_code":        return t("errOtpWrong");
     case "expired":           return t("errOtpExpired");
     case "rate_limited":      return t("errRateLimited").replace("{n}", String(f.retryAfterSec ?? RESEND_COOLDOWN));
-    case "provider_disabled": return t("errSmsProvider");
+    /* في وضع «بلا تحقّق» لا يُرسَل رمز أصلاً، فرسالة «تعذّر إرسال الرمز»
+       تصف عطلاً غير الواقع وتُرسل من يقرؤها يبحث عن رسالة لم تُطلَب. */
+    case "provider_disabled": return t(SKIP_OTP ? "errLoginUnavailable" : "errSmsProvider");
     case "signups_disabled":  return t("errSignupDisabled");
     case "network":           return t("errNetwork");
     case "same_phone":        return t("errSamePhone");
     default:                  return t("errUnknown");
   }
+}
+
+/* ═══════════════ دخول بلا تحقّق (راية التجربة) ═══════════════
+
+   ⚠️ هذا الوضع يُلغي التحقّق من ملكية الرقم. من يعرف رقم جوال يدخل على
+   حساب صاحبه ويرى حجوزاته ويحجز باسمه. مقصودٌ للتجربة الداخلية وحدها،
+   ويُطفأ بحذف VITE_CUSTOMER_SKIP_OTP من متغيّرات البيئة — لا تعديل شفرة.
+
+   الجلسة هنا *حقيقية* لا وهمية، وهذا هو الفرق بينها وبين وضع DEV_CODE
+   الذي حُذف من هذا الملف: ذاك كان يكتب هوية نصّية في localStorage بلا
+   JWT، فكل كتابات العميل تُرفض بـ401 أو تذهب لذاكرة الصفحة — يرى
+   المستخدم «تم استلام طلبك» ولا يصل اللوحة شيء. هنا نُنشئ مستخدم
+   Supabase برقم جوال وكلمة مرور مشتقّة لا يراها المستخدم ولا يكتبها،
+   فيخرج JWT صحيح ويبقى auth.uid() وauth_phone() عاملَين، وتمرّ حراسة
+   create_public_booking كما هي. لا ترحيل ولا تليين لأي سياسة.
+
+   شرط واحد في لوحة Supabase: Authentication ← Providers ← Phone مفعّل
+   مع إطفاء «Confirm phone». بلا الإطفاء يعود GoTrue ليطلب رمزاً. */
+export const SKIP_OTP = import.meta.env.VITE_CUSTOMER_SKIP_OTP === "1";
+
+/* كلمة مرور مشتقّة من الرقم: ليست سرّاً ولا تدّعي أنها سرّ — وظيفتها
+   إرضاء شرط GoTrue بوجود كلمة مرور، لا حماية الحساب. الحماية في هذا
+   الوضع معدومة بالتعريف، وهذا ما تعنيه الراية. */
+const derivedPassword = (phone: string) => `tsh.${waNormalize(phone)}.pilot`;
+
+/** يدخل بالرقم وحده. يُنشئ الحساب إن لم يكن موجوداً، ثم يعيد جلسة JWT. */
+export async function signInNoOtp(phone: string): Promise<{ ok: true; session: CustomerSession } | AuthFail> {
+  if (!isSaudiMobile(phone)) return { ok: false, kind: "invalid_phone" };
+  if (!isCustomerAuthEnabled) return notReady();
+
+  const id = e164(phone);
+  const password = derivedPassword(phone);
+
+  /* الدخول أولاً ثم الإنشاء عند الفشل — لا العكس: signUp على حساب قائم
+     يعيد في الإصدارات الحديثة مستخدماً وهمياً بلا جلسة (حمايةً من تعداد
+     الحسابات)، فلا نعرف منه أن الحساب موجود. */
+  let { data, error } = await customerSupabase!.auth.signInWithPassword({ phone: id, password });
+
+  if (error) {
+    const { data: up, error: upErr } = await customerSupabase!.auth.signUp({ phone: id, password });
+    if (upErr) return mapNoOtpError(upErr);
+    /* مع إطفاء «Confirm phone» يعود signUp بجلسة جاهزة. وإن لم يعُد —
+       لأن الإعداد ما زال يطلب تأكيداً — فمحاولة الدخول أدناه تكشفها
+       برسالة واضحة بدل أن نعلّق المستخدم على شاشة صامتة. */
+    if (up.session) return { ok: true, session: await bootstrapSession(up.session) };
+    ({ data, error } = await customerSupabase!.auth.signInWithPassword({ phone: id, password }));
+    if (error) return mapNoOtpError(error);
+  }
+
+  if (!data.session) return { ok: false, kind: "unknown" };
+  return { ok: true, session: await bootstrapSession(data.session) };
+}
+
+/* الخطأ الغالب هنا ليس خطأ المستخدم بل إعدادٌ في لوحة Supabase، وهو
+   ما لا تخمّنه رسالةٌ عامة. يُطبع صريحاً في الطرفية لمن ينشر. */
+function mapNoOtpError(e: unknown): AuthFail {
+  const f = mapAuthError(e);
+  if (f.kind === "provider_disabled" || f.kind === "signups_disabled") {
+    console.error(
+      "[auth] وضع «بلا تحقّق» يحتاج إعداداً في لوحة Supabase:\n" +
+      "  Authentication ← Providers ← Phone: مفعّل، و«Confirm phone» مطفأ.\n" +
+      "  Authentication ← Sign In / Providers: السماح بإنشاء حسابات جديدة.\n" +
+      "  التفصيل من المزوّد:", f.raw,
+    );
+  }
+  return f;
+}
+
+/** تغيير الرقم بلا رمز — نفس الراية. يبدّله في auth.users مباشرةً. */
+export async function changePhoneNoOtp(newPhone: string): Promise<{ ok: true; session: CustomerSession } | AuthFail> {
+  if (!isSaudiMobile(newPhone)) return { ok: false, kind: "invalid_phone" };
+  if (!isCustomerAuthEnabled) return notReady();
+  const { data: sess } = await customerSupabase!.auth.getSession();
+  if (waNormalize(sess.session?.user.phone ?? "") === waNormalize(newPhone))
+    return { ok: false, kind: "same_phone" };
+
+  const { error } = await customerSupabase!.auth.updateUser({
+    phone: e164(newPhone),
+    /* كلمة المرور تُشتقّ من الرقم، فتبديل الرقم بلا تبديلها يترك الحساب
+       بمفتاحٍ لا يوافق هويته الجديدة — ويتعذّر الدخول إليه في المرة
+       القادمة. تُبدَّل معه في نفس النداء. */
+    password: derivedPassword(newPhone),
+  });
+  if (error) return mapNoOtpError(error);
+
+  const { error: syncErr } = await customerSupabase!.rpc("sync_my_phone");
+  if (syncErr) console.error("[auth] تعذّرت مزامنة الجوال في الملف:", syncErr);
+  const fresh = await loadSession();
+  return fresh ? { ok: true, session: fresh } : { ok: false, kind: "unknown" };
 }
 
 /* ═══════════════ إرسال الرمز والتحقق ═══════════════ */

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, ImagePlus } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { SupportPriority, SupportStatus, SupportReq } from "@/types";
@@ -6,6 +6,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
 import { newId } from "@/lib/utils";
+import { Field } from "@/components/Field";
+import { onPickMedia } from "@/lib/mediaUpload";
+import { DEFAULT_SETTINGS, fetchSettings } from "@/data/settings";
 
 const SUPPORT_CATS = ["عام","تقني — أخطاء في النظام","مالي — فواتير وتحصيل","محتوى — تعديل النصوص","باقات ورحلات","حجوزات وتذاكر","طلب ميزة جديدة"];
 
@@ -32,6 +35,13 @@ const SUP_STATUS_COLORS:Record<SupportStatus,{bg:string;fg:string}> = {
 };
 
 export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
+  /* بريد الدعم من الإعدادات: كان نصّاً في هذه الشاشة وحدها، فتغييره
+     يستلزم تعديل شفرة. الافتراضي هو نفس البريد القائم. */
+  const [supportEmail,setSupportEmail]=useState(DEFAULT_SETTINGS.internal.supportEmail);
+  useEffect(()=>{ let alive=true;
+    fetchSettings().then(c=>{ if(alive) setSupportEmail(c.internal.supportEmail); }).catch(()=>{});
+    return ()=>{ alive=false; };
+  },[]);
   const [search,setSearch]=useState("");
   const reqs=useStore(s=>s.support); const setReqs=useStore(s=>s.setSupport);
   const [category,setCategory]=useState(SUPPORT_CATS[0]);
@@ -77,19 +87,22 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <div className="font-extrabold text-base mb-5" style={{color:B.black,fontFamily:"var(--font-app)"}}>نموذج إرسال الطلب</div>
             <div className="flex flex-col gap-4">
               <div>
-                <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>القسم</label>
-                <AppSelect value={category} onChange={setCategory} options={SUPPORT_CATS.map(c=>({value:c,label:c}))}/>
+                <Field label="القسم">
+                  <AppSelect value={category} onChange={setCategory} options={SUPPORT_CATS.map(c=>({value:c,label:c}))}/>
+                </Field>
               </div>
               <div>
-                <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عنوان المشكلة</label>
-                <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: لا أستطيع إصدار تذكرة"
-                  className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                <Field label="عنوان المشكلة">
+                  <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: لا أستطيع إصدار تذكرة"
+                    className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                </Field>
               </div>
               <div>
-                <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>وصف المشكلة</label>
-                <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5}
-                  placeholder="اشرح المشكلة بالتفصيل — الخطوات التي أدّت إليها، ما تتوقعه، وما حدث فعلاً..."
-                  className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none resize-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                <Field label="وصف المشكلة">
+                  <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5}
+                    placeholder="اشرح المشكلة بالتفصيل — الخطوات التي أدّت إليها، ما تتوقعه، وما حدث فعلاً..."
+                    className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none resize-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                </Field>
               </div>
               <div>
                 <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>أولوية الطلب</label>
@@ -120,7 +133,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                   {attachments.length<4&&(
                     <label className="flex flex-col items-center justify-center gap-1 cursor-pointer rounded-xl" style={{width:72,height:72,border:`1.5px dashed ${B.border}`,background:B.bg,color:B.muted}}>
                       <ImagePlus size={18}/><span style={{fontSize:9,fontWeight:700}}>إرفاق</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>setAttachments(a=>[...a,reader.result as string]);reader.readAsDataURL(file);e.target.value="";}}/>
+                      <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("support",url=>setAttachments(a=>[...a,url]))}/>
                     </label>
                   )}
                 </div>
@@ -133,7 +146,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
               </button>
               <div className="text-xs text-center" style={{color:B.muted}}>
                 سيتم إرسال الطلب إلى البريد التقني المسجّل في إعدادات النظام
-                {" "}<span style={{fontFamily:"var(--font-app)",color:B.text2}}>support@tasahheel.com</span>
+                {" "}<span style={{fontFamily:"var(--font-app)",color:B.text2}}>{supportEmail}</span>
               </div>
             </div>
           </div>

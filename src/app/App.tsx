@@ -1,11 +1,13 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router";
 import { motion } from "motion/react";
-import { X, Check, ShieldCheck } from "lucide-react";
+import { X, Check, ShieldCheck, AlertTriangle } from "lucide-react";
 import { B } from "@/lib/theme";
 import { Spinner } from "@/components/Spinner";
 import { hideBootSplash } from "@/lib/bootSplash";
-import { fetchBookingForPay, confirmPayment, type PayView } from "@/features/customer/data";
+import { fetchBookingForPay, confirmPayment, verifyDoc, VerifyUnavailableError,
+         type PayView, type VerifyResult } from "@/features/customer/data";
+import { OrgLine } from "@/components/OrgLine";
 
 /* ════════════════════════════════════════════════════════════
    تقسيم الحزمة عند الجذر — الاستيراد الساكن للوحتين كان يجعل البناء
@@ -101,7 +103,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               </div>
               <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>سيصلك إشعار تأكيد عبر الرسائل، وستتحوّل حالة طلبك تلقائياً إلى «مكتمل».</div>
             </div>
-            <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}>تساهيل العمرة · السجل التجاري: 1010537391 · tasaaheel.sa</div>
+            <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}><OrgLine/></div>
           </motion.div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
@@ -173,6 +175,114 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
   );
 }
 
+/* ════════════════════════════════════════════════════════════
+   TICKET VERIFY — صفحة التحقّق من رمز QR (/inv/:id/verify)
+   يفتحها الماسح: موظّف على باب الحافلة، أو حاملُ التذكرة نفسه. بلا
+   جلسة — الكاميرا لا تسجّل دخولاً. كانت هذه الصفحة غير موجودة، وقاعدة
+   rewrite في vercel.json تبتلع المسار وتفتح الاستكشاف: يمسح الموظف
+   الرمز فيحصل على قائمة باقات.
+════════════════════════════════════════════════════════════ */
+/* حالات الحجز التي تجعل التذكرة صالحة للصعود. ما عداها يُقال صراحةً:
+   تذكرةٌ لحجزٍ أُلغي يجب أن تُقرأ «ملغى» على الباب لا «صالحة». */
+const VALID_STATUSES = ["confirmed", "verified"];
+const STATUS_AR: Record<string, string> = {
+  new: "جديد", reviewing: "قيد المراجعة", needs_edit: "يحتاج تعديلاً",
+  rejected: "مرفوض", accepted: "مقبول", awaiting_payment: "بانتظار الدفع",
+  awaiting_trip: "بانتظار الرحلة", paid: "تم الدفع", verifying: "قيد التحقق",
+  verified: "تم التحقق", confirmed: "مؤكد", cancelled: "ملغى",
+};
+
+function VerifyPage({docId}:{docId:string}) {
+  const [res,setRes]=useState<VerifyResult|null>(null);
+  const [state,setState]=useState<"loading"|"ok"|"none"|"unavailable"|"error">("loading");
+
+  useEffect(()=>{ let alive=true;
+    verifyDoc(docId)
+      .then(r=>{ if(!alive) return; setRes(r); setState(r?"ok":"none"); })
+      .catch(e=>{ if(!alive) return;
+        if(e instanceof VerifyUnavailableError) setState("unavailable");
+        else { console.error("verify_doc",e); setState("error"); } });
+    return ()=>{ alive=false; };
+  },[docId]);
+  useEffect(()=>{ if(state!=="loading") hideBootSplash(); },[state]);
+
+  if(state==="loading") return null;
+
+  const valid = !!res && VALID_STATUSES.includes(res.status);
+  const tone = valid ? {bg:"#E3F3E8",fg:"#1E7A44",bd:"#C4E4CE"} : {bg:"#FBE6E6",fg:"#BE2626",bd:"#F3C9C9"};
+
+  return (
+    <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
+      style={{fontFamily:"var(--font-app)",background:`linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 55%,${B.black} 100%)`}}>
+      <div className="w-full my-6" style={{maxWidth:420}}>
+        <div className="text-center mb-5">
+          <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
+          <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TICKET VERIFICATION</div>
+        </div>
+
+        <div className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
+          {state==="ok"&&res ? <>
+            <div className="flex flex-col items-center text-center px-6 py-7" style={{background:tone.bg,borderBottom:`1px solid ${tone.bd}`}}>
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{background:"#fff"}}>
+                {valid?<Check size={30} style={{color:tone.fg}}/>:<AlertTriangle size={28} style={{color:tone.fg}}/>}
+              </div>
+              <div className="font-extrabold text-lg" style={{color:tone.fg}}>
+                {valid?"تذكرة صالحة":`غير صالحة — ${STATUS_AR[res.status]??res.status}`}
+              </div>
+              {res.ticketNo&&<div className="text-sm mt-1" style={{color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>{res.ticketNo}</div>}
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-2.5">
+              {([
+                ["الاسم",res.clientName],
+                ["الباقة",res.packageName],
+                ["تاريخ الرحلة",`${res.tripDate}${res.tripTime&&res.tripTime!=="—"?` · ${res.tripTime}`:""}`],
+                ["نقطة الانطلاق",res.departurePoint],
+                ["عدد المعتمرين",`${res.persons}`],
+                ["رقم الطلب",res.bookingId],
+              ] as [string,string][])
+                .filter(([,v])=>!!v&&v!=="—")
+                .map(([l,v])=>(
+                  <div key={l} className="flex items-center justify-between gap-3">
+                    <span className="text-sm" style={{color:B.muted}}>{l}</span>
+                    <span className="text-sm font-bold truncate" style={{color:B.black,textAlign:"end"}}>{v}</span>
+                  </div>
+                ))}
+            </div>
+            {/* الاسم مقصوص في القاعدة عمداً — يُقال هنا حتى لا يُقرأ نقصاً. */}
+            <div className="px-6 pb-5 text-xs leading-relaxed" style={{color:B.muted}}>
+              الاسم مختصر لحماية الخصوصية. طابِق الوثيقة الرسمية للمعتمر مع كشف الرحلة عند الصعود.
+            </div>
+          </> : (
+            <div className="px-6 py-10 text-center">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{background:"#FBE6E6"}}>
+                <X size={28} style={{color:"#BE2626"}}/>
+              </div>
+              <div className="font-extrabold text-lg" style={{color:"#000"}}>
+                {state==="none"?"لا يوجد مستند بهذا الرقم":"تعذّر التحقّق الآن"}
+              </div>
+              <div className="text-sm mt-2 leading-relaxed" style={{color:B.muted}}>
+                {state==="none"
+                  ? "تأكّد من الرمز، أو راجع موظف الرحلة."
+                  : "الرقم المقروء من الرمز صحيح، لكن خدمة التحقّق غير متاحة الآن — راجع موظف الرحلة."}
+              </div>
+              <div className="inline-block mt-4 px-4 py-2 rounded-xl text-sm font-bold"
+                style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>
+                {docId}
+              </div>
+            </div>
+          )}
+          <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}><OrgLine/></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VerifyRoute() {
+  const { id } = useParams();
+  return <VerifyPage docId={decodeURIComponent(id ?? "")}/>;
+}
+
 function PayRoute() {
   const { id } = useParams();
   const [params] = useSearchParams();
@@ -195,6 +305,7 @@ export default function App() {
         <Route path="/admin/*" element={<AdminApp/>}/>
         <Route path="/pay/:id" element={<PayRoute/>}/>
         <Route path="/pay" element={<Navigate to="/" replace/>}/>
+        <Route path="/inv/:id/verify" element={<VerifyRoute/>}/>
         <Route path="/*" element={<CustomerApp/>}/>
       </Routes>
     </Suspense>

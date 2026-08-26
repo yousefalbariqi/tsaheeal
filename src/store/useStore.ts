@@ -182,14 +182,26 @@ export const useStore = create<StoreState>((set, get) => ({
     /* إعادة جلب مؤجّلة: حجز واحد يولّد أحداثاً على bookings و
        booking_pilgrims و booking_seats معاً — بلا التأجيل ثلاث جولات جلب. */
     let timer: ReturnType<typeof setTimeout> | null = null;
+    /* التذاكر والفواتير تُجلب مع الحجوزات وإن لم يكن لهما اشتراك.
+
+       سببه أنهما لا تُكتبان من الواجهة أصلاً: حارس trg_booking_confirm_docs
+       (ترحيل 20260823_wave2) يُنشئهما في القاعدة عند صيرورة الحجز
+       «مؤكداً». فكان الموظف يضغط «تحقق وتأكيد»، ثم يفتح «التذاكر» فلا
+       يجد شيئاً — والتذكرة موجودة في القاعدة منذ لحظتها. الجدولان ليسا
+       في منشور supabase_realtime (انظر 20260814)، فاشتراكٌ عليهما يصمت.
+
+       ولا حاجة إليه: الحارس مؤجَّل داخل معاملة تحديث الحجز نفسها، فحدث
+       bookings لا يُبثّ إلا بعد الإيداع — أي بعد أن صار الصفّان قابلين
+       للقراءة. الجلب هنا يراهما دائماً. */
     const refetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(async () => {
         try {
-          const [bookings, customRequests, trips] = await Promise.all([
+          const [bookings, customRequests, trips, tickets, payments] = await Promise.all([
             repo.bookings.list(), repo.customRequests.list(), repo.trips.list(),
+            repo.tickets.list(), repo.payments.list(),
           ]);
-          set({ bookings, customRequests, trips });
+          set({ bookings, customRequests, trips, tickets, payments });
         } catch (e) { console.error("[live] فشل التحديث اللحظي:", e); }
       }, 400);
     };

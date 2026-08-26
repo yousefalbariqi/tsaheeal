@@ -12,6 +12,8 @@ import { useStore } from "@/store/useStore";
 import { isSupabaseEnabled } from "@/supabase/client";
 import { toast } from "sonner";
 import { createAuthUser, updateProfile, deleteProfile, setProfileStatus } from "@/supabase/adminUsers";
+import { Field } from "@/components/Field";
+import { Pager, usePaged } from "@/components/Pager";
 
 const ROLE_COLORS:Record<UserRole,{bg:string;fg:string}> = {
   "مدير عام":     {bg:"#FBF3D6",fg:"#8A6A08"},
@@ -42,20 +44,23 @@ function UserModal({user,onSave,onClose}:{user:Partial<SystemUser>;onSave:(u:Par
         </div>
         <div className="p-6 flex flex-col gap-4">
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الاسم الكامل</label>
-            <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="الاسم الكامل"
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            <Field label="الاسم الكامل">
+              <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="الاسم الكامل"
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>البريد الإلكتروني</label>
-            <input value={form.email} onChange={e=>f("email")(e.target.value)} placeholder="name@tasahheel.com" type="email" disabled={isEdit}
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"var(--font-app)",background:isEdit?B.bg:"#fff",opacity:isEdit?0.7:1}}/>
+            <Field label="البريد الإلكتروني">
+              <input value={form.email} onChange={e=>f("email")(e.target.value)} placeholder="name@tasahheel.com" type="email" disabled={isEdit}
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"var(--font-app)",background:isEdit?B.bg:"#fff",opacity:isEdit?0.7:1}}/>
+            </Field>
           </div>
           {!isEdit && isSupabaseEnabled && (
             <div>
-              <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>كلمة المرور <span style={{color:B.gold}}>*</span></label>
-              <input value={pw} onChange={e=>setPw(e.target.value)} placeholder="6 أحرف على الأقل" type="password"
-                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,direction:"ltr",textAlign:"left"}}/>
+              <Field label={<>كلمة المرور <span style={{color:B.gold}}>*</span></>}>
+                <input value={pw} onChange={e=>setPw(e.target.value)} placeholder="6 أحرف على الأقل" type="password"
+                  className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,direction:"ltr",textAlign:"left"}}/>
+              </Field>
               <p className="text-xs mt-1" style={{color:B.muted}}>يُنشأ حساب دخول فعلي لهذا المستخدم في Supabase.</p>
             </div>
           )}
@@ -98,6 +103,11 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const filtered = users.filter(u=>
     !search||(u.name+u.email+u.role).toLowerCase().includes(search.toLowerCase())
   );
+
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, search);
 
   async function saveUser(form:Partial<SystemUser>, pw:string):Promise<string|void> {
     if(editTarget) {
@@ -174,7 +184,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u,i)=>{
+              {pg.rows.map((u,i)=>{
                 const rc=ROLE_COLORS[u.role];
                 return (
                   <tr key={u.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
@@ -212,7 +222,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         </div>
         {/* Mobile cards */}
         <div className="md:hidden flex flex-col gap-3">
-          {filtered.map(u=>{
+          {pg.rows.map(u=>{
             const rc=ROLE_COLORS[u.role];
             return (
               <motion.div key={u.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
@@ -240,6 +250,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             );
           })}
         </div>
+        <Pager p={pg} unit="مستخدم"/>
       </main>
       <AnimatePresence>
         {showModal&&<UserModal user={editTarget||{}} onSave={saveUser} onClose={()=>{setShowModal(false);setEditTarget(null);}}/>}

@@ -13,6 +13,7 @@ import { AppSelect } from "@/components/AppSelect";
 import { ArabicDatePicker } from "@/components/ArabicDatePicker";
 import { useStore } from "@/store/useStore";
 import { destBadge } from "@/features/packages";
+import { Field } from "@/components/Field";
 
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 const tripLabel = (t:Trip, pkgName:string) => pkgName && pkgName!=="—" ? pkgName : (t.departurePoint || t.id);
@@ -24,13 +25,16 @@ function LaunchTripModal({
   packages:Pkg[];transports:Transport[];branches:Branch[];
   prefillPkgId?:string;onSave:(t:Trip)=>void;onClose:()=>void;
 }) {
-  const [form,setForm]=useState<Omit<Trip,"id"|"bookedSeats"|"waitingSeats">>({
-    packageId:prefillPkgId??"",transportId:"",hotelId:"",branchId:"",busPlate:"",busCode:"",
+  /* حقول الباقة — المواصلة والفندق والسعة والسعر والإعدادات — لا تُخزَّن في
+     النموذج بل تُشتقّ من الباقة المختارة عند العرض والحفظ. تخزينها كان يُطلق
+     الرحلة بصفر مقعد حين تُفتح النافذة بباقة مُمرَّرة مسبقاً (زر «إطلاق رحلة»
+     داخل بطاقة الباقة): الاشتقاق كان في pickPackage وحده، وهو لا يُستدعى. */
+  const [form,setForm]=useState<Omit<Trip,"id"|"bookedSeats"|"waitingSeats"|"transportId"|"hotelId"|"seats"|"price"|"settings">>({
+    packageId:prefillPkgId??"",branchId:"",busPlate:"",busCode:"",
     departureDate:"",returnDate:"",departureTime:"22:00",
     departurePoint:"",departureMapUrl:"",
-    seats:0,status:"open",price:0,
+    status:"open",
     drivers:[{id:uid(),name:"",phone:""}],
-    settings:{...DEFAULT_TRIP_SETTINGS},
   });
   const [depMode,setDepMode]=useState<"branch"|"custom">("branch");
   const [busy,setBusy]=useState(false);
@@ -41,16 +45,9 @@ function LaunchTripModal({
 
   const activeBranches = branches.filter(b=>b.isActive);
 
-  function pickPackage(pid:string){
-    const p=packages.find(x=>x.id===pid);
-    const tr=p?transports.find(t=>t.id===p.transportId):undefined;
-    setForm(f=>({
-      ...f, packageId:pid,
-      transportId:p?.transportId??"", hotelId:p?.hotelId??"",
-      seats:tr?.seats ?? f.seats, price:p?.marketPrice ?? f.price,
-      settings:p?.settings?{...p.settings}:f.settings,
-    }));
-  }
+  const selPkg = packages.find(p=>p.id===form.packageId);
+  const selTransport = selPkg ? transports.find(t=>t.id===selPkg.transportId) : undefined;
+  const seats = selTransport?.seats ?? 0;   /* سعة الرحلة = سعة مواصلة الباقة */
   function pickBranch(bid:string){
     const b=activeBranches.find(x=>x.id===bid);
     setForm(f=>({...f,branchId:bid,departurePoint:b?b.name:"",departureMapUrl:b?.gmapUrl??""}));
@@ -61,14 +58,19 @@ function LaunchTripModal({
   const updDriver=(id:string,field:"name"|"phone",val:string)=>set("drivers",form.drivers.map(d=>d.id===id?{...d,[field]:val}:d));
 
   const depOk = depMode==="branch" ? !!form.branchId : (!!form.departureMapUrl.trim()||!!form.departurePoint.trim());
-  const canSave = !!form.packageId && form.drivers.some(d=>d.name.trim()) && !!form.busPlate.trim()
+  /* سعة صفر تُطلق رحلة لا تقبل حجزاً — تُمنع عند المصدر لا عند أول معتمر. */
+  const canSave = !!form.packageId && seats>0 && form.drivers.some(d=>d.name.trim()) && !!form.busPlate.trim()
     && !!form.busCode.trim() && depOk && !!form.departureDate && !!form.departureTime;
   const returnInvalid = !!form.returnDate && !!form.departureDate && form.returnDate < form.departureDate;
 
   function handleSave(){
     if(!canSave||returnInvalid||busy) return;
     setBusy(true);
-    onSave({...form,id:newId("TRP"),bookedSeats:0,waitingSeats:0});
+    onSave({...form,id:newId("TRP"),
+      transportId:selPkg?.transportId??"", hotelId:selPkg?.hotelId??"",
+      seats, price:selPkg?.marketPrice??0,
+      settings:selPkg?.settings?{...selPkg.settings}:{...DEFAULT_TRIP_SETTINGS},
+      bookedSeats:0,waitingSeats:0});
   }
 
   return (
@@ -91,10 +93,15 @@ function LaunchTripModal({
         <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{scrollbarWidth:"none"}}>
           {/* 1) الباقة */}
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الباقة {req}</label>
-            <AppSelect value={form.packageId} placeholder="اختر الباقة" onChange={pickPackage}
-              options={packages.map(p=>({value:p.id,label:p.name}))}/>
-            {form.packageId&&<div className="text-xs mt-1.5" style={{color:B.muted}}>السعر والفندق والسعة ({form.seats} مقعد) مأخوذة من الباقة.</div>}
+            <Field label={<>الباقة {req}</>}>
+              <AppSelect value={form.packageId} placeholder="اختر الباقة" onChange={v=>set("packageId",v)}
+                options={packages.map(p=>({value:p.id,label:p.name}))}/>
+            </Field>
+            {form.packageId&&(seats>0
+              ? <div className="text-xs mt-1.5" style={{color:B.muted}}>السعر ({selPkg?.marketPrice??0} ر.س) والفندق والسعة ({seats} مقعد) مأخوذة من الباقة.</div>
+              : <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
+                  ⚠ سعة هذه الباقة صفر — {selPkg?.transportId?"المواصلة المرتبطة بها غير موجودة أو سعتها صفر":"الباقة غير مرتبطة بمواصلة"}. اربط الباقة بمواصلة ذات مقاعد ثم أعد المحاولة.
+                </div>)}
           </div>
           {/* 2) السائقون */}
           <div>
@@ -115,10 +122,12 @@ function LaunchTripModal({
           </div>
           {/* 3) بيانات الباص */}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم لوحة الباص {req}</label>
-              <input className={inp} style={ist} value={form.busPlate} placeholder="أ ب ج 1234" onChange={e=>set("busPlate",e.target.value)}/></div>
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الرقم التعريفي للباص {req}</label>
-              <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.busCode} placeholder="1" onChange={e=>set("busCode",e.target.value)}/></div>
+            <div><Field label={<>رقم لوحة الباص {req}</>}>
+                   <input className={inp} style={ist} value={form.busPlate} placeholder="أ ب ج 1234" onChange={e=>set("busPlate",e.target.value)}/>
+                 </Field></div>
+            <div><Field label={<>الرقم التعريفي للباص {req}</>}>
+                   <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.busCode} placeholder="1" onChange={e=>set("busCode",e.target.value)}/>
+                 </Field></div>
           </div>
           {/* 4) نقطة الانطلاق */}
           <div>
@@ -142,19 +151,22 @@ function LaunchTripModal({
           </div>
           {/* 5) التواريخ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ الذهاب {req}</label>
-              <ArabicDatePicker value={form.departureDate} onChange={v=>set("departureDate",v)} minDate={todayStart()}/></div>
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ العودة</label>
-              <ArabicDatePicker value={form.returnDate} onChange={v=>set("returnDate",v)} minDate={form.departureDate?parseYMDDate(form.departureDate):todayStart()} invalid={returnInvalid}/>
+            <div><Field label={<>تاريخ الذهاب {req}</>}>
+                   <ArabicDatePicker value={form.departureDate} onChange={v=>set("departureDate",v)} minDate={todayStart()}/>
+                 </Field></div>
+            <div><Field label="تاريخ العودة">
+                   <ArabicDatePicker value={form.returnDate} onChange={v=>set("returnDate",v)} minDate={form.departureDate?parseYMDDate(form.departureDate):todayStart()} invalid={returnInvalid}/>
+                 </Field>
               {returnInvalid&&<div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>تاريخ العودة لا يسبق الذهاب</div>}</div>
           </div>
           {/* 6) وقت الانطلاق */}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>وقت الانطلاق {req}</label>
-              <input type="time" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.departureTime} onChange={e=>set("departureTime",e.target.value)}/></div>
+            <div><Field label={<>وقت الانطلاق {req}</>}>
+                   <input type="time" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.departureTime} onChange={e=>set("departureTime",e.target.value)}/>
+                 </Field></div>
           </div>
           {!canSave&&<div className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08"}}>
-            ⚠ أكمل: الباقة، سائق واحد على الأقل، لوحة الباص ورقمه التعريفي، نقطة الانطلاق، تاريخ ووقت الذهاب.
+            ⚠ أكمل: الباقة (بسعة مقاعد أكبر من صفر)، سائق واحد على الأقل، لوحة الباص ورقمه التعريفي، نقطة الانطلاق، تاريخ ووقت الذهاب.
           </div>}
         </div>
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>

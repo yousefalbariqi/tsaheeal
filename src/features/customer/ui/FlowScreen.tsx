@@ -6,7 +6,7 @@
    للخلف، والـ✕ في inline-end (يسار الشاشة) — كما في اللقطات بالضبط.
    لا يُعاد استخدام Sheet من kit.tsx هنا: الـ✕ فيه أول ابن flex فيظهر
    في الجهة المقابلة. */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, ArrowLeft } from "lucide-react";
 import { C, T, SPACE, R, FONT, SHADOW, STICKY_H, flipRTL } from "./tokens";
 import { useDir, CTAButton } from "./kit";
@@ -158,6 +158,11 @@ export function StackField({
 }) {
   const dir = useDir();
   const [focus, setFocus] = useState(false);
+  /* العنوان كان نصّاً مجاوراً: النقر عليه لا يضع المؤشّر في الحقل،
+     وقارئ الشاشة يقرأ الحقل بلا اسم — في نموذج الاسم القانوني
+     والبريد، حيث الحقلان متجاوران بلا فارق ظاهر لمن لا يرى. */
+  const uid = useId();
+  const fieldId = `${uid}-f`, errId = `${uid}-e`;
   return (
     <div style={{
       position: "relative", padding: "10px 14px 8px",
@@ -167,10 +172,13 @@ export function StackField({
       borderRadius: focus || error ? R.chip : undefined,
     }}>
       <div className="flex items-center justify-between" style={{ gap: 8 }}>
-        <label style={{ ...T.small, color: C.ink2, fontWeight: 400 }}>{label}</label>
+        <label htmlFor={fieldId} style={{ ...T.small, color: C.ink2, fontWeight: 400 }}>{label}</label>
         {badge}
       </div>
       <input
+        id={fieldId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errId : undefined}
         value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder}
         type={type} inputMode={inputMode} maxLength={maxLength} readOnly={readOnly}
         onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
@@ -180,6 +188,10 @@ export function StackField({
           ...(ltr ? { direction: "ltr" as const, textAlign: dir === "rtl" ? ("right" as const) : ("left" as const) } : {}),
         }}
       />
+      {/* رسالة الخطأ إن كانت نصّاً — بعض النداءات تمرّر مسافة كعلامة
+          خطأ بصرية فقط، فلا يُعلَن للقارئ نصٌّ فارغ. */}
+      {error && error.trim() &&
+        <div id={errId} style={{ ...T.small, color: C.danger, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -192,6 +204,8 @@ export function PhoneField({ value, onChange, error, placeholder = "5X XXX XXXX"
   const dir = useDir();
   const [focus, setFocus] = useState(false);
   const ring = focus ? `0 0 0 2px ${C.ink}` : undefined;
+  const uid = useId();
+  const errId = `${uid}-e`;
   return (
     <div>
       <div className="flex items-stretch" dir="ltr"
@@ -205,6 +219,9 @@ export function PhoneField({ value, onChange, error, placeholder = "5X XXX XXXX"
           <span style={{ fontFamily: FONT.mono, fontWeight: 600 }}>+966</span>
         </div>
         <input
+          aria-label="رقم الجوال"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errId : undefined}
           value={value} inputMode="tel" maxLength={12} placeholder={placeholder}
           onChange={e => onChange(e.target.value.replace(/[^\d ]/g, ""))}
           onKeyDown={e => { if (e.key === "Enter") onEnter?.(); }}
@@ -216,7 +233,7 @@ export function PhoneField({ value, onChange, error, placeholder = "5X XXX XXXX"
           }}
         />
       </div>
-      {error && <div style={{ ...T.small, color: C.danger, marginTop: 6, textAlign: dir === "rtl" ? "start" : "start" }}>{error}</div>}
+      {error && <div id={errId} style={{ ...T.small, color: C.danger, marginTop: 6, textAlign: dir === "rtl" ? "start" : "start" }}>{error}</div>}
     </div>
   );
 }
@@ -225,11 +242,20 @@ export function PhoneField({ value, onChange, error, placeholder = "5X XXX XXXX"
 export function Labeled({ label, hint, bad, children }: {
   label: string; hint?: string; bad?: boolean; children: ReactNode;
 }) {
+  /* عنوان مجموعة لا عنوان حقل: أبناؤه صندوق حقول (InputStack) أو ثلاث
+     قوائم تاريخ. group + aria-labelledby يجعل قارئ الشاشة يعلن «الاسم
+     القانوني، مجموعة» قبل حقلَي الأول والأخير، بدل حقلين بلا نسبة.
+     htmlFor هنا لا يربط شيئاً — لا عنصر واحداً يشير إليه. */
+  const uid = useId();
+  const labelId = `${uid}-l`, hintId = `${uid}-h`;
   return (
     <div className="flex flex-col" style={{ gap: 8 }}>
-      <div style={{ ...T.h3, fontSize: 15, color: C.ink }}>{label}</div>
-      {children}
-      {hint && <div style={{ ...T.small, fontWeight: 400, color: bad ? C.danger : C.ink2 }}>{hint}</div>}
+      <div id={labelId} style={{ ...T.h3, fontSize: 15, color: C.ink }}>{label}</div>
+      <div role="group" aria-labelledby={labelId} aria-describedby={hint ? hintId : undefined}
+        className="flex flex-col" style={{ gap: 8 }}>
+        {children}
+      </div>
+      {hint && <div id={hintId} style={{ ...T.small, fontWeight: 400, color: bad ? C.danger : C.ink2 }}>{hint}</div>}
     </div>
   );
 }

@@ -14,6 +14,8 @@ import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTy
 import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { useStore, flushSync, clearSyncError } from "@/store/useStore";
 import { PAY_ACCOUNT, TASAHEEL_BRANCHES } from "@/features/payments";
+import { Field } from "@/components/Field";
+import { Pager, usePaged } from "@/components/Pager";
 
 const PAY_METHODS_INTERNAL = ["كاش","تحويل بنكي","آجل للموظف"];
 const validPhone = (p:string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
@@ -90,37 +92,43 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
         <>
         <div className="p-6 grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم العميل {req}</label>
-            <input value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="الاسم الكامل" className={inp} style={ist}/>
+            <Field label={<>اسم العميل {req}</>}>
+              <input value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="الاسم الكامل" className={inp} style={ist}/>
+            </Field>
             <Err k="name"/>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم الجوال {req}</label>
-            <input value={clientPhone} onChange={e=>setClientPhone(e.target.value)} placeholder="05xxxxxxxx" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Field label={<>رقم الجوال {req}</>}>
+              <input value={clientPhone} onChange={e=>setClientPhone(e.target.value)} placeholder="05xxxxxxxx" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            </Field>
             <Err k="phone"/>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الباقة {req}</label>
-            <AppSelect value={packageId} placeholder="اختر الباقة" onChange={v=>{setPackageId(v);setTripId("");}}
-              options={packages.map(p=>({value:p.id,label:p.name}))}/>
+            <Field label={<>الباقة {req}</>}>
+              <AppSelect value={packageId} placeholder="اختر الباقة" onChange={v=>{setPackageId(v);setTripId("");}}
+                options={packages.map(p=>({value:p.id,label:p.name}))}/>
+            </Field>
             <Err k="pkg"/>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الرحلة {req}</label>
-            <AppSelect value={tripId} placeholder={packageId?"اختر الرحلة المتاحة":"اختر الباقة أولاً"}
-              disabled={!packageId} onChange={setTripId}
-              options={availTrips.map(t=>({value:t.id,label:`${t.departureDate} · ${packages.find(p=>p.id===t.packageId)?.name??t.id} · المتبقي ${t.seats-t.bookedSeats}`}))}/>
+            <Field label={<>الرحلة {req}</>}>
+              <AppSelect value={tripId} placeholder={packageId?"اختر الرحلة المتاحة":"اختر الباقة أولاً"}
+                disabled={!packageId} onChange={setTripId}
+                options={availTrips.map(t=>({value:t.id,label:`${t.departureDate} · ${packages.find(p=>p.id===t.packageId)?.name??t.id} · المتبقي ${t.seats-t.bookedSeats}`}))}/>
+            </Field>
             {packageId&&availTrips.length===0&&<div className="text-xs mt-1" style={{color:B.muted}}>لا توجد رحلات متاحة لهذه الباقة.</div>}
             <Err k="trip"/>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عدد المقاعد {req}</label>
-            <input type="number" min={1} max={maxSeats} value={persons} onChange={e=>setPersons(Math.max(1,Number(e.target.value)||1))} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Field label={<>عدد المقاعد {req}</>}>
+              <input type="number" min={1} max={maxSeats} value={persons} onChange={e=>setPersons(Math.max(1,Number(e.target.value)||1))} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            </Field>
             <Err k="persons"/>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>طريقة الدفع {req}</label>
-            <AppSelect value={payMethod} onChange={setPayMethod} options={PAY_METHODS_INTERNAL.map(m=>({value:m,label:m}))}/>
+            <Field label={<>طريقة الدفع {req}</>}>
+              <AppSelect value={payMethod} onChange={setPayMethod} options={PAY_METHODS_INTERNAL.map(m=>({value:m,label:m}))}/>
+            </Field>
           </div>
           {errors.seats&&<div className="col-span-2 rounded-xl px-4 py-3 text-xs font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{errors.seats}</div>}
         </div>
@@ -436,9 +444,10 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
             <div className="rounded-xl p-4 mb-3 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>طريقة الدفع</label>
-                  <AppSelect value={payMethodSel} onChange={setPayMethodSel}
-                    options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
+                  <Field label="طريقة الدفع">
+                    <AppSelect value={payMethodSel} onChange={setPayMethodSel}
+                      options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
+                  </Field>
                 </div>
                 <label className="flex items-end gap-2.5 cursor-pointer pb-1.5">
                   <span onClick={()=>setPayReceived(v=>!v)} className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:payReceived?"#1E7A44":"#fff",border:`1.5px solid ${payReceived?"#1E7A44":B.border}`}}>
@@ -711,6 +720,11 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     (!search||(b.id+b.clientName+b.clientPhone).toLowerCase().includes(search.toLowerCase()))
   );
 
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, `${search}|${statusFilter}`);
+
   const stats = {
     total:bookings.length,
     new:bookings.filter(b=>["new","reviewing"].includes(b.status)).length,
@@ -772,7 +786,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((b,i)=>{
+                    {pg.rows.map((b,i)=>{
                       const pkg=packages.find(p=>p.id===trips.find(t=>t.id===b.tripId)?.packageId);
                       return (
                         <tr key={b.id} onClick={()=>setDetailId(b.id)} title="فتح مراجعة الطلب"
@@ -803,7 +817,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
 
             {/* Mobile cards */}
             <div className="md:hidden flex flex-col gap-3">
-              {filtered.map(b=>{
+              {pg.rows.map(b=>{
                 const pkg=packages.find(p=>p.id===trips.find(t=>t.id===b.tripId)?.packageId);
                 return (
                   <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} onClick={()=>setDetailId(b.id)}
@@ -832,6 +846,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                 </div>
               )}
             </div>
+            <Pager p={pg} unit="طلب"/>
           </main>
         </>
       )}

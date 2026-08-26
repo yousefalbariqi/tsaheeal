@@ -9,8 +9,7 @@ import { BirthDateSelect } from "@/components/BirthDateSelect";
 import { SearchSelect } from "@/components/SearchSelect";
 import { Spinner } from "@/components/Spinner";
 import { submitCustomRequest } from "../data";
-
-const G = { deep: "#0B5A41", green: B.primary, gold: B.gold };
+import { G } from "../ui/tokens";
 
 const TXT = {
   ar: {

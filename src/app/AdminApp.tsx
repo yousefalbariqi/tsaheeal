@@ -20,6 +20,8 @@ import { PackagesPage } from "@/features/packages";
 import { TripsPage } from "@/features/trips";
 import { BranchesPage } from "@/features/branches";
 import { BookingsPage } from "@/features/bookings";
+import { DashboardPage } from "@/features/dashboard";
+import { SettingsPage } from "@/features/settings";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { isSupabaseEnabled } from "@/supabase/client";
 import { Spinner } from "@/components/Spinner";
@@ -147,7 +149,7 @@ export default function AdminApp() {
   const signOut    = useStore(s=>s.signOut);
   const [mobileSidebar,setMobileSidebar]=useState(false);
 
-  const knownViews = ["hotels","transport","packages","trips","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support"];
+  const knownViews = ["dashboard","hotels","transport","packages","trips","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support","settings"];
 
   useEffect(()=>{ useStore.getState().initAuth(); },[]);
   /* الجلب بعد ثبوت أنه موظف — سياسات RLS لا تعيد شيئاً لغيره، فالجلب
@@ -191,6 +193,7 @@ export default function AdminApp() {
       <div className="flex-1 min-w-0" key={navNonce}>
         {!viewAllowed && <NoAccessPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {viewAllowed && <>
+        {activeView==="dashboard"&& <DashboardPage onMenuOpen={()=>setMobileSidebar(true)} onNav={nav}/>}
         {activeView==="hotels"   && <HotelsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="transport"&& <TransportPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="packages" && <PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
@@ -203,6 +206,7 @@ export default function AdminApp() {
         {activeView==="tickets"        && <TicketsPage  onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="users"          && <UsersPage    onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="support"        && <SupportPage  onMenuOpen={()=>setMobileSidebar(true)}/>}
+        {activeView==="settings"       && <SettingsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {!knownViews.includes(activeView)&&<ComingSoonPage view={NAV_ITEMS.find(n=>n.view===activeView)?.label??""}/>}
         </>}
       </div>

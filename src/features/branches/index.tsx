@@ -12,6 +12,8 @@ import { useStore } from "@/store/useStore";
 import { newId } from "@/lib/utils";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
+import { Field } from "@/components/Field";
+import { Pager, usePaged } from "@/components/Pager";
 
 const EMPTY: Omit<Branch,"id"> = { name:"", city:"", address:"", gmapUrl:"", phone:"", managerId:"", isActive:true };
 const NONE = "__none__";
@@ -60,40 +62,47 @@ function BranchModal({branch,managers,onSave,onClose}:{
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم الفرع {req}</label>
-            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="فرع الرياض — العليا" className={inp} style={ist}/>
+            <Field label={<>اسم الفرع {req}</>}>
+              <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="فرع الرياض — العليا" className={inp} style={ist}/>
+            </Field>
             <Err k="name"/>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المدينة {req}</label>
-            <input value={form.city} onChange={e=>set("city",e.target.value)} placeholder="الرياض" className={inp} style={ist}/>
+            <Field label={<>المدينة {req}</>}>
+              <input value={form.city} onChange={e=>set("city",e.target.value)} placeholder="الرياض" className={inp} style={ist}/>
+            </Field>
             <Err k="city"/>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم جوال الفرع</label>
-            <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="+966 11 000 0000" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Field label="رقم جوال الفرع">
+              <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="+966 11 000 0000" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            </Field>
             <Err k="phone"/>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>العنوان التفصيلي {req}</label>
-            <input value={form.address} onChange={e=>set("address",e.target.value)} placeholder="طريق الملك فهد، حي العليا" className={inp} style={ist}/>
+            <Field label={<>العنوان التفصيلي {req}</>}>
+              <input value={form.address} onChange={e=>set("address",e.target.value)} placeholder="طريق الملك فهد، حي العليا" className={inp} style={ist}/>
+            </Field>
             <Err k="address"/>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رابط Google Maps</label>
-            <input value={form.gmapUrl} onChange={e=>set("gmapUrl",e.target.value)} placeholder="https://maps.google.com/…" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            <Field label="رابط Google Maps">
+              <input value={form.gmapUrl} onChange={e=>set("gmapUrl",e.target.value)} placeholder="https://maps.google.com/…" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>المسؤول عن الفرع</label>
-            <AppSelect value={form.managerId||NONE} placeholder="اختر المسؤول"
-              onChange={v=>set("managerId",v===NONE?"":v)}
-              options={[{value:NONE,label:"بدون مسؤول"},...managers.map(m=>({value:m.id,label:m.name}))]}/>
+            <Field label="المسؤول عن الفرع">
+              <AppSelect value={form.managerId||NONE} placeholder="اختر المسؤول"
+                onChange={v=>set("managerId",v===NONE?"":v)}
+                options={[{value:NONE,label:"بدون مسؤول"},...managers.map(m=>({value:m.id,label:m.name}))]}/>
+            </Field>
           </div>
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحالة</label>
-            <AppSelect value={form.isActive?"active":"inactive"}
-              onChange={v=>set("isActive",v==="active")}
-              options={[{value:"active",label:"نشط"},{value:"inactive",label:"غير نشط"}]}/>
+            <Field label="الحالة">
+              <AppSelect value={form.isActive?"active":"inactive"}
+                onChange={v=>set("isActive",v==="active")}
+                options={[{value:"active",label:"نشط"},{value:"inactive",label:"غير نشط"}]}/>
+            </Field>
           </div>
         </div>
         <div className="px-6 pb-6 flex gap-3">
@@ -136,6 +145,11 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     const q=search.trim();
     return branches.filter(b=> !q || b.name.includes(q) || b.city.includes(q) || b.address.includes(q));
   },[branches,search]);
+
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(filtered, search);
 
   const stats = {
     total: branches.length,
@@ -195,7 +209,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b,i)=>(
+              {pg.rows.map((b,i)=>(
                 <tr key={b.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex items-center gap-3">
@@ -227,7 +241,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         </div>
         {/* Mobile cards */}
         <div className="md:hidden flex flex-col gap-3">
-          {filtered.map(b=>(
+          {pg.rows.map(b=>(
             <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primary,color:B.gold}}><Building size={16}/></div>
@@ -252,6 +266,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
           ))}
           {filtered.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Building size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد فروع مطابقة</p></div>}
         </div>
+        <Pager p={pg} unit="فرع"/>
       </main>
 
       <AnimatePresence>

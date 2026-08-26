@@ -15,6 +15,11 @@ export interface CustomerRoute {
   screen: Screen;
   /** معرّف الباقة من المسار — في /p/:id و/book/:id/:step. */
   packageId?: string;
+  /** مسار لا نعرفه. يُرسَم عليه الاستكشاف ويُصحَّح العنوان إلى «/»:
+      بلا هذه الراية كان /أي-شيء يعرض الصفحة الأولى ويُبقي المسار
+      الخطأ في شريط العنوان — فيُحفظ في المفضّلة ويُشارَك كأنه صحيح،
+      ولا يظهر للزائر أنّ الرابط الذي وصله تالف. */
+  unknown?: boolean;
 }
 
 /* خطوات الحجز التي تظهر في المسار. الاسم في المسار = اسم الشاشة،
@@ -45,7 +50,7 @@ export function parseRoute(pathname: string): CustomerRoute {
   if (a === "profile") return { screen: "profile" };
   if (a === "account") return { screen: "account" };
   if (a === "login") return { screen: b === "otp" ? "otp" : "login" };
-  return { screen: "packages" };
+  return { screen: "packages", unknown: true };
 }
 
 export function pathOf(screen: Screen, packageId?: string): string {

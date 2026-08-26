@@ -9,6 +9,8 @@ import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { useStore } from "@/store/useStore";
+import { Field } from "@/components/Field";
+import { onPickMedia } from "@/lib/mediaUpload";
 
 /* شعارات مميزات الباقة — قائمة يختار منها المستخدم */
 const PKG_FEATURE_ICONS: Record<string,{icon:React.FC<{size?:number;style?:React.CSSProperties}>;label:string}> = {
@@ -95,16 +97,20 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
             <ListChecks size={16} style={{color:"#8A6A08",flexShrink:0,marginTop:1}}/>
             <p className="text-xs leading-relaxed" style={{color:"#8A6A08"}}>هذه بيانات مبدئية. بعد الحفظ ستُفتح صفحة التفاصيل تلقائياً لإكمال باقي البيانات (البرنامج، الغرف والأسعار، مميزات الرحلة، السياسات، الآراء).</p>
           </div>
-          <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم الباقة <span style={{color:B.gold}}>*</span></label>
-            <input className={inp} style={ist} value={form.name} placeholder="مثال: عمرة مكة 3 أيام" onChange={e=>set("name",e.target.value)}/></div>
-          <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الوجهة</label>
-            <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/>
+          <div><Field label={<>اسم الباقة <span style={{color:B.gold}}>*</span></>}>
+                 <input className={inp} style={ist} value={form.name} placeholder="مثال: عمرة مكة 3 أيام" onChange={e=>set("name",e.target.value)}/>
+               </Field></div>
+          <div><Field label="الوجهة">
+                 <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/>
+               </Field>
             <p className="text-xs mt-1.5" style={{color:B.muted}}>نوع المنتج يُحدَّد تلقائياً من المواصلة المرتبطة في تفاصيل الباقة.</p></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الأيام</label>
-              <input type="number" min={1} className={inp} style={ist} value={form.days} onChange={e=>set("days",Number(e.target.value))}/></div>
-            <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الليالي</label>
-              <input type="number" min={0} className={inp} style={ist} value={form.nights} onChange={e=>set("nights",Number(e.target.value))}/></div>
+            <div><Field label="الأيام">
+                   <input type="number" min={1} className={inp} style={ist} value={form.days} onChange={e=>set("days",Number(e.target.value))}/>
+                 </Field></div>
+            <div><Field label="الليالي">
+                   <input type="number" min={0} className={inp} style={ist} value={form.nights} onChange={e=>set("nights",Number(e.target.value))}/>
+                 </Field></div>
           </div>
           <div><label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الحالة</label>
             <div className="grid grid-cols-2 gap-2">
@@ -117,8 +123,9 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>void;onClose:()=>void}) {
             </div>
           </div>
           <div className="rounded-xl p-4" style={{background:B.bg,border:`1px solid ${B.border}`}}>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>أيام التشغيل المقترحة</label>
-            <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
+            <Field label="أيام التشغيل المقترحة">
+              <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
+            </Field>
             <p className="text-xs mt-2 flex items-center gap-1.5" style={{color:B.muted}}><CalendarDays size={12} style={{color:B.gold}}/>اقتراح فقط — تُحدَّد تواريخ الانطلاق الفعلية عند إطلاق الرحلات.</p>
           </div>
         </div>
@@ -322,7 +329,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                         style={{background:"rgba(192,134,44,0.92)",color:"#fff"}}><Star size={10}/>أساسية</span>
                       {form.coverImage&&<button onClick={e=>{e.preventDefault();set("coverImage","");}} className="absolute bottom-1.5 left-1.5 w-6 h-6 rounded-md flex items-center justify-center cursor-pointer"
                         style={{background:"rgba(190,38,38,0.9)",border:"none",color:"#fff"}} title="حذف الصورة الأساسية"><Trash2 size={12}/></button>}
-                      <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>set("coverImage",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                      <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("packages",url=>set("coverImage",url))}/>
                     </label>
                     {/* Gallery thumbnails */}
                     <div className="flex-1 min-w-0">
@@ -340,38 +347,45 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                         {gallery.length<PKG_GALLERY_MAX&&(
                           <label className="rounded-lg flex flex-col items-center justify-center cursor-pointer" style={{width:58,height:58,border:`1px dashed ${B.border}`,background:B.bg,color:B.muted}}>
                             <ImagePlus size={16}/>
-                            <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>addGalleryImg(reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                            <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("package-gallery",url=>addGalleryImg(url))}/>
                           </label>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اسم الباقة</label>
-                  <input className={inp} style={ist} value={form.name} onChange={e=>set("name",e.target.value)}/></div>
+                <div><Field label="اسم الباقة">
+                       <input className={inp} style={ist} value={form.name} onChange={e=>set("name",e.target.value)}/>
+                     </Field></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>نوع المنتج</label>
-                    <AppSelect value={form.productType} onChange={v=>set("productType",v)} options={PRODUCT_TYPE_OPTS.map(o=>({value:o,label:o}))}/></div>
-                  <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الوجهة</label>
-                    <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/></div>
+                  <div><Field label="نوع المنتج">
+                         <AppSelect value={form.productType} onChange={v=>set("productType",v)} options={PRODUCT_TYPE_OPTS.map(o=>({value:o,label:o}))}/>
+                       </Field></div>
+                  <div><Field label="الوجهة">
+                         <AppSelect value={form.destination} onChange={v=>set("destination",v as PkgDest)} options={DEST_OPTS.map(o=>({value:o,label:o}))}/>
+                       </Field></div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                  <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الأيام</label>
-                    <input type="number" min={1} className={inp} style={ist} value={form.days} onChange={e=>set("days",Number(e.target.value))}/></div>
-                  <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الليالي</label>
-                    <input type="number" min={0} className={inp} style={ist} value={form.nights} onChange={e=>set("nights",Number(e.target.value))}/></div>
+                  <div><Field label="الأيام">
+                         <input type="number" min={1} className={inp} style={ist} value={form.days} onChange={e=>set("days",Number(e.target.value))}/>
+                       </Field></div>
+                  <div><Field label="الليالي">
+                         <input type="number" min={0} className={inp} style={ist} value={form.nights} onChange={e=>set("nights",Number(e.target.value))}/>
+                       </Field></div>
                   
                 </div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحالة</label>
-                  <AppSelect value={form.status} onChange={v=>set("status",v as PkgStatus)}
-                    options={[{value:"active",label:"نشطة"},{value:"draft",label:"مسودة"},{value:"hidden",label:"مخفية"},{value:"suspended",label:"موقوفة"}]}/></div>
+                <div><Field label="الحالة">
+                       <AppSelect value={form.status} onChange={v=>set("status",v as PkgStatus)}
+                                           options={[{value:"active",label:"نشطة"},{value:"draft",label:"مسودة"},{value:"hidden",label:"مخفية"},{value:"suspended",label:"موقوفة"}]}/>
+                     </Field></div>
               </div>
               {/* Suggested operating days */}
               <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <div><div className="text-sm font-bold" style={{color:B.black}}>أيام التشغيل المقترحة</div>
                   <div className="text-xs mt-0.5" style={{color:B.muted}}>اليوم الأسبوعي المقترح لتشغيل الباقة · التواريخ الفعلية تُحدد في الرحلات</div></div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>اليوم المقترح</label>
-                  <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/></div>
+                <div><Field label="اليوم المقترح">
+                       <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
+                     </Field></div>
               </div>
             </div>
             {/* RIGHT */}
@@ -419,8 +433,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               </div>
               {/* Notes */}
               <div className="rounded-2xl p-5 flex flex-col gap-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                <label className="text-sm font-bold" style={{color:B.black}}>ملاحظات داخلية</label>
-                <textarea className={inp} style={{...ist,resize:"vertical"}} rows={4} value={form.notes} onChange={e=>set("notes",e.target.value)} placeholder="ملاحظات للفريق..."/>
+                <Field label="ملاحظات داخلية" labelClass="text-sm font-bold" labelStyle={{color:B.black}}>
+                  <textarea className={inp} style={{...ist,resize:"vertical"}} rows={4} value={form.notes} onChange={e=>set("notes",e.target.value)} placeholder="ملاحظات للفريق..."/>
+                </Field>
               </div>
             </div>
           </motion.div>}
@@ -451,20 +466,25 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       </div>
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-3">
-                      <div><label className="block text-xs font-bold mb-1" style={{color:B.muted}}>الأيقونة</label>
-                        <select className={inp} style={{...ist,fontSize:16}} value={s.icon} onChange={e=>updStage(s.id,"icon",e.target.value)}>
-                          {STAGE_ICONS.map(i=><option key={i} value={i}>{i}</option>)}</select></div>
-                      <div><label className="block text-xs font-bold mb-1" style={{color:B.muted}}>الوقت</label>
-                        <input className={inp} style={{...ist,direction:"ltr"}} value={s.time} placeholder="22:00" onChange={e=>updStage(s.id,"time",e.target.value)}/></div>
+                      <div><Field label="الأيقونة" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
+                             <select className={inp} style={{...ist,fontSize:16}} value={s.icon} onChange={e=>updStage(s.id,"icon",e.target.value)}>
+                                                       {STAGE_ICONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
+                           </Field></div>
+                      <div><Field label="الوقت" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
+                             <input className={inp} style={{...ist,direction:"ltr"}} value={s.time} placeholder="22:00" onChange={e=>updStage(s.id,"time",e.target.value)}/>
+                           </Field></div>
                       <div style={{gridColumn:"1/-1"}}>
-                        <label className="block text-xs font-bold mb-1" style={{color:B.muted}}>اليوم</label>
-                        <input className={inp} style={ist} value={s.day} placeholder="اليوم الأول" onChange={e=>updStage(s.id,"day",e.target.value)}/></div>
+                        <Field label="اليوم" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
+                          <input className={inp} style={ist} value={s.day} placeholder="اليوم الأول" onChange={e=>updStage(s.id,"day",e.target.value)}/>
+                        </Field></div>
                       <div style={{gridColumn:"1/-1"}}>
-                        <label className="block text-xs font-bold mb-1" style={{color:B.muted}}>عنوان المرحلة</label>
-                        <input className={inp} style={ist} value={s.title} placeholder="الانطلاق من الرياض" onChange={e=>updStage(s.id,"title",e.target.value)}/></div>
+                        <Field label="عنوان المرحلة" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
+                          <input className={inp} style={ist} value={s.title} placeholder="الانطلاق من الرياض" onChange={e=>updStage(s.id,"title",e.target.value)}/>
+                        </Field></div>
                       <div style={{gridColumn:"1/-1"}}>
-                        <label className="block text-xs font-bold mb-1" style={{color:B.muted}}>وصف مختصر</label>
-                        <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={s.desc} onChange={e=>updStage(s.id,"desc",e.target.value)}/></div>
+                        <Field label="وصف مختصر" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
+                          <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={s.desc} onChange={e=>updStage(s.id,"desc",e.target.value)}/>
+                        </Field></div>
                     </div>
                   </motion.div>
                 ))}</AnimatePresence>
@@ -709,7 +729,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                       style={{background:B.bg,color:"#8a6a08",border:`1px solid ${B.border}`}}>
                       <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"إرفاق صورة"}
-                      <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updReview(rv.id,"image",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                      <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("package-reviews",url=>updReview(rv.id,"image",url))}/>
                     </label>
                   </div>
                 </div>
@@ -751,14 +771,16 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mt-4 pt-4" style={{borderTop:`1px solid ${B.border}`}}>
                 <div>
-                  <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>مهلة الدفع (بالساعات)</label>
-                  <input type="number" min={0} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}
-                    value={settings.paymentDeadlineHours} onChange={e=>setSetting("paymentDeadlineHours",Number(e.target.value))}/>
+                  <Field label="مهلة الدفع (بالساعات)">
+                    <input type="number" min={0} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}
+                      value={settings.paymentDeadlineHours} onChange={e=>setSetting("paymentDeadlineHours",Number(e.target.value))}/>
+                  </Field>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحد الأقصى للمعتمرين في الطلب الواحد</label>
-                  <input type="number" min={1} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}
-                    value={settings.maxPilgrims} onChange={e=>setSetting("maxPilgrims",Number(e.target.value))}/>
+                  <Field label="الحد الأقصى للمعتمرين في الطلب الواحد">
+                    <input type="number" min={1} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}
+                      value={settings.maxPilgrims} onChange={e=>setSetting("maxPilgrims",Number(e.target.value))}/>
+                  </Field>
                 </div>
               </div>
             </div>

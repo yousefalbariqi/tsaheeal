@@ -169,7 +169,18 @@ export class AuthRequiredError extends Error {
 /** `submittedAt` طابع زمني كامل (ISO)، بخلاف `createdAt` الذي هو تاريخ بلا
     ساعة — وعدّاد الساعتين يحتاج اللحظة لا اليوم. غائب في الحجوزات القديمة
     والداخلية، وحينها يُعرض الوعد نصّاً بلا حلقة. */
-export interface TrackResult { id: string; status: string; paymentStatus: string; packageName: string; tripDate: string; tripTime: string; persons: number; total: number; createdAt?: string; submittedAt?: string; }
+export interface TrackResult {
+  id: string; status: string; paymentStatus: string; packageName: string;
+  tripDate: string; tripTime: string; persons: number; total: number;
+  createdAt?: string; submittedAt?: string;
+  /* التذكرة ونقطة الانطلاق — اختياريان لا لأن الحجز قد يخلو منهما، بل
+     لأن الدالة قد تكون النسخة السابقة. ترحيل 20260826_wave4 هو ما
+     يضيفهما إلى my_public_bookings؛ قبله يعودان undefined وتُخفي
+     الشاشة القسم بدل أن تعرض «—». الواجهة تُنشر قبل الترحيل أو بعده
+     بلا فرق — وهذا مقصود: نشرٌ لا ينتظر ترحيلاً. */
+  ticketNo?: string;
+  departurePoint?: string;
+}
 
 /** طلبات صاحب الجلسة. الهوية تأتي من الـJWT لا من وسيط — النسخة
     القديمة my_public_bookings(p_phone) كانت تسمح بتعداد حجوزات أي رقم.
@@ -178,7 +189,12 @@ export async function myBookings(phoneForSeed?: string): Promise<TrackResult[]> 
   if (hasRealSession()) {
     const { data, error } = await cust().rpc("my_public_bookings");
     if (error) { console.error(error); return []; }
-    return (data as any[] ?? []).map(r => ({ id: r.id, status: r.status, paymentStatus: r.payment_status, packageName: r.package_name, tripDate: r.trip_date, tripTime: r.trip_time, persons: r.persons, total: r.total, createdAt: r.created_at, submittedAt: r.submitted_at ?? undefined }));
+    return (data as any[] ?? []).map(r => ({
+      id: r.id, status: r.status, paymentStatus: r.payment_status, packageName: r.package_name,
+      tripDate: r.trip_date, tripTime: r.trip_time, persons: r.persons, total: r.total,
+      createdAt: r.created_at, submittedAt: r.submitted_at ?? undefined,
+      ticketNo: r.ticket_no ?? undefined, departurePoint: r.departure_point ?? undefined,
+    }));
   }
   const ph = waNormalize(phoneForSeed ?? "");
   const st = useStore.getState();
@@ -213,6 +229,48 @@ export async function fetchBookingForPay(bookingId: string, token: string): Prom
   const pkg = st.packages.find(pk => pk.id === (b.packageId || trip?.packageId));
   return { id: b.id, clientName: b.clientName, packageName: pkg?.name ?? "", roomType: b.roomType,
            persons: b.persons, total: b.total, paymentStatus: b.paymentStatus, status: b.status };
+}
+
+/* ── صفحة التحقّق /inv/:id/verify ──
+   يفتحها من مسح رمز QR: موظّف على باب الحافلة، أو العميل يتأكّد من
+   تذكرته. بلا جلسة — الماسح لا يسجّل دخولاً.
+
+   المعرّف قد يكون تذكرة (TKT-) أو فاتورة (INV-) أو حجزاً (TSH-)، لأن
+   ثلاث شاشات ترمّز الرمز بثلاثة معرّفات. الدالة في القاعدة تقبلها كلّها.
+   والمُعاد مقصوص عمداً — لا جوال ولا هوية ولا مبلغ، والاسم مقصوص. */
+export interface VerifyResult {
+  kind: "ticket" | "invoice" | "booking";
+  ticketNo?: string; bookingId: string; clientName: string;
+  packageName: string; tripDate: string; tripTime: string;
+  departurePoint: string; persons: number; status: string;
+}
+
+/** خطأ يعني «الدالة غير موجودة» — القاعدة لم تُرحَّل بعد إلى الموجة ٤.
+    يُفرَّق عن «لا يوجد مستند بهذا الرقم»: الأول عطلٌ عندنا يُقال للماسح
+    بصيغته، والثاني جوابٌ صحيح عن سؤال. */
+export class VerifyUnavailableError extends Error {
+  constructor() { super("verify_unavailable"); }
+}
+
+export async function verifyDoc(id: string): Promise<VerifyResult | null> {
+  if (!isSupabaseEnabled || !supabase) throw new VerifyUnavailableError();
+  const { data, error } = await supabase.rpc("verify_doc", { p_id: id });
+  if (error) {
+    /* 42883 دالة غير موجودة · PGRST202 لا تعرفها ذاكرة PostgREST */
+    if (error.code === "42883" || error.code === "PGRST202" ||
+        /Could not find the function|does not exist|schema cache/i.test(error.message)) {
+      throw new VerifyUnavailableError();
+    }
+    throw error;
+  }
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r) return null;
+  return {
+    kind: r.kind, ticketNo: r.ticket_no ?? undefined, bookingId: r.booking_id,
+    clientName: r.client_name, packageName: r.package_name,
+    tripDate: r.trip_date, tripTime: r.trip_time, departurePoint: r.departure_point,
+    persons: r.persons, status: r.status,
+  };
 }
 
 /** يرمي عند الفشل — الاستدعاء السابق كان يبتلع الخطأ ويعرض «تم الدفع بنجاح». */

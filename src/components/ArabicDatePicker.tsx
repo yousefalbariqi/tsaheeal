@@ -29,7 +29,6 @@ export function ArabicDatePicker({
   const shown = value ? new DateObject({ date: value, format: "YYYY-MM-DD", calendar: gregorian, locale: gregorian_ar }) : "";
   return (
     <DatePicker
-      id={id}
       value={shown}
       onChange={(d: DateObject | null) => onChange(d ? d.convert(gregorian, gregorian_en).format("YYYY-MM-DD") : "")}
       calendar={gregorian}
@@ -45,7 +44,12 @@ export function ArabicDatePicker({
       containerStyle={{ width: "100%" }}
       style={{ width: "100%", boxSizing: "border-box", borderColor: invalid ? "#E1A3A3" : B.border, background: disabled ? B.bg : "#fff", color: B.black, fontFamily: "inherit", height: 42 }}
       placeholder={placeholder}
-      render={<InputIcon />}
+      /* المعرّف يُمرَّر عبر عنصر الإدخال لا كخاصّية على DatePicker:
+         المكتبة لا تنقل id إلى الحقل، فكان عنوان «تاريخ الذهاب»
+         مربوطاً بمعرّف لا وجود له — عنوانٌ لا يربط شيئاً أسوأ من
+         عنوانٍ بلا ربط، لأنه يبدو مربوطاً في الفحص الآلي.
+         InputIcon ينشر خصائصه الزائدة على <input> فيصل المعرّف. */
+      render={<InputIcon id={id} />}
       plugins={[
         <Settings
           key="settings"

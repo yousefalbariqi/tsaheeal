@@ -10,6 +10,7 @@ import { StatCard } from "@/components/StatCard";
 import { AppSelect } from "@/components/AppSelect";
 import { openWhatsApp } from "@/lib/utils";
 import { useStore } from "@/store/useStore";
+import { Pager, usePaged } from "@/components/Pager";
 
 const STATUS: { value: CustomReqStatus; label: string; bg: string; fg: string }[] = [
   { value: "new",       label: "جديد",          bg: "#EAF1FE", fg: "#1E52C7" },
@@ -110,6 +111,10 @@ export function CustomRequestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) 
       .filter(r => filter === "all" || r.status === filter)
       .filter(r => !k || r.name.includes(k) || r.phone.includes(k) || r.id.includes(k));
   }, [requests, filter, q]);
+  /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
+     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
+     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const pg = usePaged(shown, `${q}|${filter}`);
   const open = requests.find(r => r.id === openId);
   if (open) return (
     <>
@@ -149,7 +154,7 @@ export function CustomRequestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) 
           </div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-            {shown.map((r, i) => (
+            {pg.rows.map((r, i) => (
               <button key={r.id} onClick={() => setOpenId(r.id)}
                 className="w-full flex items-center gap-3 px-5 py-4 text-start cursor-pointer"
                 style={{ background: i % 2 ? "#FDFCFA" : "#fff", border: "none", borderTop: i ? `1px solid ${B.border}` : "none" }}>
@@ -165,6 +170,7 @@ export function CustomRequestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) 
             ))}
           </div>
         )}
+        <Pager p={pg} unit="طلب"/>
       </div>
     </>
   );

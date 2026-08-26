@@ -15,6 +15,8 @@ import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
+import { Field } from "@/components/Field";
+import { onPickMedia } from "@/lib/mediaUpload";
 
 /* ─── Transport Card Hero ─── */
 function TransportHero({mode,vehicleType,status,seats,cover}:{mode:VehicleMode;vehicleType:string;status:VehicleStatus;seats:number;cover?:string}) {
@@ -194,23 +196,29 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
                   ))}
                 </div>
               </div>
-              <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الاسم <span style={{color:B.gold}}>*</span></label>
-                <input className={inp} style={ist} value={form.name} placeholder="مثال: حافلة الحرمين 1" onChange={e=>set("name",e.target.value)}/></div>
+              <div><Field label={<>الاسم <span style={{color:B.gold}}>*</span></>}>
+                     <input className={inp} style={ist} value={form.name} placeholder="مثال: حافلة الحرمين 1" onChange={e=>set("name",e.target.value)}/>
+                   </Field></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>النوع</label>
-                  <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
+                <div><Field label="النوع">
+                       <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
+                     </Field>
                 </div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>عدد المقاعد</label>
-                  <input type="number" min={1} className={inp} style={ist} value={form.seats} onChange={e=>set("seats",Number(e.target.value))}/></div>
+                <div><Field label="عدد المقاعد">
+                       <input type="number" min={1} className={inp} style={ist} value={form.seats} onChange={e=>set("seats",Number(e.target.value))}/>
+                     </Field></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تكلفة المقعد (ر.س) <span style={{color:B.gold}}>*</span></label>
-                  <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800,fontFamily:"var(--font-app)"}} value={form.seatCost} onChange={e=>set("seatCost",Number(e.target.value))}/></div>
-                <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>{form.mode==="bus"?"الشركة / الموديل":"شركة الطيران"}</label>
-                  <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"طيران ناس"} onChange={e=>set("model",e.target.value)}/></div>
+                <div><Field label={<>تكلفة المقعد (ر.س) <span style={{color:B.gold}}>*</span></>}>
+                       <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800,fontFamily:"var(--font-app)"}} value={form.seatCost} onChange={e=>set("seatCost",Number(e.target.value))}/>
+                     </Field></div>
+                <div><Field label={<>{form.mode==="bus"?"الشركة / الموديل":"شركة الطيران"}</>}>
+                       <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"طيران ناس"} onChange={e=>set("model",e.target.value)}/>
+                     </Field></div>
               </div>
-              <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>سنة التصنيع</label>
-                <input type="number" min={1990} max={2030} className={inp} style={ist} value={form.year} placeholder="2024" onChange={e=>set("year",e.target.value)}/></div>
+              <div><Field label="سنة التصنيع">
+                     <input type="number" min={1990} max={2030} className={inp} style={ist} value={form.year} placeholder="2024" onChange={e=>set("year",e.target.value)}/>
+                   </Field></div>
               <div><label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الحالة</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["active","inactive"] as const).map(s=>(
@@ -278,7 +286,7 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
                           ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                           : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
                       : <div className="flex flex-col items-center gap-1" style={{color:B.muted}}>{m.kind==="image"?<ImagePlus size={20}/>:<Film size={20}/>}<span style={{fontSize:10}}>اختر ملفاً</span></div>}
-                    <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updMedia(m.id,"url",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                    <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={onPickMedia("transport",url=>updMedia(m.id,"url",url))}/>
                   </label>
                   <div className="flex-1 flex flex-col gap-2 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -336,7 +344,7 @@ function TransportModal({initial,onSave,onClose,onDelete}:{initial:Transport|nul
                       <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
                         style={{background:B.bg,color:"#8a6a08",border:`1px solid ${B.border}`}}>
                         <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"إرفاق صورة (اختياري)"}
-                        <input type="file" accept="image/*" className="hidden" onChange={e=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>updReview(rv.id,"image",reader.result as string);reader.readAsDataURL(file);e.target.value="";}}/>
+                        <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("transport-reviews",url=>updReview(rv.id,"image",url))}/>
                       </label>
                     </div>
                   </div>

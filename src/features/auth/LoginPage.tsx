@@ -5,6 +5,7 @@ import { B } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { Spinner } from "@/components/Spinner";
 import { useStore } from "@/store/useStore";
+import { Field } from "@/components/Field";
 
 export function LoginPage() {
   const signIn = useStore((s) => s.signIn);
@@ -38,11 +39,12 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3, textAlign: "right", direction: "rtl" }}>البريد الإلكتروني</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="you@example.com" autoFocus
-              className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-              style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "right", fontFamily: "var(--font-app)" }} />
+            <Field label="البريد الإلكتروني" labelStyle={{ color: B.text3, textAlign: "right", direction: "rtl" }}>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
+                placeholder="you@example.com" autoFocus
+                className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
+                style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "right", fontFamily: "var(--font-app)" }} />
+            </Field>
           </div>
           <div>
             <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3, textAlign: "right", direction: "rtl" }}>كلمة المرور</label>

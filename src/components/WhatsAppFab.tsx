@@ -1,10 +1,16 @@
 import { openWhatsApp } from "@/lib/utils";
+import { DEFAULT_SETTINGS } from "@/data/settings";
+import { usePublicSettings } from "@/data/useSettings";
 
 /* زر واتساب عائم — ثابت أسفل يمين الشاشة في كل صفحات المستفيد.
-   رقم خدمة العملاء في مكان واحد (SUPPORT_PHONE) ليُعدَّل بسطر واحد.
-   النبض يتوقف مع تفضيل «تقليل الحركة» في النظام. */
+   النبض يتوقف مع تفضيل «تقليل الحركة» في النظام.
 
-export const SUPPORT_PHONE = "0501234567";
+   الرقم من الإعدادات لا ثابتاً في الشفرة: تغييره كان يستلزم تعديل
+   هذا السطر وإعادة نشر الموقع. الافتراضي هو الرقم القائم نفسه، فمن
+   لم ينفّذ ترحيل الإعدادات يرى السلوك السابق حرفياً. */
+
+/** الافتراضي — يُستعمل قبل وصول الإعدادات وفي وضع التجربة. */
+export const SUPPORT_PHONE = DEFAULT_SETTINGS.pub.supportPhone;
 
 const STYLE_ID = "ts-wa-fab-style";
 const CSS = `
@@ -27,11 +33,12 @@ function ensureStyle() {
 }
 
 export function WhatsAppFab({
-  phone = SUPPORT_PHONE,
+  phone,
   message = "السلام عليكم، عندي استفسار عن العمرة",
   bottom = 96,
   label = "تواصل معنا عبر واتساب",
 }: {
+  /** يُمرَّر لتجاوز رقم الإعدادات؛ وبلا تمرير يُقرأ منها. */
   phone?: string;
   message?: string;
   /** ارتفاعه عن أسفل الشاشة — يُرفع فوق الشريط السفلي حيث يوجد. */
@@ -39,9 +46,11 @@ export function WhatsAppFab({
   label?: string;
 }) {
   ensureStyle();
+  const cfg = usePublicSettings();
+  const to = phone || cfg.supportPhone || SUPPORT_PHONE;
   return (
     <button
-      onClick={() => openWhatsApp(phone, message)}
+      onClick={() => openWhatsApp(to, message)}
       aria-label={label}
       title={label}
       className="ts-wa-fab flex items-center justify-center"
