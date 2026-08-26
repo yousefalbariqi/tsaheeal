@@ -371,7 +371,7 @@ function PaymentLinkCard({booking,trip,pkg}:{booking:Booking;trip:Trip|undefined
   );
 }
 
-function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange,onPilgrimsChange,onSeatsChange}:{booking:Booking;trips:Trip[];packages:Pkg[];allBookings:Booking[];onBack:()=>void;onStatusChange:(id:string,s:BookingStatus)=>void;onPilgrimsChange:(id:string,pilgrims:Pilgrim[])=>void;onSeatsChange:(id:string,seats:number[])=>void}) {
+function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange,onPilgrimsChange,onSeatsChange}:{booking:Booking;trips:Trip[];packages:Pkg[];allBookings:Booking[];onBack:()=>void;onStatusChange:(id:string,s:BookingStatus,patch?:Partial<Booking>)=>void;onPilgrimsChange:(id:string,pilgrims:Pilgrim[])=>void;onSeatsChange:(id:string,seats:number[])=>void}) {
   const trip  = trips.find(t=>t.id===booking.tripId);
   const pkg   = packages.find(p=>p.id===trip?.packageId);
 
@@ -393,16 +393,30 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
 
   const needsVerif = booking.status==="new"||booking.status==="reviewing";
 
-  const actions:{label:string;next:BookingStatus;bg:string;fg:string;br:string;disabled?:boolean}[] = (() => {
+  /* الدفع المسجَّل يُحفظ مع نقلة الحالة لا بعدها: كانت طريقة الدفع تُختار
+     في الشاشة ثم تُهمل — يصير الطلب «مدفوعاً» بلا طريقة ولا تاريخ. */
+  const today = new Date().toISOString().slice(0,10);
+  const CASH_AT_BRANCH = "كاش في الفرع";
+
+  const actions:{label:string;next:BookingStatus;bg:string;fg:string;br:string;disabled?:boolean;patch?:Partial<Booking>;confirm?:string}[] = (() => {
     switch(booking.status) {
       case "new":
       case "reviewing": return [
         {label:"قبول الطلب واختيار المقاعد",next:"accepted",bg:"#E3F3E8",fg:"#1E7A44",br:"#C4E4CE",disabled:!allVerified},
-        {label:"رفض الطلب",next:"rejected",bg:"#FBE6E6",fg:"#BE2626",br:"#F3C9C9"},
+        {label:"رفض الطلب",next:"rejected",bg:"#FBE6E6",fg:"#BE2626",br:"#F3C9C9",
+         confirm:`رفض الطلب ${booking.id} للعميل ${booking.clientName}؟ لا يمكن التراجع.`},
         {label:"إلغاء الطلب",next:"cancelled",bg:"#fff",fg:B.text2,br:B.border},
       ];
-      case "accepted": return [{label:"إرسال رابط الدفع",next:"awaiting_payment",bg:B.primary,fg:B.cream,br:B.primary}];
-      case "awaiting_payment": return [{label:"تأكيد الدفع يدوياً",next:"paid",bg:"#DDF3F0",fg:"#0C766B",br:"#A8DDD8"}];
+      /* الدفع كاش في الفرع لا يمرّ برابط: المبلغ في اليد، فينتقل الطلب
+         إلى «مدفوع» مباشرة موثّقاً بالطريقة والتاريخ. */
+      case "accepted": return [
+        {label:"إرسال رابط الدفع",next:"awaiting_payment",bg:B.primary,fg:B.cream,br:B.primary},
+        {label:"تم الدفع كاش في الفرع",next:"paid",bg:"#E3F3E8",fg:"#1E7A44",br:"#C4E4CE",
+         patch:{paymentStatus:"verified",payMethod:CASH_AT_BRANCH,payDate:today},
+         confirm:`تأكيد استلام ${booking.total.toLocaleString("en-US")} ر.س كاش في الفرع من ${booking.clientName}؟ ينتقل الطلب إلى «تم الدفع» بلا رابط دفع.`},
+      ];
+      case "awaiting_payment": return [{label:"تأكيد الدفع يدوياً",next:"paid",bg:"#DDF3F0",fg:"#0C766B",br:"#A8DDD8",
+        patch:{paymentStatus:"verified",payMethod:payMethodSel,payDate:today}}];
       case "paid":     return [{label:"تحقق وتأكيد",next:"confirmed",bg:"#E3F3E8",fg:"#1E7A44",br:"#C4E4CE"}];
       case "confirmed":return [{label:"إلغاء",next:"cancelled",bg:"#FBE6E6",fg:"#BE2626",br:"#F3C9C9"}];
       default:         return [];
@@ -461,16 +475,18 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
           )}
           <div className="flex flex-wrap gap-3">
             {actions.map(a=>{
-              const gated=a.next==="paid"&&!payReceived;
+              /* شرط «استلمت الدفع» يخصّ التأكيد اليدوي بعد إرسال الرابط.
+                 الكاش في الفرع مرّ بتأكيده الخاص، فلا يُحجب به. */
+              const gated=a.next==="paid"&&booking.status==="awaiting_payment"&&!payReceived;
               const disabled=a.disabled||gated;
               return (
-              <button key={a.next}
-                /* الرفض لا رجعة فيه ويقع بنقرة واحدة بجوار «قبول» — تأكيد
-                   واحد يفصل الخطأ عن القرار. */
+              <button key={a.label}
+                /* ما لا رجعة فيه — الرفض واستلام الكاش — يحمل تأكيداً
+                   واحداً يفصل الخطأ عن القرار. */
                 onClick={()=>{ if(disabled) return;
                   if(a.next==="accepted"){setSeatOpen(true);return;}
-                  if(a.next==="rejected"&&!window.confirm(`رفض الطلب ${booking.id} للعميل ${booking.clientName}؟ لا يمكن التراجع.`)) return;
-                  onStatusChange(booking.id,a.next); }}
+                  if(a.confirm&&!window.confirm(a.confirm)) return;
+                  onStatusChange(booking.id,a.next,a.patch); }}
                 className="px-5 py-2.5 rounded-xl font-bold text-sm"
                 style={{background:disabled?"#EEECEA":a.bg,color:disabled?B.muted:a.fg,border:`1px solid ${disabled?B.border:a.br}`,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.7:1}}>
                 {a.label}
@@ -684,8 +700,8 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   /* الإلغاء والرفض يحرّران المقاعد في القاعدة (حارس trg_booking_seats_sync)،
      فتُعاد قراءة الرحلات بعده — لا تُحسب محلياً. كان تغيير الحالة لا يُنقص
      bookedSeats إطلاقاً، فتظهر الرحلة ممتلئة وهي فارغة. */
-  function changeStatus(id:string,s:BookingStatus){
-    setBookings(p=>p.map(b=>b.id===id?{...b,status:s}:b));
+  function changeStatus(id:string,s:BookingStatus,patch?:Partial<Booking>){
+    setBookings(p=>p.map(b=>b.id===id?{...b,...patch,status:s}:b));
     void refreshTrips();
   }
 
