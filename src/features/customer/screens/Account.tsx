@@ -134,7 +134,7 @@ export function Account(p: AccountProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col" style={{ padding: SPACE.page, gap: 22 }}>
+    <div className="ts-account-shell flex-1 flex flex-col" style={{ padding: SPACE.page, gap: 22 }}>
       {/* ── الهوية ── */}
       <div className="flex items-center" style={{ gap: 12 }}>
         <span className="flex items-center justify-center flex-shrink-0"

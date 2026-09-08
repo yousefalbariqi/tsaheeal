@@ -89,6 +89,7 @@ function NativeSelect({ label, value, onChange, options, placeholder, disabled, 
 
 export function BirthDateSelect({
   value, onChange, lang = "ar", dir = "rtl", disabled, invalid, maxYearsBack = 110, future = false, yearsAhead = 2,
+  calendar, hideCalendarSwitch = false,
   ...aria
 }: {
   value: string;                     // "YYYY-MM-DD" ميلادية أو ""
@@ -101,6 +102,9 @@ export function BirthDateSelect({
   /** تواريخ قادمة (سفر) بدل ماضية (ميلاد): السنوات تصعد من اليوم ولا يُقبل ما قبله. */
   future?: boolean;
   yearsAhead?: number;
+  /** يثبت التقويم عندما نعرض الميلادي والهجري جنباً إلى جنب. */
+  calendar?: Cal;
+  hideCalendarSwitch?: boolean;
   /* ثلاث قوائم لا حقل واحد، فلا id يُربط بـhtmlFor. خصائص التسمية
      تُمرَّر إلى الحاوية لتُقرأ مجموعةً باسمها («تاريخ الميلاد») بدل
      ثلاث قوائم مجهولة النسبة. */
@@ -108,10 +112,14 @@ export function BirthDateSelect({
   const txt = (TXT as any)[lang] ?? TXT.ar;
   const en = lang === "en";
 
-  const [cal, setCal] = React.useState<Cal>("greg");
+  const [cal, setCal] = React.useState<Cal>(calendar ?? "greg");
   const [y, setY] = React.useState<number | null>(null);
   const [m, setM] = React.useState<number | null>(null);
   const [d, setD] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (calendar && calendar !== cal) setCal(calendar);
+  }, [calendar, cal]);
 
   // مزامنة من الخارج (تعبئة مسبقة أو إعادة تعيين النموذج)
   React.useEffect(() => {
@@ -140,8 +148,12 @@ export function BirthDateSelect({
   const minMonth = future && y === today.y ? today.m : 1;
   const maxMonth = !future && y === today.y ? today.m : 12;
   const months = React.useMemo<{ value: string; label: string }[]>(
-    () => monthNames.map((n, i) => ({ value: String(i + 1), label: n })).slice(minMonth - 1, maxMonth),
-    [monthNames, minMonth, maxMonth],
+    () => monthNames.map((n, i) => ({
+      value: String(i + 1),
+      // رقم الشهر الميلادي يزيل الحاجة لتذكّر ترتيبه، خصوصاً في قوائم الجوال.
+      label: cal === "greg" ? `${i + 1} — ${n}` : n,
+    })).slice(minMonth - 1, maxMonth),
+    [monthNames, minMonth, maxMonth, cal],
   );
 
   const inCurMonth = !!y && !!m && y === today.y && m === today.m;
@@ -202,22 +214,22 @@ export function BirthDateSelect({
   return (
     <div {...aria} className="flex flex-col gap-2">
       {/* ميلادي | هجري */}
-      <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
-        {(["greg", "hijri"] as Cal[]).map(c => (
-          <button
-            key={c} type="button" disabled={disabled} onClick={() => switchCal(c)}
-            aria-pressed={cal === c}
-            style={{
-              ...pillBase,
-              background: cal === c ? "#fff" : "transparent",
-              color: cal === c ? B.primary : B.muted,
-              boxShadow: cal === c ? "0 1px 3px rgba(0,0,0,.08)" : "none",
-            }}
-          >
-            {c === "greg" ? txt.greg : txt.hijri}
-          </button>
-        ))}
-      </div>
+      {!hideCalendarSwitch && <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+          {(["greg", "hijri"] as Cal[]).map(c => (
+            <button
+              key={c} type="button" disabled={disabled} onClick={() => switchCal(c)}
+              aria-pressed={cal === c}
+              style={{
+                ...pillBase,
+                background: cal === c ? "#fff" : "transparent",
+                color: cal === c ? B.primary : B.muted,
+                boxShadow: cal === c ? "0 1px 3px rgba(0,0,0,.08)" : "none",
+              }}
+            >
+              {c === "greg" ? txt.greg : txt.hijri}
+            </button>
+          ))}
+        </div>}
 
       {/* السنة ← الشهر ← اليوم — قوائم أصلية بلا بحث */}
       <div className="grid grid-cols-3 gap-2">
@@ -232,18 +244,6 @@ export function BirthDateSelect({
           disabled={disabled || !m} invalid={invalid && !!m && !d} />
       </div>
 
-      {/* معاينة التاريخ المختار بالتقويمين */}
-      {value && (
-        <div className="text-xs" style={{ color: B.muted }}>
-          {(() => {
-            const g = fromGregISO("greg", value); const h = fromGregISO("hijri", value);
-            if (!g || !h) return null;
-            const gs = `${g.d} ${(en ? MONTHS_GREG_EN : MONTHS_GREG_AR)[g.m - 1]} ${g.y} ${en ? "" : "م"}`;
-            const hs = `${h.d} ${(en ? MONTHS_HIJRI_EN : MONTHS_HIJRI_AR)[h.m - 1]} ${h.y} ${en ? "AH" : "هـ"}`;
-            return `${gs} — ${hs}`;
-          })()}
-        </div>
-      )}
     </div>
   );
 }

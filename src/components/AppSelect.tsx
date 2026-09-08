@@ -12,6 +12,11 @@ export interface AppSelectOption {
   disabled?: boolean;
 }
 
+/* Radix يرفض عنصراً قيمته "" (فهي عنده «لا اختيار» تُظهر الـplaceholder)، ونحن
+   نستخدم "" في كل النداءات بمعنى «بلا مسؤول/كل الفروع». فنُبدّلها داخلياً
+   ببديلٍ غير فارغ ونعيدها "" في onChange — يبقى عقد المُستخدِم كما هو. */
+const EMPTY = "__app_select_empty__";
+
 export function AppSelect({
   value, onChange, options, placeholder = "اختر…", disabled, invalid, id, ariaLabel, className,
 }: {
@@ -25,8 +30,17 @@ export function AppSelect({
   ariaLabel?: string;
   className?: string;
 }) {
+  const hasEmptyOption = options.some((o) => o.value === "");
+  // "" بلا عنصرٍ يقابلها = لا اختيار (placeholder)؛ ومعه = اختيارٌ صريح يُعرض عنوانه.
+  const inner = value === "" ? (hasEmptyOption ? EMPTY : undefined) : value;
+
   return (
-    <RS.Root dir="rtl" value={value || undefined} onValueChange={onChange} disabled={disabled}>
+    <RS.Root
+      dir="rtl"
+      value={inner}
+      onValueChange={(v) => onChange(v === EMPTY ? "" : v)}
+      disabled={disabled}
+    >
       <RS.Trigger
         id={id}
         aria-label={ariaLabel}
@@ -35,7 +49,7 @@ export function AppSelect({
         style={{
           borderColor: invalid ? "#E1A3A3" : B.border,
           background: disabled ? B.bg : "#fff",
-          color: value ? B.black : B.placeholder,
+          color: inner ? B.black : B.placeholder,
           fontFamily: "inherit",
           cursor: disabled ? "not-allowed" : "pointer",
         }}
@@ -67,7 +81,7 @@ export function AppSelect({
             {options.map((o) => (
               <RS.Item
                 key={o.value}
-                value={o.value}
+                value={o.value === "" ? EMPTY : o.value}
                 disabled={o.disabled}
                 className="relative flex items-center justify-between gap-2 rounded-lg py-2 pr-3 pl-8 text-sm text-right outline-none cursor-pointer select-none data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed data-[highlighted]:bg-[color:var(--sel-hl)]"
                 style={{ color: B.black, ["--sel-hl" as any]: B.bg }}

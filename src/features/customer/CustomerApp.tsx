@@ -23,16 +23,16 @@ import { SlaCountdown } from "./ui/SlaCountdown";
 import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, AuthRequiredError, SKIP_SEAT_CHECK, availSeats, holdSeats, releaseSeatHolds, type Catalog, type TrackResult } from "./data";
 import { isSellable, tripState } from "@/lib/trip";
 import {
-  sendOtp, verifyOtp, signInNoOtp, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
+  sendOtp, verifyOtp, signInNoOtp, customerAccountExists, signInWithCustomerPassword, signUpCustomer, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
   cachedPhoneLocal, isWhatsappEnabled, authErrorMessage, isFail,
   type CustomerSession,
 } from "./customerAuth";
 import { DirProvider, GrayButton, CTAButton } from "./ui/kit";
 import { FlowScreen, InputStack, StackField, PhoneField, TextLink, Labeled } from "./ui/FlowScreen";
 import { C, T, R, G, LTR, SPACE, formatDate } from "./ui/tokens";
-import { AppBar, BottomBar } from "./ui/chrome";
+import { AppBar, BottomBar, DesktopNav } from "./ui/chrome";
 import { Timeline } from "./ui/Timeline";
-import { Explore } from "./screens/Explore";
+import { Explore, citiesOf, cityRank } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
 import { Account } from "./screens/Account";
@@ -176,6 +176,7 @@ const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل ا�
 const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","seats","review","success"];
 /* شاشات لها شريط تنقّل سفلي — الزر العائم يرتفع فوقه. */
 const TABBED_SCREENS:Screen[]=["packages","track","profile"];
+const BOOKING_RESUME_KEY="tsaheel.booking.resume";
 
 export function CustomerApp(){
   /* اللغة تُحفظ: «زر EN يجب أن يحفظ اختيار المستخدم». المتصفّح وحده
@@ -234,6 +235,18 @@ export function CustomerApp(){
     navigate(pathOf(s,pkgId??pkgRef.current?.id??route.packageId),{replace:true});
   },[navigate,route.packageId]);
 
+  /* الدخول ليس نهاية مسار الحجز. نحفظ وجهته قبل نقل العنوان إلى /login
+     لأن مسار الدخول لا يحمل معرّف الباقة؛ بهذا تعود الجلسة الجديدة إلى
+     الباقة والخطوة نفسيهما، حتى لو أعاد المتصفح تحميل صفحة الدخول. */
+  const rememberBookingResume=useCallback((requested?:Screen)=>{
+    const id=pkgRef.current?.id??route.packageId;
+    if(!id) return;
+    const candidate=requested??(screen==="listing"?"passengers":screen);
+    const target=(candidate==="passengers"||candidate==="seats"||candidate==="review")
+      ? candidate : "passengers";
+    try{ sessionStorage.setItem(BOOKING_RESUME_KEY,pathOf(target,id)); }catch{}
+  },[route.packageId,screen]);
+
   /* ── الجلسة والهوية ──
      الجلسة الحقيقية تُقرأ بوعد (قد تُجدّد رمزاً عبر الشبكة)، فنبدأ
      بالرقم المحفوظ محلياً للرسم الأول فقط ولا نبني عليه أي تصريح. */
@@ -241,6 +254,9 @@ export function CustomerApp(){
   const [sessionReady,setSessionReady]=useState(false);
   const cachedPhone=useRef<string|null>(cachedPhoneLocal());
   const [loginPhone,setLoginPhone]=useState("");
+  const [loginStage,setLoginStage]=useState<"phone"|"password"|"signup">("phone");
+  const [loginPassword,setLoginPassword]=useState("");
+  const [loginEmail,setLoginEmail]=useState("");
   const [otpCode,setOtpCode]=useState("");
   const [otpErr,setOtpErr]=useState("");
   const [sentVia,setSentVia]=useState<"sms"|"whatsapp">("sms");
@@ -249,6 +265,10 @@ export function CustomerApp(){
   const resendTimer=useRef<ReturnType<typeof setInterval>|null>(null);
   /* بعد الدخول: يعود للمسار إن جاء منه، أو لصفحة الطلبات إن جاء من التبويب. */
   const [intent,setIntent]=useState<"flow"|"track">("flow");
+  /* الوجهة المختارة («» = الكل). ترتفع إلى هنا لأن رأس الديسكتوب يعرضها
+     تنقّلاً أوّل: الضغط على «مكة» من شاشة الحجوزات يعيد إلى الرحلات
+     مصفّاةً، وذلك لا يصحّ لو كانت الحالة داخل شاشة الاستكشاف. */
+  const [city,setCity]=useState("");
   const [myOrders,setMyOrders]=useState<TrackResult[]|null>(null);
   const [ordersLoading,setOrdersLoading]=useState(false);
   const [catErr,setCatErr]=useState(false);
@@ -280,10 +300,9 @@ export function CustomerApp(){
   useEffect(()=>{ const prev=document.body.style.background; document.body.style.background="#fff";
     return ()=>{ document.body.style.background=prev; }; },[]);
   useEffect(()=>{ setPax(prev=>{ const a=[...prev]; while(a.length<persons) a.push(emptyPax()); return a.slice(0,persons); }); },[persons]);
-  /* التوزيع مربوط بالعدد: تغيّره بعده يُبطله. حارس واحد هنا بدل إبطاله عند
-     كل موضع يغيّر العدد (العدّاد، وقصّ المقاعد عند تبديل الرحلة، والتصفير) —
-     وإلا نجا توزيع قديم إلى المراجعة بسعر لا يطابق عدد المعتمرين. */
-  useEffect(()=>{ setSplit(s=>(s&&s.capacity>=persons&&s.rooms.length<=persons?s:null)); },[persons]);
+  /* فئة السكن مستقلة عن عدد معتمري الطلب. تبقى المختارة عند تغيير العدد،
+     ويعاد فقط ضرب سعر الفرد في العدد الجديد. */
+  useEffect(()=>{ setSplit(s=>s ? ({ ...s, perNight: s.rooms.reduce((sum, r) => sum + r.perNight, 0) * persons }) : null); },[persons]);
   /* المقاعد المحجوزة: الفشل يعني كروكياً بلا حجوزات — أفضل من شاشة معطّلة،
      والقاعدة ترفض المقعد المأخوذ في آخر خطوة على أي حال. */
   useEffect(()=>{ if(!trip) return;
@@ -331,6 +350,12 @@ export function CustomerApp(){
     const one=cat.packages.find(p=>p.id===route.packageId);
     return one&&!published.some(p=>p.id===one.id) ? [...published,one] : published;
   },[cat.packages,preview,route.packageId]);
+  /* الوجهات المعروضة في الرأس: مشتقّة من الباقات المنشورة لا ثابتة —
+     وجهةٌ بلا باقةٍ منشورة لا تُعرض شريحةً تفتح صفحةً فارغة. */
+  const cities=useMemo(
+    ()=>[...new Set(activePkgs.flatMap(citiesOf))].sort((a,b)=>cityRank(a)-cityRank(b)),
+    [activePkgs]);
+
   /* الرحلة الفائتة لا تُعرض ولو بقيت "open" في القاعدة: تاريخ المغادرة
      هو الحدّ، لا الحالة. بدونه يظهر ٣٠ يوليو حجزاً متاحاً في ٢٣ أغسطس. */
   const today=todayYMD();
@@ -422,9 +447,11 @@ export function CustomerApp(){
     if(screen==="otp"&&!validPhone(loginPhone)){ replaceScreen("login"); return; }
     /* الجلسة تُقرأ بوعد — قبل جهوزها لا يُطرد أحد من مسار محمي. */
     if(!sessionReady) return;
-    if(!session&&(screen==="passengers"||screen==="seats"||screen==="review")){ setIntent("flow"); replaceScreen("login"); return; }
+    if(!session&&(screen==="passengers"||screen==="seats"||screen==="review")){
+      rememberBookingResume(screen); setIntent("flow"); replaceScreen("login"); return;
+    }
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
-  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
+  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
 
   function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
@@ -567,7 +594,7 @@ export function CustomerApp(){
            إنجليزياً وسط جدول عربي. والغرف تُحفظ مفصّلة بجواره. */
         roomType:bookingMode==="transport"?"مواصلات فقط":split?splitSummary(split,makeT("ar")):"", persons, total, seats,
         bookingMode: bookingMode === "transport" ? "transport_only" : "full_package",
-        rooms:bookingMode==="transport"?undefined:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight})),
+        rooms:bookingMode==="transport"?undefined:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons,perNight:r.perNight})),
         pilgrims:pax.map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
           phone:p.phone.replace(/\s/g,""),seat:p.seat??undefined})),
@@ -614,6 +641,19 @@ export function CustomerApp(){
   function startResendCountdown(sec:number){ setResendIn(sec); if(resendTimer.current) clearInterval(resendTimer.current);
     resendTimer.current=setInterval(()=>setResendIn(s=>{ if(s<=1){ if(resendTimer.current) clearInterval(resendTimer.current); return 0; } return s-1; }),1000); }
 
+  /** بعد الدخول/حفظ الملف يعود العميل لآخر خطوة من الحجز، لا للواجهة. */
+  function continueAfterAuth(){
+    if(intent==="track"){ setScreen("track"); return; }
+    let saved="";
+    try{ saved=sessionStorage.getItem(BOOKING_RESUME_KEY)??""; sessionStorage.removeItem(BOOKING_RESUME_KEY); }catch{}
+    const savedRoute=saved?parseRoute(saved):null;
+    if(savedRoute?.packageId&&(savedRoute.screen==="passengers"||savedRoute.screen==="seats"||savedRoute.screen==="review")){
+      navigate(saved);
+      return;
+    }
+    setScreen("passengers");
+  }
+
   /** بعد التحقق: من ملفه ناقص يُكمل حسابه، وإلا يعود لِما جاء منه. */
   function afterAuth(s:CustomerSession){
     if(!s.profile?.complete){
@@ -621,10 +661,35 @@ export function CustomerApp(){
       setAcBirth(s.profile?.birthDate??""); setAcEmail(s.profile?.email??"");
       setAcTried(false); setAcErr(""); setScreen("account"); return;
     }
-    setScreen(intent==="track"?"track":"passengers");
+    continueAfterAuth();
   }
 
   async function beginLogin(){
+    if(!validPhone(loginPhone)){ setOtpErr(t("invalidPhone")); return; }
+    setOtpErr(""); setSending(true);
+    const known=await customerAccountExists(loginPhone);
+    setSending(false);
+    if(isFail(known)){ setOtpErr(authErrorMessage(known,t)); return; }
+    setLoginStage(known.exists?"password":"signup");
+  }
+  async function submitPasswordLogin(){
+    if(sending||!loginPassword) return;
+    setOtpErr(""); setSending(true);
+    const r=await signInWithCustomerPassword(loginPhone,loginPassword);
+    setSending(false);
+    if(isFail(r)){ setOtpErr("كلمة المرور غير صحيحة"); return; }
+    setSession(r.session); afterAuth(r.session);
+  }
+  async function submitSignup(){
+    if(sending||!loginEmail.includes("@")||loginPassword.length<6) return;
+    setOtpErr(""); setSending(true);
+    const r=await signUpCustomer(loginPhone,loginEmail,loginPassword);
+    setSending(false);
+    if(isFail(r)){ setOtpErr(authErrorMessage(r,t)); return; }
+    setSession(r.session); afterAuth(r.session);
+  }
+  /* مسار الرمز القديم يبقى للروابط/الجلسات القائمة فقط. */
+  async function beginOtpLogin(){
     if(!validPhone(loginPhone)){ setOtpErr(t("invalidPhone")); return; }
     setOtpErr(""); setSending(true);
     /* راية التجربة: لا رمز ولا شاشة تأكيد — الجلسة تُفتح بالرقم وحده
@@ -667,7 +732,7 @@ export function CustomerApp(){
     setAcSaving(false);
     if(isFail(r)){ setAcErr(authErrorMessage(r,t)); return; }
     setSession(s=>s?{...s,profile:r.profile}:s);
-    setScreen(intent==="track"?"track":"passengers");
+    continueAfterAuth();
   }
   async function logout(){ await clearSession(); setSession(null); setMyOrders(null); setScreen("packages"); }
 
@@ -676,11 +741,15 @@ export function CustomerApp(){
     /* المعاينة تعرض ولا تحجز: باقةٌ مسودة قد تكون بلا أسعار ولا رحلات،
        والمضيّ فيها يُنتج طلباً على منتجٍ لم يُنشر بعد. */
     if(preview){ toast.info(t("previewNote")); return; }
-    if(!session){ setIntent("flow"); setLoginPhone(cachedPhone.current??""); setOtpErr(""); setScreen("login"); return; }
+    if(!session){ openLogin("flow"); return; }
     if(!session.profile?.complete){ setIntent("flow"); afterAuth(session); return; }
     setScreen("passengers");
   }
-  function openLogin(from:"flow"|"track"){ setIntent(from); setLoginPhone(cachedPhone.current??""); setOtpErr(""); setScreen("login"); }
+  function openLogin(from:"flow"|"track"){
+    if(from==="flow") rememberBookingResume();
+    else try{ sessionStorage.removeItem(BOOKING_RESUME_KEY); }catch{}
+    setIntent(from); setLoginPhone(cachedPhone.current??""); setLoginStage("phone"); setLoginPassword(""); setLoginEmail(""); setOtpErr(""); setScreen("login");
+  }
 
   // تحميل الطلبات عند فتح التتبّع/الحساب بجلسة قائمة
   useEffect(()=>{ if((screen==="track"||screen==="profile") && session){ setOrdersLoading(true);
@@ -691,7 +760,9 @@ export function CustomerApp(){
   const primaryBtn=(on=true)=>({background:on?G.gold:"#d6cfc6",color:on?B.black:"#a09688",border:"none",cursor:on?"pointer":"not-allowed"} as const);
 
   const isFlow=FLOW_SCREENS.includes(screen);
-  const whiteBase=isFlow||screen==="packages"||screen==="listing";
+  /* الحساب والحجوزات جزءٌ من الواجهة الجديدة كذلك؛ لا تعود لهما خلفية
+     الحرم القديمة أو لون قاعدة مختلف حين ينتقل العميل بين التبويبات. */
+  const whiteBase=isFlow||screen==="packages"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
 
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
@@ -727,6 +798,11 @@ export function CustomerApp(){
         </div>
       )}
       <div className="relative flex flex-col flex-1" style={{zIndex:1}}>
+      {!isFlow && (screen === "packages" || screen === "listing" || screen === "track" || screen === "profile" || screen === "custom") &&
+        <DesktopNav screen={screen} onNav={setScreen} lang={lang} setLang={setLang} t={t}
+          cities={cities} city={city} setCity={setCity}
+          signedIn={!!session} onLogin={()=>openLogin("track")} onSignup={()=>openLogin("track")}/>
+      }
 
       {/* ═══ EXPLORE (الاستكشاف) ═══ */}
       {screen==="packages"&&<>
@@ -734,11 +810,14 @@ export function CustomerApp(){
           packages={activePkgs}
           hotels={cat.hotels}
           transports={cat.transports}
+          cities={cities} city={city} setCity={setCity}
           tripsOf={pkgTrips}
           /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
              وتوزيع غرفها إلى نموذج باقة أخرى. */
           onOpen={p=>{clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
           onCustom={()=>setScreen("custom")}
+          signedIn={!!session}
+          onAccount={()=>session ? setScreen("profile") : openLogin("track")}
           t={t} lang={lang} setLang={setLang}
         />
         <BottomBar screen={screen} onNav={setScreen} t={t}/>
@@ -766,14 +845,13 @@ export function CustomerApp(){
 
       {/* ═══ CUSTOM — رحلة حسب الطلب: طلب لا حجز ═══ */}
       {screen==="custom"&&<>
-        <AppBar title={t("customPkg")} onBack={()=>setScreen("packages")}
-          dir={dir} lang={lang} onLang={setLang} t={t}/>
-        <CustomRequestScreen lang={lang} dir={dir} onDone={()=>setScreen("packages")}/>
+        <CustomRequestScreen lang={lang} dir={dir} onBack={()=>setScreen("packages")} onDone={()=>setScreen("packages")}/>
       </>}
 
       {/* ═══ PASSENGERS — بطاقة لكل معتمر؛ الأول مُعبَّأ من الحساب ═══ */}
       {screen==="passengers"&&
         <FlowScreen
+          variant="auth"
           title={t("passengers")} subtitle={t("pilgrimCardHint")} step={2}
           onBack={()=>setScreen("listing")} onClose={()=>setScreen("listing")}
           cta={goSeats} ctaLabel={t("next")}
@@ -900,6 +978,7 @@ export function CustomerApp(){
       {/* ═══ SEATS — مقعد لكل معتمر بالاسم، بعد إدخال بياناتهم ═══ */}
       {screen==="seats"&&trip&&
         <FlowScreen
+          variant="auth"
           title={t("assignSeats")} subtitle={t("pickPilgrim")} step={3}
           onBack={()=>setScreen("passengers")} onClose={()=>setScreen("listing")}
           cta={()=>{ if(seatsDone) setScreen("review"); }} ctaLabel={t("next")} ctaDisabled={!seatsDone}>
@@ -950,6 +1029,7 @@ export function CustomerApp(){
       {/* ═══ REVIEW ═══ */}
       {screen==="review"&&pkg&&trip&&
         <FlowScreen
+          variant="auth"
           title={t("review")} step={4}
           onBack={()=>setScreen("seats")} onClose={()=>setScreen("listing")}
           cta={doSubmit} ctaLabel={submitting?t("submitting"):t("submit")}
@@ -1047,6 +1127,7 @@ export function CustomerApp(){
       {/* ═══ SUCCESS (R8: timeline directly) ═══ */}
       {screen==="success"&&
         <FlowScreen
+          variant="auth"
           title={t("successTitle")} subtitle={t("successMsg")} align="center"
           cta={()=>{reset();setScreen("packages");}} ctaLabel={t("home")}>
           <div className="flex flex-col items-center" style={{gap:20}}>
@@ -1071,7 +1152,7 @@ export function CustomerApp(){
 
       {/* ═══ TRACK (auto for logged-in) ═══ */}
       {screen==="track"&&<>
-        <div className="flex-1 flex flex-col" style={{background:C.white,paddingInline:SPACE.page,paddingTop:20,gap:16}}>
+        <div className="ts-track-shell flex-1 flex flex-col" style={{background:C.white,paddingInline:SPACE.page,paddingTop:20,gap:16}}>
           <h1 style={{...T.h1,color:C.ink,margin:0}}>{t("trackTitle")}</h1>
           {!session
             ? sessionReady
@@ -1153,14 +1234,22 @@ export function CustomerApp(){
       {/* ═══ LOGIN — الجوال ═══ */}
       {screen==="login"&&
         <FlowScreen
-          title={t("loginOrSignup")} subtitle={t(SKIP_OTP?"phoneLeadNoOtp":"phoneLead")} step={1}
+          variant="auth"
+          title={loginStage==="phone"?t("loginOrSignup"):loginStage==="password"?"مرحبًا بعودتك":"إنشاء حساب جديد"}
+          subtitle={loginStage==="phone"?"أدخل رقم جوالك للمتابعة":loginStage==="password"?"أدخل كلمة المرور للدخول إلى حسابك":"أدخل بريدك الإلكتروني وكلمة المرور لإنشاء حسابك"}
+          onBack={loginStage!=="phone"?()=>{setLoginStage("phone");setOtpErr("");}:undefined}
           onClose={()=>setScreen(intent==="track"?"track":"listing")}
-          cta={beginLogin} ctaLabel={t("continueBtn")} ctaBusy={sending}
-          ctaDisabled={!validPhone(loginPhone)} error={otpErr}>
+          cta={loginStage==="phone"?beginLogin:loginStage==="password"?submitPasswordLogin:submitSignup}
+          ctaLabel={loginStage==="phone"?"متابعة":loginStage==="password"?"تسجيل الدخول":"إنشاء الحساب"} ctaBusy={sending}
+          ctaDisabled={loginStage==="phone"?!validPhone(loginPhone):loginStage==="password"?!loginPassword:!loginEmail.includes("@")||loginPassword.length<6} error={otpErr}>
           {/* الزر معطّل حتى يصحّ الرقم؛ والتلميح يظهر بعد أول إدخال
               حتى لا يبقى المستخدم أمام زر لا يعمل بلا سبب معروض. */}
-          <PhoneField value={loginPhone} onChange={setLoginPhone} onEnter={beginLogin}
+          {loginStage==="phone" ? <PhoneField value={loginPhone} onChange={setLoginPhone} onEnter={beginLogin}
             error={loginPhone.trim().length>=4&&!validPhone(loginPhone)?t("phoneHint"):undefined}/>
+          : <InputStack>
+              {loginStage==="signup"&&<StackField label="البريد الإلكتروني" value={loginEmail} onChange={setLoginEmail} placeholder="name@example.com" type="email" inputMode="email" />}
+              <StackField label="كلمة المرور" value={loginPassword} onChange={setLoginPassword} placeholder="6 أحرف على الأقل" type="password" last />
+            </InputStack>}
         </FlowScreen>}
 
       {/* ═══ OTP — تأكيد الهوية ═══ */}
@@ -1202,17 +1291,22 @@ export function CustomerApp(){
       {/* ═══ ACCOUNT — إكمال بيانات الحساب (أول مرة فقط) ═══ */}
       {screen==="account"&&
         <FlowScreen
+          variant="auth"
           title={t("completeAccount")} subtitle={t("accountHint")} step={1}
           onClose={()=>setScreen(intent==="track"?"track":"listing")}
           cta={submitAccount} ctaLabel={t("saveAndContinue")} ctaBusy={acSaving}
           ctaDisabled={!acFirst.trim()||!acLast.trim()||!acBirth} error={acErr}>
           <Labeled label={t("legalName")}>
-            <InputStack>
+            <div className="ts-account-name-grid">
+              <InputStack>
               <StackField label={t("firstName")} value={acFirst} onChange={setAcFirst}
-                error={acTried&&!acFirst.trim()?" ":undefined}/>
+                  error={acTried&&!acFirst.trim()?" ":undefined} last/>
+              </InputStack>
+              <InputStack>
               <StackField label={t("lastName")} value={acLast} onChange={setAcLast} last
                 error={acTried&&!acLast.trim()?" ":undefined}/>
-            </InputStack>
+              </InputStack>
+            </div>
           </Labeled>
           <Labeled label={t("birthDate")} hint={acTried&&!acBirth?t("required"):t("birthDateHint")} bad={acTried&&!acBirth}>
             <BirthDateSelect lang={lang} dir={dir} value={acBirth} invalid={acTried&&!acBirth}
@@ -1277,7 +1371,8 @@ export function CustomerApp(){
       {/* زر واتساب — ثابت في كل الشاشات، ويرتفع فوق الشريط السفلي حيث يظهر */}
       {/* الزر العائم يختفي في شاشات المسار: زر الإجراء الثابت أهم منه،
           وكان يغطّيه. ويرتفع فوق شريط التنقّل حيث يظهر. */}
-      {!isFlow&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)||screen==="listing"?100:24}/>}
+      {/* صفحة الباقة جزء من قرار الحجز؛ لا زر عائم يزاحم شريط الإجمالي أو الخيارات. */}
+      {!isFlow&&screen!=="listing"&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)?100:24}/>} 
 
       {/* كان مركّباً في AdminApp وحده، فكل toast من طبقة البيانات كان
           يُطلَق في لا مكان: العميل يرى «تم استلام طلبك» ثم لا شيء. dir

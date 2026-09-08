@@ -6,19 +6,20 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Wifi, Tv, BatteryCharging, Utensils, UserCheck, BusFront, MapPin, Building2,
-  CalendarX, KeyRound, ShieldCheck, Star, BedDouble, ChevronLeft,
+  CalendarX, KeyRound, ShieldCheck, Star, BedDouble, ChevronLeft, CalendarDays, Users,
 } from "lucide-react";
-import type { Pkg, Trip, Hotel, Transport, PkgFeature } from "@/types";
+import { TasaheelMark } from "@/components/TasaheelMark";
+import type { Pkg, Trip, Hotel, Transport, PkgFeature, PkgReview } from "@/types";
 import { hotelDisplayName } from "@/lib/hotelName";
 import {
-  roomSplits, splitTotal, splitSummary, splitHeadline, splitDetail, bedsCount,
+  bookingRoomChoices, splitTotal, splitSummary, splitHeadline, splitDetail, bedsCount,
   type RoomSplit,
 } from "../roomSplit";
 import { C, T, R, SPACE, STICKY_H, LTR, flipRTL, money, formatDate } from "../ui/tokens";
 import {
-  Section, HeroGallery, StickyBar, Chip, Stars, AmenityRow, AccordionRow, StepRow,
+  Section, HeroGallery, StickyBar, Chip, Stars, AmenityRow, AccordionRow, DoneRow,
   GrayButton, OutlineButton, Sheet, Counter, TripCalendar, HScroll, TitleAccent,
-  MediaGallery, CTAButton, useDir, type Tone,
+  MediaGallery, CTAButton, useDir, useIsDesktop, type Tone,
 } from "../ui/kit";
 import {
   pkgGallery, hotelMedia, roomMedia, transportMedia, type Media,
@@ -87,9 +88,10 @@ function RoomTypeCard({ type, opts, nights, t, selected, onOpen }: {
   type: string; opts: RoomSplit[]; nights: number; t: (k: string) => string;
   selected: boolean; onOpen: () => void;
 }) {
-  /* الغرف مرتّبة تنازلياً بالسعة، فأولى أوّل توزيع أكبرها وصورتها أدلّ. */
+  /* الخيار يساوي صفّاً واحداً من الباقة: نوع السكن وسعته المسجلة. */
   const thumb = roomMedia(opts[0].rooms[0])[0];
   const cheapest = Math.min(...opts.map(o => splitTotal(o, nights)));
+  const capacity = opts[0].capacity;
   const dir = useDir();
 
   return (
@@ -109,14 +111,12 @@ function RoomTypeCard({ type, opts, nights, t, selected, onOpen }: {
 
         {/* الأسرّة رسماً: يُفهم شكل النوم قبل القراءة */}
         <span className="flex items-center" style={{ gap: 2 }}>
-          {Array.from({ length: Math.min(opts[0].rooms[0].persons, 4) }, (_, b) => (
+          {Array.from({ length: Math.min(capacity, 3) }, (_, b) => (
             <BedDouble key={b} size={15} style={{ color: selected ? C.greenDeep : C.ink2 }} />
           ))}
-          {opts.length > 1 && (
-            <span style={{ ...T.small, fontWeight: 400, color: C.ink2, marginInlineStart: 6 }}>
-              {t("splitOptionsN").replace("{n}", String(opts.length))}
-            </span>
-          )}
+          <span style={{ ...T.small, fontWeight: 500, color: C.ink2, marginInlineStart: 6 }}>
+            {capacity} {t("guests")}
+          </span>
         </span>
 
         <span className="flex items-baseline" style={{ gap: 5, flexWrap: "wrap" }}>
@@ -194,12 +194,40 @@ function SplitRow({ split, nights, t, picked, onPick }: {
   );
 }
 
+/** بطاقة رأي — أربعٌ في صفٍّ على الديسكتوب بدل مُدوِّرٍ يعرض واحداً.
+
+    الرأي الواحد المتبدّل يناسب عمود الجوال؛ وعلى الشاشة العريضة يترك
+    ثلاثة أرباع الصفّ فارغاً ويطلب من القارئ انتظار الدور. */
+function ReviewCard({ rv, onOpen }: { rv: PkgReview; onOpen: () => void }) {
+  const r = reviewRating(rv.rating);
+  return (
+    <button type="button" onClick={onOpen} className="ts-review-card">
+      <span className="ts-review-head">
+        <span className="ts-review-avatar" aria-hidden>{rv.name.trim().charAt(0)}</span>
+        <span className="ts-review-name">{rv.name}</span>
+        {r !== null && (
+          <span className="ts-review-score" style={{ direction: "ltr" }}>
+            {r.toFixed(1).replace(/\.0$/, "")}/5
+          </span>
+        )}
+      </span>
+      <span className="ts-review-text">{rv.text}</span>
+    </button>
+  );
+}
+
 export function Listing(p: ListingProps) {
   const { pkg, trips, calendarTrips, hotel, transport, trip, split, persons, total, bookingMode, t } = p;
+  const dir = useDir();
   const transportOnly = !!pkg.transportOnlyEnabled && (pkg.transportOnlyPrice ?? 0) > 0;
 
   const [amenitiesOpen, setAmenitiesOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
+  /* على الديسكتوب التفاصيل جزء مرئي من الصفحة في شبكة 2×2؛ الجوال يبقيها
+     مطوية حتى لا يحوّل رحلة الحجز إلى صفحة طويلة. */
+  const [detailsOpen, setDetailsOpen] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches,
+  );
   /** عرض كامل لأي معرض عند الضغط على صورته الرئيسية. */
   const [full, setFull] = useState<{ items: Media[]; i: number } | null>(null);
   /** ورقة تفاصيل التوزيع — تحمل الصور وتفصيل السعر بدل تمديد البطاقة. */
@@ -219,28 +247,36 @@ export function Listing(p: ListingProps) {
   const transportPics = useMemo(() => transportMedia(transport), [transport]);
   const nights = pkg.nights || 1;
 
-  /* توزيعات السكن الممكنة لهذا العدد — تُشتق من شرائح الباقة لا تُكتب يدوياً،
-     فباقة بلا شريحة سعة 3 لا تعرض «غرفة لثلاثة» أصلاً. */
-  const options = useMemo(() => roomSplits(pkg.roomPrices, persons), [pkg.roomPrices, persons]);
-  /* البطاقات مجمّعة بالنوع: «سكن مشترك» و«غرفة خاصة» قراران مختلفان،
-     وخلطهما في قائمة واحدة يجعل فرق السعر يبدو تعسّفياً. */
-  const groups = useMemo(() => {
-    const m = new Map<string, RoomSplit[]>();
-    for (const o of options) { const g = m.get(o.type); if (g) g.push(o); else m.set(o.type, [o]); }
-    return [...m];
-  }, [options]);
+  /* كل صف يظهر كما سُجّل: «سكن مشترك · 3 أشخاص» مثلاً. الرقم سعة الغرفة،
+     أما الإجمالي فيضرب سعرها للفرد في عدد معتمري الطلب. */
+  const options = useMemo(() => bookingRoomChoices(pkg.roomPrices, persons), [pkg.roomPrices, persons]);
+  /* لا ندمج فئات السكن المشترك: 2 و3 و4 أشخاص خيارات مستقلة. */
+  const groups = useMemo(() => options.map(o => [o.key, [o]] as [string, RoomSplit[]]), [options]);
 
   /* المقاعد انتقلت لشاشة مستقلة بعد بيانات المعتمرين — لكل معتمر مقعده بالاسم. */
   /* السعة تُفحص هنا أيضاً لا في الحارس وحده: الحارس أثر جانبي يعمل بعد
      الرسم، وبين تغيّر العدد وتنفيذه إطارٌ كان الشريط الثابت فيه مفعَّلاً. */
-  const ready = !!trip && (bookingMode === "transport" || (!!split && split.capacity >= persons));
+  const ready = !!trip && (bookingMode === "transport" || !!split);
 
-  /** الخطوة المفتوحة حالياً — واحدة فقط، ولا تنتقل إلا بزرّ صريح. */
-  const [openStep, setOpenStep] = useState<string>("date");
+  /* ── حالة التحرير ──
+     لا أكورديون مرقّم ولا خطوةٌ تُطوى فتغيب. العلّة التي أسقطته: التاريخ
+     كان يختفي بعد اختياره ويبقى مكانه زرٌّ ذهبي ضخم، فلا المستفيد يرى ما
+     اختار ولا يعرف لِمَ الزرّ. الآن كل قرارٍ يبقى مرئياً: محرّرٌ مفتوح
+     قبل الاختيار، وصفٌّ فاتح فيه ✓ وقيمته و«تعديل» بعده.
 
-  /* الشهر المعروض في التقويم — هنا لا داخل TripCalendar: خطوة الأكورديون
-     تفكّ تركيب أبنائها عند الطيّ، فكانت العودة إليها تعيد التقويم إلى شهر
-     أول رحلة ولو كان المستفيد قد تصفّح إلى ما بعده. */
+     ثلاث رايات مستقلة لا راية واحدة: التاريخ والعدد يُحرَّران معاً في
+     البداية (صفّان جنباً إلى جنب على الديسكتوب)، وتأكيد التاريخ يطويهما
+     كليهما — وهو ما يجعل الصفحة تقصر بضغطةٍ واحدة. */
+  const [editDate, setEditDate] = useState(true);
+  const [editPeople, setEditPeople] = useState(true);
+  const [editRoom, setEditRoom] = useState(true);
+  /* التفريع الحقيقي على العرض في موضعين لا يكفي فيهما CSS: شبكة التقييمات
+     (مُدوِّرها مؤقّتٌ يجب ألّا يوجد أصلاً على الجوال) وارتفاع المعرض. */
+  const isDesktop = useIsDesktop();
+
+  /* الشهر المعروض في التقويم — هنا لا داخل TripCalendar: إعادة تركيب
+     المحرّر بعد طيّه كانت تعيد التقويم إلى شهر أول رحلة ولو كان المستفيد
+     قد تصفّح إلى ما بعده. */
   const [calMonth, setCalMonth] = useState<{ y: number; m: number } | undefined>();
 
   /** اليوم مطروح لكنه لا يُحجز — التقويم يرسمه مشطوباً بدل إخفائه. */
@@ -252,114 +288,103 @@ export function Listing(p: ListingProps) {
   const firstPolicy = pkg.policies?.find(x => x.trim())?.trim();
   const reviews = pkg.reviews?.filter(r => r.name.trim() && r.text.trim()) ?? [];
 
-  /** ما ينقص الحجز — يُعرض في الشريط الثابت بدل تعطيل صامت. */
+  /** ما ينقص الحجز — يُعرض في الملخّص بدل تعطيل صامت. */
   const missing = !trip ? t("chooseTrip")
     : bookingMode === "transport" ? null
     : options.length === 0 ? t("noRoomFit")
     : !split ? t("chooseRoom")
     : null;
 
-  /** نص بديل للخطوة المقفلة — أوضح من إخفائها، لأن إخفاءها يغيّر عدد الخطوات. */
-  const locked = (
-    <div style={{ ...T.meta, color: C.ink3 }}>{t("pickDateFirst")}</div>
-  );
+  const roomNeeded = bookingMode === "full" && !!pkg.roomPrices?.length;
+  /* أقصى عدد قبل اختيار التاريخ: أكبر ما تتيحه رحلةٌ من رحلات الباقة.
+     يُقصّ إلى سعة الرحلة لحظة اختيارها (CustomerApp يفعلها)، فلا يُمنع
+     المستفيد من تحديد عدده قبل الموعد — والخليتان مفتوحتان معاً. */
+  const maxAnyTrip = trips.length ? Math.max(...trips.map(availSeats)) : 9;
+  const peopleMax = trip ? availSeats(trip) : maxAnyTrip;
 
-  /* ── خطوات الحجز: تاريخ ← عدد ← سكن. المقاعد بعد بيانات المعتمرين.
-        الترقيم يُشتق من الموضع، والخطوة المنتهية تُطوى إلى سطر واحد. ── */
-  const steps: { key: string; title: string; done: boolean; value?: string; locked?: boolean; body: ReactNode }[] = [
-    {
-      key: "date", title: t("chooseTrip"), done: !!trip,
-      value: trip ? formatDate(trip.departureDate, p.lang, true) : undefined,
-      body: trips.length === 0
-        ? <div style={{ ...T.body, color: C.ink2 }}>{t("noTrips")}</div>
-        : (
-          /* التقويم يبقى مفتوحاً بعد الضغط، والانتقال بزرّ تأكيد صريح:
-             الطيّ الفوري كان يقفز بالتخطيط قبل أن يرى المستفيد أثر ضغطته،
-             فيبقى غير واثق أنه اختار تاريخاً أصلاً. */
-          <>
-            <TripCalendar
-              trips={calendarTrips} valueId={trip?.id}
-              isFull={tripFull}
-              month={calMonth} onMonthChange={setCalMonth}
-              legend={{ available: t("dayAvailable"), full: t("dayFull") }}
-              onPick={p.setTrip}
-              onClear={() => p.setTrip(null)}
-              clearLabel={t("clearDate")}
-            />
+  const dateDone   = !!trip  && !editDate;
+  const peopleDone = !!trip  && !editPeople;
+  const roomDone   = !!split && !editRoom;
 
-            {/* سطر تأكيد نصّي — أثر الضغطة مقروءاً لا لوناً وحده */}
-            {trip && (
-              <div style={{ ...T.meta, color: C.ink, marginTop: 12, fontWeight: 600 }}>
-                {formatDate(trip.departureDate, p.lang, true)}
-                {" · "}
-                <span style={{ fontWeight: 400, color: C.ink2 }}>
-                  {seatsLabel(availSeats(trip), t)}
-                </span>
-              </div>
-            )}
-
-            <div style={{ marginTop: 14 }}>
-              <CTAButton full disabled={!trip} onClick={() => setOpenStep("people")}>
-                {t("confirmDate")}
-              </CTAButton>
-              {/* الزرّ المعطَّل يقول سببه. بدونه يقف المستفيد أمام زرٍّ
-                  رماديّ لا يعرف أهو معطوب أم ينتظر منه شيئاً — وهو ما
-                  رصده الفريق. والنصّ يختفي فور الاختيار فلا يزاحم. */}
-              {!trip && (
-                <div style={{ ...T.small, fontWeight: 400, color: C.ink3, marginTop: 8, textAlign: "center" }}>
-                  {t("pickDateFirst")}
-                </div>
-              )}
+  /* ── خليّة التاريخ ── */
+  const dateBody = trips.length === 0
+    ? <div style={{ ...T.body, color: C.ink2 }}>{t("noTrips")}</div>
+    : dateDone && trip
+    ? <DoneRow icon={<CalendarDays size={15} />} label={t("chooseTrip")}
+        value={`${formatDate(trip.departureDate, p.lang, true)} · ${seatsLabel(availSeats(trip), t)}`}
+        editLabel={t("editWord")} onEdit={() => setEditDate(true)} />
+    : (
+      <>
+        <TripCalendar
+          trips={calendarTrips} valueId={trip?.id}
+          isFull={tripFull}
+          month={calMonth} onMonthChange={setCalMonth}
+          legend={{ available: t("dayAvailable"), full: t("dayFull") }}
+          onPick={p.setTrip}
+          onClear={() => p.setTrip(null)}
+          clearLabel={t("clearDate")}
+        />
+        <div style={{ marginTop: 12 }}>
+          <CTAButton full disabled={!trip}
+            onClick={() => setEditDate(false)}>
+            {t("confirmDate")}
+          </CTAButton>
+          {/* الزرّ المعطَّل يقول سببه، والنصّ يختفي فور الاختيار فلا يزاحم. */}
+          {!trip && (
+            <div style={{ ...T.small, fontWeight: 400, color: C.ink3, marginTop: 8, textAlign: "center" }}>
+              {t("pickDateFirst")}
             </div>
-          </>
-        ),
-    },
-    {
-      key: "people", title: t("people"), done: !!trip, locked: !trip,
-      value: trip ? `${persons} ${t("person")}` : undefined,
-      body: trip
-        ? (
-          <>
-            <Counter
-              label={t("person")} note={seatsLabel(availSeats(trip), t)}
-              value={persons} min={1} max={availSeats(trip)} onChange={p.setPersons}
-            />
-            <div style={{ marginTop: 14 }}>
-              <CTAButton full onClick={() => setOpenStep(bookingMode === "full" && options.length ? "room" : "people")}>
-                {t("next")}
-              </CTAButton>
-            </div>
-          </>
-        )
-        : locked,
-    },
-    ...(bookingMode === "full" && pkg.roomPrices?.length ? [{
-      key: "room", title: t("roomSplitTitle"), done: !!split, locked: !trip,
-      value: split ? splitSummary(split, t) : undefined,
-      body: options.length === 0
-        ? (
-          /* لا توزيع يناسب العدد — رسالة صريحة لا خطوة فارغة، لأن الخطوة
-             الفارغة تُقرأ عطلاً في التطبيق لا حدّاً في بيانات الباقة. */
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <div style={{ ...T.body, color: C.ink }}>{t("noRoomFit")}</div>
-            <div style={{ ...T.meta, color: C.ink2 }}>{t("noRoomFitHint")}</div>
+          )}
+        </div>
+      </>
+    );
+
+  /* ── خليّة العدد ── */
+  const peopleBody = peopleDone
+    ? <DoneRow icon={<Users size={15} />} label={t("people")}
+        value={`${persons} ${t("person")}`}
+        editLabel={t("editWord")} onEdit={() => setEditPeople(true)} />
+    : (
+      <>
+        <Counter
+          label={t("person")} note={trip ? seatsLabel(availSeats(trip), t) : undefined}
+          value={persons} min={1} max={peopleMax} onChange={p.setPersons}
+        />
+        {trip && (
+          <div style={{ marginTop: 10 }}>
+            <CTAButton full onClick={() => setEditPeople(false)}>{t("confirmPeople")}</CTAButton>
           </div>
-        )
-        : (
-          <div className="flex flex-col" style={{ gap: 10 }}>
-            {/* بطاقة لكل نوع لا لكل توزيع — الاسم صار داخل البطاقة فلا
-                حاجة لعنوان مجموعة فوقها. */}
-            {groups.map(([type, opts]) => (
-              <RoomTypeCard
-                key={type} type={type} opts={opts} nights={nights} t={t}
-                selected={split?.type === type}
-                onOpen={() => openRoomType(type, opts)}
-              />
-            ))}
-          </div>
-        ),
-    }] : []),
-  ];
+        )}
+      </>
+    );
+
+  /* ── خليّة السكن ── */
+  const roomBody = !roomNeeded ? null
+    : options.length === 0
+    ? (
+      /* لا توزيع يناسب العدد — رسالة صريحة لا خليّة فارغة، لأن الفارغة
+         تُقرأ عطلاً في التطبيق لا حدّاً في بيانات الباقة. */
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        <div style={{ ...T.body, color: C.ink }}>{t("noRoomFit")}</div>
+        <div style={{ ...T.meta, color: C.ink2 }}>{t("noRoomFitHint")}</div>
+      </div>
+    )
+    : roomDone && split
+    ? <DoneRow icon={<BedDouble size={15} />} label={t("roomSplitTitle")}
+        value={`${splitSummary(split, t)} · ${money(splitTotal(split, nights))} ${t("currency")}`}
+        editLabel={t("editWord")} onEdit={() => setEditRoom(true)} />
+    : (
+      <div className="ts-room-options flex flex-col" style={{ gap: 10 }}>
+        {/* الاختيار مباشر: كل صف هو فئة سكن مستقلة كما في الأسعار. */}
+        {groups.map(([key, opts]) => (
+          <RoomTypeCard
+            key={key} type={opts[0].type} opts={opts} nights={nights} t={t}
+            selected={split?.key === opts[0].key}
+            onOpen={() => { p.setSplit(opts[0]); setEditRoom(false); }}
+          />
+        ))}
+      </div>
+    );
 
   /* ── الأقسام المعلوماتية — تُرشَّح بالوجود ثم يُحسب لونها من موضعها.
         لو ثُبّت اللون يدوياً لكل قسم، فباقة بلا برنامج أو بلا فندق
@@ -414,7 +439,8 @@ export function Listing(p: ListingProps) {
     key: "stay", title: t("stay"),
     body: (
       <div>
-        <MediaGallery items={hotelPics} height={230} onOpen={i => setFull({ items: hotelPics, i })} />
+        <MediaGallery items={hotelPics} height={230} layout={isDesktop ? "triplet" : undefined}
+          onOpen={i => setFull({ items: hotelPics, i })} />
         <div style={{ paddingTop: 16 }}>
           <div className="flex items-center gap-2">
             <span style={{ ...T.h3, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
@@ -480,9 +506,24 @@ export function Listing(p: ListingProps) {
   info.push({
     key: "reviews",
     title: reviews.length ? `${reviews.length} ${t("guestReviews")}` : t("guestReviews"),
-    /* bleed حتى يتحكّم القسم بهوامشه: النقاط تُتوسَّط بعرض الصفحة كاملاً. */
-    bleed: reviews.length > 0,
+    /* bleed حتى يتحكّم القسم بهوامشه: النقاط تُتوسَّط بعرض الصفحة كاملاً.
+       ولا bleed على الديسكتوب — الشبكة تحترم حشوة اللوحة. */
+    bleed: reviews.length > 0 && !isDesktop,
     body: reviews.length ? (
+      isDesktop ? (
+        <>
+          <div className="ts-reviews-grid">
+            {reviews.slice(0, 4).map(rv => (
+              <ReviewCard key={rv.id} rv={rv} onOpen={() => setReviewsOpen(true)} />
+            ))}
+          </div>
+          {reviews.length > 4 && (
+            <div className="ts-reviews-all">
+              <button type="button" onClick={() => setReviewsOpen(true)}>{t("showAllReviewsShort")}</button>
+            </div>
+          )}
+        </>
+      ) : (
       <>
         <ReviewsSection reviews={reviews} t={t} onReadMore={() => setReviewsOpen(true)} />
         {reviews.length > 1 && (
@@ -491,6 +532,7 @@ export function Listing(p: ListingProps) {
           </div>
         )}
       </>
+      )
     ) : (
       <div className="flex items-center gap-2" style={{ ...T.body, color: C.ink2 }}>
         <Star size={16} color={C.ink3} />{t("noReviews")}
@@ -501,7 +543,9 @@ export function Listing(p: ListingProps) {
   info.push({
     key: "know", title: t("thingsToKnow"),
     body: (
-      <>
+      /* ثلاثة أعمدة على الديسكتوب (CSS): الإلغاء والشروط والملاحظات
+         معلوماتٌ يُرجَع إليها لا تُقرأ بالتتابع، فصفّ واحد يكفيها. */
+      <div className="ts-know-grid">
         {/* لا سياسة مسجّلة ⇒ يُقال ذلك صراحةً. الاحتياطية القديمة كانت
             «إلغاء مجاني» — وعدٌ لم يكتبه أحد يظهر على باقةٍ بلا سياسات،
             ويُقرأ التزاماً عند أول طلب إلغاء. */}
@@ -518,23 +562,40 @@ export function Listing(p: ListingProps) {
         <AccordionRow icon={<ShieldCheck size={20} />} title={t("termsTitle")}>
           {p.terms}
         </AccordionRow>
-      </>
+      </div>
     ),
   });
 
   return (
-    <div className="flex flex-col flex-1" style={{ background: C.white }}>
-      <div className="flex-1" style={{ paddingBottom: STICKY_H }}>
+    <div className="ts-listing-shell flex flex-col flex-1" style={{ background: C.white }}>
+      {/* ── الشبكة ──
+          على الجوال عمودٌ واحد بالترتيب نفسه. وعلى الديسكتوب شبكة اثني
+          عشر عموداً (CSS): الصور والمعلومات صفّاً أول، والحجز مع ملخّصه
+          صفّاً ثانياً، ثم أزواج، ثم ثلاثيات، والتقييمات أربعٌ في صفّ.
+          كل لوحة `ts-panel` تأخذ حصّتها من العرض بصنفها لا بمكانها. */}
+      <div className="flex-1 ts-listing-grid" style={{ paddingBottom: STICKY_H }}>
 
-        {/* ═══ المعرض ═══ */}
-        <HeroGallery images={images} onBack={p.onBack} t={t} shareTitle={pkg.name} />
+        {/* رأسٌ فعلي للجوال: لا يُترك الرجوع كلمةً صغيرةً داخل المعلومات.
+            يظهر فوق المحتوى، ثم تبدأ الصور مباشرةً. */}
+        <header className="ts-mobile-listing-header">
+          <button type="button" onClick={p.onBack} className="ts-mobile-listing-back">
+            <ChevronLeft size={22} style={{ ...flipRTL(dir) }} />
+            {t("back")}
+          </button>
+          <TasaheelMark size={42} plain />
+        </header>
 
-        {/* ═══ بطاقة الرأس — تتداخل مع الصورة كما عندهم ═══ */}
-        <div style={{
-          background: C.white, borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet,
-          marginTop: -24, position: "relative", zIndex: 1,
-          padding: `24px ${SPACE.page}px ${SPACE.section}px`,
-        }}>
+        {/* ═══ صور الباقة ═══
+            الصور تسبق معلومات الباقة على الجوال، وتبقى في صدر الشبكة
+            على الديسكتوب أيضاً. */}
+        <div className="ts-panel ts-p-gallery"
+          style={{ background: C.white, padding: `0 ${SPACE.page}px ${SPACE.section}px` }}>
+          <div className="ts-gallery-title" style={{ ...T.h3, color: C.ink, marginBottom: 10 }}>{t("viewPhotos")}</div>
+          <HeroGallery images={images} onBack={isDesktop ? p.onBack : undefined} height={isDesktop ? 336 : 220} t={t} shareTitle={pkg.name} />
+        </div>
+
+        {/* ═══ رأس الباقة — معلومات الرحلة بجانب الصور ═══ */}
+        <div className="ts-panel ts-p-head" style={{ background: C.white, padding: `16px ${SPACE.page}px ${SPACE.section}px` }}>
           <h1 style={{ ...T.h1, color: C.ink, margin: 0 }}>{pkg.name}</h1>
           <div style={{ ...T.body, color: C.ink2, marginTop: 6 }}>
             {pkg.destination} · {pkg.audience}
@@ -564,48 +625,114 @@ export function Listing(p: ListingProps) {
               <Chip tone="fill">✓ {firstPolicy}</Chip>
             </div>
           )}
+
+          {/* ── حقائق سريعة ──
+              تشغل المساحة التي كانت فراغاً بجانب الصور على الديسكتوب.
+              مخفيّة على الجوال: هناك الصفحة سرديّة وهذه المعلومات تتكرّر
+              في أقسامها، فتزيد طولاً بلا فائدة. */}
+          <div className="ts-facts ts-only-desktop">
+            {[
+              { Icon: CalendarDays, k: t("nextTrip"), v: trips[0] ? formatDate(trips[0].departureDate, p.lang) : "—" },
+              { Icon: Users,        k: t("people"),   v: `${persons} ${t("person")}` },
+              { Icon: BusFront,     k: t("transport"), v: transport?.vehicleType ?? "—" },
+              { Icon: Building2,    k: t("stay"),      v: hotel && bookingMode === "full" ? hotelDisplayName(hotel.name) : "—" },
+            ].map(({ Icon, k, v }) => (
+              <div key={k} className="ts-fact">
+                <Icon size={15} aria-hidden />
+                <span className="min-w-0"><small>{k}</small><b title={v}>{v}</b></span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* ═══ كتلة الحجز — الخطوات الأربع تحت عنوان واحد ═══ */}
-        <section style={{ background: C.bandAction, paddingInline: SPACE.page, paddingBlock: SPACE.section }}>
-          <div className="flex items-center gap-2.5" style={{ marginBottom: 20 }}>
+        {/* ═══ الحجز — التاريخ والعدد خليّتان جنباً إلى جنب ═══ */}
+        <section className="ts-panel ts-p-book" style={{ background: C.bandAction, paddingInline: SPACE.page, paddingBlock: SPACE.section }}>
+          <div className="flex items-center gap-2.5" style={{ marginBottom: 16 }}>
             <TitleAccent />
             <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("bookYourTrip")}</h2>
           </div>
           {transportOnly && (
-            <div className="grid grid-cols-2" style={{ gap: 10, marginBottom: 18 }}>
+            <div className="grid grid-cols-2" style={{ gap: 10, marginBottom: 14 }}>
               {(["full", "transport"] as const).map(mode => {
                 const on = bookingMode === mode;
-                const transport = mode === "transport";
+                const transportMode = mode === "transport";
                 return <button key={mode} onClick={() => p.setBookingMode(mode)}
                   style={{ padding: 12, borderRadius: R.card, cursor: "pointer", textAlign: "start",
                     border: `${on ? 2 : 1}px solid ${on ? C.green : C.border}`,
                     background: on ? C.greenTint : C.white, color: C.ink, fontFamily: "inherit" }}>
-                  <span style={{ ...T.body, fontWeight: 600, display: "block" }}>{transport ? "🚌 مواصلات فقط" : "الباقة الكاملة"}</span>
+                  <span style={{ ...T.body, fontWeight: 600, display: "block" }}>{transportMode ? "🚌 مواصلات فقط" : "الباقة الكاملة"}</span>
                   <span style={{ ...T.small, color: C.ink2, display: "block", marginTop: 3 }}>
-                    {transport ? `${money(pkg.transportOnlyPrice ?? 0)} ${t("currency")} للفرد` : "يشمل السكن"}
+                    {transportMode ? `${money(pkg.transportOnlyPrice ?? 0)} ${t("currency")} للفرد` : "يشمل السكن"}
                   </span>
                 </button>;
               })}
             </div>
           )}
-          {steps.map((s, i) => (
-            <StepRow
-              key={s.key} n={i + 1} title={s.title} done={s.done}
-              last={i === steps.length - 1}
-              open={openStep === s.key} value={s.value} locked={s.locked}
-              onOpen={() => setOpenStep(s.key)}
-            >
-              {s.body}
-            </StepRow>
-          ))}
+
+          <div className="ts-book-grid">
+            <div className={`ts-book-cell${!dateDone ? " ts-book-active" : ""}`}>
+              {!dateDone && <div className="ts-book-cell-title">{t("chooseTrip")}</div>}
+              {dateBody}
+            </div>
+            <div className={`ts-book-cell${dateDone && !peopleDone ? " ts-book-active" : ""}`}>
+              {!peopleDone && <div className="ts-book-cell-title">{t("people")}</div>}
+              {peopleBody}
+            </div>
+            {roomBody && (
+              <div className={`ts-book-cell ts-book-room${peopleDone && !roomDone ? " ts-book-active" : ""}`}>
+                {!roomDone && <div className="ts-book-cell-title">{t("roomSplitTitle")}</div>}
+                {roomBody}
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* ═══ الأقسام المعلوماتية — اللون يتناوب على الظاهر فعلاً ═══ */}
+        {/* ═══ ملخّص الحجز ═══
+            عمودٌ لاصق بجانب الحجز على الديسكتوب: السعر والخطوة التالية
+            مرئيان بلا شريطٍ يأكل مئتي بكسل من أسفل الشاشة. وعلى الجوال
+            يبقى الشريط الثابت (StickyBar) وحده. */}
+        <aside className="ts-panel ts-p-aside ts-only-desktop" aria-label={t("bookingSummary")}>
+          <div className="ts-aside-card">
+            <div className="ts-aside-head">{t("bookingSummary")}</div>
+            <div className="ts-aside-rows">
+              {/* صفّ السكن يسقط في وضع «مواصلات فقط»: لا سكن فيه، وسطرٌ
+                  قيمته «—» يُقرأ نقصاً في البيانات لا خياراً مختلفاً. */}
+              {([
+                [t("chooseTrip"), trip ? formatDate(trip.departureDate, p.lang, true) : "—"],
+                [t("people"), `${persons} ${t("person")}`],
+                ...(bookingMode === "transport" ? [] : [[t("roomSplitTitle"), split ? splitSummary(split, t) : "—"]]),
+              ] as [string, string][]).map(([k, v]) => (
+                <div key={k} className="ts-aside-row"><span>{k}</span><b>{v}</b></div>
+              ))}
+            </div>
+            <div className="ts-aside-total">
+              <span>{t("total")}</span>
+              <b style={LTR}>{(bookingMode === "transport" || split) ? `${money(total)} ${t("currency")}` : "—"}</b>
+            </div>
+            <CTAButton full disabled={!ready} onClick={p.onNext}>{t("next")}</CTAButton>
+            {/* ما ينقص يُقال بنصّه: زرٌّ رماديّ بلا سبب يُقرأ عطلاً. */}
+            {missing && <div className="ts-aside-missing">{missing}</div>}
+            {ready && firstPolicy && (
+              <div style={{ marginTop: 10, textAlign: "center" }}><Chip tone="fill">✓ {firstPolicy}</Chip></div>
+            )}
+          </div>
+        </aside>
+
+        {/* فاصل التفاصيل: على الديسكتوب عنوان ثابت لشبكة 2×2، وعلى الجوال
+            يبقى الزرّ الذي يفتح التفاصيل عند الحاجة. */}
+        <div className="ts-panel ts-p-toggle" style={{background:C.white,padding:`16px ${SPACE.page}px`}}>
+          <OutlineButton full onClick={() => { if (!isDesktop) setDetailsOpen(open => !open); }}>
+            {isDesktop ? "تفاصيل الرحلة" : detailsOpen ? "إخفاء تفاصيل الرحلة" : "عرض تفاصيل البرنامج والفندق والنقل"}
+          </OutlineButton>
+        </div>
+
+        {/* ═══ الأقسام المعلوماتية ═══ */}
         {info.map((s, i) => (
-          <Section key={s.key} title={s.title} bleed={s.bleed} tone={(i % 2 === 0 ? "white" : "sand") as Tone}>
-            {s.body}
-          </Section>
+          <div key={s.key} className={`ts-panel ts-p-${s.key}${detailsOpen ? "" : " ts-info-collapsed"}`}>
+            <Section title={s.title} bleed={s.bleed} tone={(i % 2 === 0 ? "white" : "sand") as Tone}>
+              {s.body}
+            </Section>
+          </div>
         ))}
       </div>
 
@@ -646,7 +773,7 @@ export function Listing(p: ListingProps) {
         title={roomSheet?.type ?? ""}
         footer={roomSheet && sheetPick && (
           // الاختيار يقع هنا لا في القائمة: البطاقة تعرّف، والورقة تقرّر
-          <CTAButton full onClick={() => { p.setSplit(sheetPick); setRoomSheet(null); }}>
+          <CTAButton full onClick={() => { p.setSplit(sheetPick); setRoomSheet(null); setEditRoom(false); }}>
             {t("selectThisRoom")}
           </CTAButton>
         )}>
@@ -654,7 +781,8 @@ export function Listing(p: ListingProps) {
           <div className="flex flex-col gap-4">
             {/* بلا onOpen — وإلا فُتحت ورقة فوق ورقة.
                 الغرف مرتّبة تنازلياً بالسعة، فالأولى أكبرها وصورتها أدلّ. */}
-            <MediaGallery items={roomMedia(sheetPick.rooms[0])} height={220} />
+            <MediaGallery items={roomMedia(sheetPick.rooms[0])} height={220}
+              layout={isDesktop ? "triplet" : undefined} />
 
             <div>
               <div style={{ ...T.h3, color: C.ink }}>
@@ -718,17 +846,35 @@ export function Listing(p: ListingProps) {
         )}
       </Sheet>
 
-      {/* عرض كامل لأي معرض */}
+      {/* نافذة صور الفندق/النقل: صورة واحدة مضبوطة النسبة ثم مصغّرات.
+          عرض كل الصور عمودياً كان يكبّر صورة المبنى حتى تخرج من مجال النظر. */}
       <Sheet open={!!full} onClose={() => setFull(null)} title={t("viewPhotos")}>
         {full && (
-          <div className="flex flex-col gap-3">
-            {full.items.map((m, n) => m.kind === "video" ? (
-              <video key={n} src={m.url} poster={m.poster} controls preload="none" playsInline
-                style={{ width: "100%", borderRadius: R.card, background: C.fill }} />
+          <div className="flex flex-col" style={{ gap: 12 }}>
+            {full.items[full.i]?.kind === "video" ? (
+              <video src={full.items[full.i].url} poster={full.items[full.i].poster} controls preload="none" playsInline
+                style={{ width: "100%", height: "min(60vh, 560px)", objectFit: "contain", borderRadius: R.card, background: C.fill }} />
             ) : (
-              <img key={n} src={m.url} alt="" loading="lazy"
-                style={{ width: "100%", borderRadius: R.card, display: "block", background: C.fill }} />
-            ))}
+              <div style={{ height: "min(60vh, 560px)", borderRadius: R.card, overflow: "hidden", background: C.fill }}>
+                <img src={full.items[full.i]?.url} alt="" loading="eager"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+              </div>
+            )}
+
+            {full.items.length > 1 && (
+              <div className="flex overflow-x-auto" style={{ gap: 8, scrollbarWidth: "none", paddingBlock: 2 }}>
+                {full.items.map((m, n) => (
+                  <button key={n} type="button" onClick={() => setFull(current => current ? { ...current, i: n } : null)}
+                    aria-label={`${t("viewPhotos")} ${n + 1}`}
+                    style={{ width: 68, height: 52, flexShrink: 0, overflow: "hidden", padding: 0, borderRadius: R.button,
+                      border: `${n === full.i ? 2 : 1}px solid ${n === full.i ? C.green : C.border}`,
+                      background: C.fill, cursor: "pointer" }}>
+                    <img src={m.kind === "video" ? (m.poster ?? "") : m.url} alt="" loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Sheet>

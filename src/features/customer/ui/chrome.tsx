@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Globe, ChevronLeft, Check, Search, Heart, UserRound } from "lucide-react";
 import { B } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
-import { LANGS, type Lang } from "../i18n";
+import { LANGS, cityLabel, type Lang } from "../i18n";
 import type { Screen } from "../routing";
 import { C, G } from "./tokens";
 
@@ -28,7 +28,7 @@ export function AppBar({ title, onBack, dir, lang, onLang, t }: {
 }) {
   const [langOpen, setLangOpen] = useState(false);
   return (
-    <div className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{background:G.deep,color:"#fff"}}>
+    <div className="ts-mobile-appbar sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{background:G.deep,color:"#fff"}}>
       {onBack
         ? <button onClick={onBack} className="p-1.5 rounded-lg cursor-pointer" style={{background:"rgba(255,255,255,.1)",border:"none",color:"#fff"}}><ChevronLeft size={18} style={{transform:dir==="rtl"?"scaleX(-1)":"none"}}/></button>
         : <TasaheelMark size={40}/>}
@@ -62,7 +62,7 @@ export const BottomBar = memo(function BottomBar({ screen, onNav, t }: {
   t: (k: string) => string;
 }) {
   return (
-    <div className="sticky bottom-0 z-30 grid grid-cols-3"
+    <div className="ts-mobile-bottom-bar sticky bottom-0 z-30 grid grid-cols-3"
       style={{background:C.white,borderTop:`1px solid ${C.line}`,paddingBlock:8,
               paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))"}}>
       {([["packages",Search,t("explore")],["track",Heart,t("myBookings")],["profile",UserRound,t("profile")]] as const).map(([sc,Icon,lbl])=>{
@@ -79,3 +79,50 @@ export const BottomBar = memo(function BottomBar({ screen, onNav, t }: {
     </div>
   );
 });
+
+/** تنقّل الديسكتوب مستقل عن شريط الجوال: لا نضغط أزرار الهاتف في عرض واسع.
+
+    بنيته من صفحة نتائج Booking: الشعار، ثم الوجهات (مكة · المدينة) تنقّلاً
+    أوّل، ثم في الطرف اللغة والعملة ثم الدخول وإنشاء الحساب. ولا مُنتقي
+    تواريخ — رحلتنا تبدأ من الباقة لا من فندقٍ بتاريخٍ يُبحث عنه.
+
+    والوجهة تنقّلٌ لا فلترٌ محلّي: الضغط على «مكة» من شاشة الحجوزات يعيدك
+    إلى الرحلات مصفّاةً، فحالتها في CustomerApp لا في شاشة الاستكشاف. */
+export function DesktopNav({ screen, onNav, lang, setLang, t, cities, city, setCity, signedIn, onLogin, onSignup }: {
+  screen: Screen; onNav: (s: Screen, pkgId?: string) => void;
+  lang: Lang; setLang: (lang: Lang) => void; t: (k: string) => string;
+  cities: string[]; city: string; setCity: (c: string) => void;
+  signedIn: boolean; onLogin: () => void; onSignup: () => void;
+}) {
+  const go = (c: string) => { setCity(c); onNav("packages"); };
+  const onPackages = screen === "packages";
+  return <header className="ts-desktop-nav">
+    <div className="ts-desktop-nav-inner">
+      <button className="ts-brand" onClick={() => go("")} aria-label={t("brand")}>
+        <TasaheelMark size={54} plain />
+        <span><b>{t("brand")}</b><small>{lang === "ar" ? "رحلتك المباركة، بخطوات واثقة" : "Your Umrah, clearly arranged"}</small></span>
+      </button>
+      <nav aria-label={lang === "ar" ? "التنقل الرئيسي" : "Primary navigation"}>
+        <button className={onPackages && !city ? "active" : ""} aria-current={onPackages && !city ? "page" : undefined}
+          onClick={() => go("")}>{lang === "ar" ? "الرحلات" : "Trips"}</button>
+        {cities.map(c => (
+          <button key={c} className={onPackages && city === c ? "active" : ""} aria-current={onPackages && city === c ? "page" : undefined}
+            onClick={() => go(c)}>{cityLabel(c, lang)}</button>
+        ))}
+      </nav>
+      <div className="ts-desktop-nav-actions">
+        {/* العملة تُقال ولا تُبدَّل: الأسعار بالريال وحده، ومُنتقي عملاتٍ
+            بلا أسعار تحويل يعِد بما لا يقع. */}
+        <span className="ts-currency" title={t("pricesInSar")}>SAR · {t("currency")}</span>
+        <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}><Globe size={15}/>{lang === "ar" ? "العربية" : "English"}</button>
+        {signedIn ? <>
+          <button className={screen === "track" ? "on" : ""} onClick={() => onNav("track")}><Heart size={15}/>{t("myBookings")}</button>
+          <button className="account" onClick={() => onNav("profile")}><UserRound size={15}/>{t("profile")}</button>
+        </> : <>
+          <button onClick={onSignup}>{t("signup")}</button>
+          <button className="primary" onClick={onLogin}>{t("login")}</button>
+        </>}
+      </div>
+    </div>
+  </header>;
+}

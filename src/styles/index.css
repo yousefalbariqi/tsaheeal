@@ -3,45 +3,652 @@
 @import './theme.css';
 @import './admin.css';
 
-/* واجهة المعتمر: زخرفة الهوية موجودة في الخلفية فقط، فلا تنافس قرار الحجز. */
+/* واجهة المعتمر: خلفية جميلة من الحرم والمسجد النبوي */
 .ts-explore-shell { width: 100%; max-width: 1280px; margin-inline: auto; }
 .ts-umrah-hero {
   position: relative;
   overflow: hidden;
-  padding-bottom: 26px;
+  padding-bottom: 40px;
   background:
-    radial-gradient(circle at 8% 20%, rgba(232,212,168,.42), transparent 23rem),
-    radial-gradient(circle at 92% 16%, rgba(232,212,168,.36), transparent 21rem),
+    linear-gradient(135deg, rgba(232,212,168,.15) 0%, rgba(212,190,160,.25) 50%, rgba(232,212,168,.15) 100%),
+    url("/bg-haram.jpg") center / cover fixed no-repeat,
+    linear-gradient(180deg, rgba(17,11,3,.25) 0%, rgba(17,11,3,.15) 50%, rgba(17,11,3,.35) 100%),
     #fff;
+  background-blend-mode: overlay, normal, normal, normal;
+  box-shadow: inset 0 0 60px rgba(17,11,3,.2);
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 2px solid rgba(232,212,168,.2);
 }
-.ts-umrah-hero::before,
-.ts-umrah-hero::after {
-  content: "";
-  position: absolute;
-  width: 122px;
-  height: 122px;
-  pointer-events: none;
-  opacity: .36;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%23B7893F' stroke-width='1'%3E%3Cpolygon points='30,4 36,18 51,18 39,27 44,42 30,33 16,42 21,27 9,18 24,18'/%3E%3C/g%3E%3C/svg%3E");
-}
-.ts-umrah-hero::before { inset-inline-start: -38px; top: 60px; }
-.ts-umrah-hero::after { inset-inline-end: -38px; bottom: 5px; }
 .ts-journey-helper {
   position: relative;
   z-index: 1;
-  padding: 17px;
-  background: #fff;
-  border: 1px solid #E6DFCF;
-  border-radius: 16px;
-  box-shadow: 0 14px 28px -24px rgba(91,65,19,.62);
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(255,255,255,.98) 0%, rgba(255,250,240,.96) 100%);
+  border: 1.5px solid rgba(232,212,168,.35);
+  border-radius: 18px;
+  box-shadow: 0 16px 32px -20px rgba(91,65,19,.55);
+  backdrop-filter: blur(8px);
 }
-.ts-trust-promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.ts-trust-promise { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 13px; background: #FBF9F5; border: 1px solid #E6DFCF; border-radius: 12px; color: #5C421B; }
+.ts-trust-promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ts-trust-promise { 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
+  min-width: 0; 
+  padding: 14px; 
+  background: linear-gradient(135deg, rgba(247,238,220,.8) 0%, rgba(255,255,255,.6) 100%);
+  border: 1px solid rgba(232,212,168,.4);
+  border-radius: 14px; 
+  color: #5C421B;
+  transition: all 0.3s ease;
+}
+.ts-trust-promise:hover {
+  border-color: rgba(180,137,63,.5);
+  box-shadow: 0 8px 20px rgba(180,137,63,.15);
+  transform: translateY(-2px);
+}
 .ts-trust-promise b, .ts-trust-promise small { display: block; }
-.ts-trust-promise b { font-size: 13px; }
-.ts-trust-promise small { margin-top: 1px; color: #625B4D; font-size: 11px; line-height: 1.5; }
-.ts-trust-icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #F7EEDC; color: #8C6423; }
+.ts-trust-promise b { font-size: 13px; font-weight: 600; }
+.ts-trust-promise small { margin-top: 2px; color: #626052; font-size: 11px; line-height: 1.5; font-weight: 400; }
+.ts-trust-icon { 
+  display: grid; 
+  flex: 0 0 auto; 
+  place-items: center; 
+  width: 40px; 
+  height: 40px; 
+  border-radius: 50%; 
+  background: linear-gradient(135deg, #F7EEDC 0%, #EFE8D8 100%);
+  color: #8C6423; 
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(180,137,63,.15);
+}
+.ts-desktop-nav { display:none; }
+
+/* ── شبكة الباقات وقائمتها ──
+   عمودان على الجوال (الشبكة وحدها)، وأربعة أعمدة أو قائمة أفقية على
+   الديسكتوب — انظر استعلام 1024 أدناه. */
+.ts-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap:14px; }
+.ts-list { display:grid; gap:12px; }
+
+/* صفّ القائمة يعمل على الجوال كذلك: من بدّل العرض على الحاسب ثم صغّر
+   النافذة يجد الصورة فوق والتفاصيل تحتها، لا صفّاً أفقياً مضغوطاً. */
+.ts-list-row { display:grid; grid-template-columns:1fr; gap:10px; width:100%; padding:10px; background:#fff; border:1px solid #EDE4D6; border-radius:14px; }
+.ts-list-row > img { width:100%; aspect-ratio:16 / 10; object-fit:cover; border-radius:10px; display:block; }
+.ts-list-main { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.ts-list-title { font-family:var(--font-display); font-size:18px; font-weight:600; color:#5C421B; }
+.ts-list-meta { display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:500; color:#625B4D; }
+.ts-list-incl { font-size:11px; font-weight:400; color:#A69D8E; }
+.ts-list-side { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+
+/* شريط الأدوات وبطاقة VIP للديسكتوب وحده؛ وعلى الجوال بطاقة الطلب
+   الكبيرة أسفل الصفحة هي التي تظهر. */
+.ts-explore-toolbar { display:none; }
+.ts-vip-card { display:none; }
+
+/* ═══ بنر الحديث — الحرمان خلفيةً جميلة مع تأثيرات ديناميكية ═══ */
+.ts-sacred {
+  position:relative; isolation:isolate; overflow:hidden;
+  display:grid; place-items:center; min-height:280px;
+  margin:12px 16px 4px; padding:40px 20px; border-radius:22px;
+  border:2px solid rgba(232,212,168,.45);
+  background:
+    linear-gradient(135deg, rgba(140,100,35,.1) 0%, rgba(180,150,100,.08) 50%, rgba(140,100,35,.1) 100%),
+    url("/bg-haram.jpg") center / cover,
+    #1A0F06;
+  background-attachment: fixed;
+  box-shadow: 
+    0 20px 60px rgba(17,11,3,.4),
+    inset 0 1px 0 rgba(255,255,255,.05);
+}
+/* الحجاب الناعم: تدرج شعاعي متوازن يرفع الظلام تجاه النص */
+.ts-sacred::after {
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:radial-gradient(ellipse 150% 120% at 50% 50%, 
+    rgba(17,11,3,.50) 0%, 
+    rgba(17,11,3,.68) 40%, 
+    rgba(17,11,3,.85) 100%);
+}
+
+.ts-sacred-bg { position:absolute; inset:0; z-index:-2; }
+.ts-sacred-bg img { position:absolute; inset-block:0; width:56%; height:100%; object-fit:cover; object-position:center 55%; }
+.ts-sacred-bg .mak { left:0;  -webkit-mask:linear-gradient(to right,#000 62%,transparent); mask:linear-gradient(to right,#000 62%,transparent); }
+.ts-sacred-bg .mad { right:0; }
+[dir="rtl"] .ts-sacred-bg .mak { left:auto; right:0; -webkit-mask:linear-gradient(to left,#000 62%,transparent); mask:linear-gradient(to left,#000 62%,transparent); }
+[dir="rtl"] .ts-sacred-bg .mad { right:auto; left:0; }
+
+.ts-sacred-copy { position:relative; max-width:26ch; text-align:center; }
+.ts-sacred-kind { 
+  margin:0 0 16px; 
+  color:#F0D89A; 
+  font-family:var(--font-app); 
+  font-size:13px; 
+  font-weight:700; 
+  letter-spacing:.16em; 
+  text-transform: uppercase;
+  opacity: 0.95;
+}
+/* Mobile: Show marketing copy by default */
+.ts-sacred-mobile-text { display:block; }
+.ts-sacred-hadith { display:none !important; }
+.ts-sacred-hadith-eng { display:none !important; }
+.ts-sacred-mobile-meaning { display:block; }
+
+.ts-sacred-text {
+  margin:0; color:#fff; font-family:var(--font-quote);
+  font-size:24px; font-weight:400; line-height:1.85; overflow-wrap:break-word;
+  text-shadow:
+    0 2px 8px rgba(0,0,0,.5),
+    0 0 30px rgba(232,212,168,.15);
+  letter-spacing: 0.5px;
+}
+.ts-sacred-meaning { 
+  margin:14px auto 0; 
+  max-width:40ch; 
+  color:rgba(255,255,255,.85); 
+  font-family:var(--font-app); 
+  font-size:13px; 
+  line-height:1.75;
+  font-weight: 400;
+}
+.ts-sacred-src { 
+  margin:16px 0 0; 
+  color:rgba(255,255,255,.68); 
+  font-family:var(--font-app); 
+  font-size:12px;
+  font-weight: 500;
+}
+
+/* رأس الجوال عملي وقصير؛ الهوية لا تحتاج كتلة مستقلة قبل الباقات. */
+.ts-mobile-explore-header { 
+  display:flex; 
+  align-items:center; 
+  justify-content:space-between; 
+  min-height:66px; 
+  border-bottom:1px solid #E6DFCF;
+  background: linear-gradient(135deg, rgba(255,255,255,.97) 0%, rgba(255,250,240,.95) 100%);
+  padding-inline: 16px;
+}
+.ts-mobile-explore-brand { display:flex; align-items:center; border:0; background:transparent; color:#3F2A18; cursor:pointer; padding:4px 0; }
+.ts-mobile-explore-actions { display:flex; align-items:center; gap:8px; }
+.ts-mobile-explore-actions .ts-mobile-auth { 
+  display:inline-flex; 
+  align-items:center; 
+  gap:5px; 
+  height:38px; 
+  padding-inline:12px; 
+  border:1.5px solid rgba(232,212,168,.4);
+  border-radius:12px; 
+  background:linear-gradient(135deg, #fff 0%, rgba(255,250,240,.95) 100%);
+  color:#5C421B; 
+  font-family:var(--font-app); 
+  font-size:12px; 
+  font-weight:600; 
+  cursor:pointer;
+  transition: all 0.2s ease;
+}
+.ts-mobile-explore-actions .ts-mobile-auth:active {
+  background: #F8F3EB;
+  box-shadow: 0 2px 8px rgba(180,137,63,.15);
+}
+.ts-mobile-explore-actions > div button { height:38px !important; padding-inline:11px !important; font-size:12px !important; }
+.ts-mobile-filter-row { display:flex; align-items:center; gap:8px; }
+.ts-mobile-view-switch { 
+  display:inline-flex; 
+  flex:0 0 auto; 
+  gap:2px; 
+  padding:4px; 
+  border:1px solid rgba(232,212,168,.3);
+  border-radius:12px; 
+  background: linear-gradient(135deg, #FBF9F5 0%, rgba(247,238,220,.8) 100%);
+}
+.ts-mobile-view-switch button { 
+  display:grid; 
+  width:36px; 
+  height:34px; 
+  place-items:center; 
+  border:0; 
+  border-radius:10px; 
+  background:transparent; 
+  color:#8B7D70; 
+  cursor:pointer;
+  transition: all 0.2s ease;
+}
+.ts-mobile-view-switch button.on { 
+  background:linear-gradient(135deg, #fff 0%, rgba(255,250,240,.95) 100%);
+  color:#8C6423; 
+  box-shadow:0 2px 6px rgba(79,51,16,.12);
+}
+.ts-mobile-city-tabs { flex:1; min-width:0; padding-bottom:2px; }
+.ts-mobile-city-tabs::-webkit-scrollbar { display:none; }
+
+@media (max-width: 1023px) {
+  .ts-sacred { min-height:260px; padding:32px 18px; }
+  .ts-sacred-text { font-size:22px; line-height:1.8; }
+  .ts-sacred-kind { margin-bottom:12px; font-size:11px; }
+
+  /* وضع القائمة هو صف خدمات مضغوط، لا نسخة ثانية من بطاقة الشبكة: صورة
+     وهوية الباقة بالأعلى، والسعر والإجراء في شريط واحد أسفلها. */
+  .ts-list-row { grid-template-columns:106px minmax(0,1fr); gap:10px; padding:8px; }
+  .ts-list-row > img { grid-column:1; grid-row:1; width:106px; height:106px; aspect-ratio:auto; }
+  .ts-list-main { grid-column:2; grid-row:1; gap:5px; padding-top:2px; }
+  .ts-list-title { font-size:17px; }
+  .ts-list-meta { gap:5px 9px; font-size:11px; }
+  .ts-list-incl { display:none; }
+  .ts-list-side { grid-column:1 / -1; grid-row:2; padding-top:8px; border-top:1px solid #F0EADD; }
+  .ts-list-side .ts-card-cta { min-width:132px; }
+
+  /* رأس تفاصيل الباقة مستقلّ عن النص؛ زر العودة كبير بارتفاع لمسي واضح
+     ولا يختفي داخل الكتلة بعد تصفّح الصور. */
+  .ts-mobile-listing-header { display:flex; align-items:center; justify-content:space-between; min-height:62px; padding-inline:16px; border-bottom:1px solid #F0EADD; background:#fff; }
+  .ts-mobile-custom-header { display:flex; align-items:center; justify-content:space-between; min-height:62px; margin:-16px -16px 0; padding-inline:16px; border-bottom:1px solid #F0EADD; background:#fff; }
+  .ts-mobile-listing-back { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#5C421B; font-family:var(--font-app); font-size:14px; font-weight:700; cursor:pointer; }
+}
+
 @media (max-width: 620px) {
   .ts-trust-promises { grid-template-columns: 1fr; }
-  .ts-umrah-hero::before, .ts-umrah-hero::after { opacity: .2; }
+}
+
+/* الديسكتوب ليس نسخة مكبّرة من الهاتف: إطار ثابت، تنقّل علوي، وشبكة مقارنة. */
+.ts-trip-range-calendar {
+  border:1px solid #D6A34E;
+  border-radius:14px;
+  background:#FFFAEF;
+  padding:14px 16px 16px;
+}
+.ts-trip-range-calendar.is-invalid { border-color:#E1A3A3; }
+.ts-trip-range-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+  color:#73501F;
+  font-size:12px;
+  font-weight:700;
+}
+.ts-trip-range-value { direction:ltr; color:#9E7129; font-size:11px; white-space:nowrap; }
+.ts-trip-range-month {
+  display:grid;
+  grid-template-columns:40px 1fr 40px;
+  align-items:center;
+  max-width:620px;
+  margin:0 auto 8px;
+}
+.ts-trip-range-month strong { color:#5C421B; font-size:17px; text-align:center; }
+.ts-trip-range-month button {
+  display:grid;
+  width:36px;
+  height:36px;
+  place-items:center;
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  color:#6D4B20;
+  cursor:pointer;
+}
+.ts-trip-range-month button:hover { background:#F7ECD7; }
+.ts-trip-range-grid {
+  display:grid;
+  grid-template-columns:repeat(7, minmax(0, 1fr));
+  gap:3px;
+  max-width:620px;
+  margin:auto;
+}
+.ts-trip-range-weekday {
+  min-height:24px;
+  color:#806B49;
+  font-size:10px;
+  font-weight:700;
+  text-align:center;
+}
+.ts-trip-range-empty, .ts-trip-range-day { height:40px; }
+.ts-trip-range-day {
+  width:100%;
+  border:1px solid transparent;
+  border-radius:999px;
+  background:transparent;
+  color:#705B39;
+  font-family:inherit;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+}
+.ts-trip-range-day:hover:not(:disabled) { border-color:#C49138; background:#FFF; }
+.ts-trip-range-day:disabled { color:#C8BFAE; cursor:not-allowed; }
+.ts-trip-range-day.is-between { border-radius:4px; background:#F7ECD7; color:#6D4B20; }
+.ts-trip-range-day.is-edge { border-color:#C49138; background:#FFF; color:#A46F17; }
+@media (max-width: 480px) {
+  .ts-trip-range-calendar { padding:12px 8px; }
+  .ts-trip-range-heading { padding-inline:4px; font-size:11px; }
+  .ts-trip-range-value { display:none; }
+  .ts-trip-range-weekday { font-size:9px; }
+  .ts-trip-range-empty, .ts-trip-range-day { height:36px; }
+}
+
+@media (min-width: 1024px) {
+  .ts-mobile-listing-header, .ts-mobile-custom-header { display:none !important; }
+  .ts-mobile-bottom-bar { display:none !important; }
+  .ts-mobile-appbar { display:none !important; }
+  .ts-desktop-nav { display:block; height:76px; background:rgba(255,255,255,.96); border-bottom:1px solid #EDE4D6; position:sticky; top:0; z-index:40; backdrop-filter:blur(12px); }
+  .ts-desktop-nav-inner { height:100%; max-width:1360px; padding-inline:40px; margin-inline:auto; display:flex; align-items:center; justify-content:space-between; gap:36px; }
+  .ts-brand { display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; cursor:pointer; color:#3F2A18; text-align:start; }
+  .ts-brand span { display:flex; flex-direction:column; gap:1px; }
+  .ts-brand b { font-family:var(--font-display); font-size:18px; font-weight:700; }
+  .ts-brand small { color:#8B7D70; font-size:10px; font-weight:500; }
+  .ts-desktop-nav nav { display:flex; align-self:stretch; align-items:center; gap:12px; }
+  .ts-desktop-nav nav button { height:100%; padding-inline:19px; background:none; border:0; border-bottom:2px solid transparent; color:#5C421B; cursor:pointer; font-size:14px; font-weight:600; }
+  .ts-desktop-nav nav button.active { border-color:#B7893F; color:#8C6423; }
+  .ts-desktop-nav-actions { display:flex; align-items:center; gap:8px; }
+  .ts-desktop-nav-actions button { min-height:38px; display:inline-flex; align-items:center; gap:6px; padding-inline:13px; border:1px solid #E6DFCF; border-radius:10px; background:#fff; color:#5C421B; cursor:pointer; font-size:13px; font-weight:600; }
+  .ts-desktop-nav-actions .account { background:#FBF9F5; }
+  .ts-desktop-nav-actions .ts-currency { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:10px; background:#FBF9F5; color:#5C421B; font-size:13px; font-weight:600; cursor:default; }
+  .ts-desktop-nav-actions button.primary { background:#8C6423; border-color:#8C6423; color:#fff; }
+  .ts-desktop-nav-actions button.on { background:#F8F1E4; border-color:#B7893F; color:#8C6423; }
+
+  /* لا رأس ترويجي على الديسكتوب: صفحة النتائج تبدأ بالنتائج — الهيدر
+     ثم شريط الأدوات ثم الباقات، بلا لافتةٍ تدفع أول صفٍّ خارج الشاشة. */
+  .ts-umrah-hero, .ts-mobile-explore-header, .ts-mobile-head, .ts-trust-promises, .ts-custom-hero { display:none !important; }
+
+  .ts-explore-shell { max-width:none; padding-bottom:32px !important; }
+  .ts-explore-shell > div:not(.ts-explore-toolbar) { max-width:1280px; width:100%; margin-inline:auto; }
+  .ts-explore-body { padding-inline:40px !important; margin-top:22px !important; }
+
+  /* شريط الأدوات: صفٌّ واحد لاصقٌ تحت الهيدر — العدد ومبدّل العرض.
+     خلفيته بعرض الشاشة ومحتواه على عرض المحتوى، فيبدو امتداداً للهيدر. */
+  .ts-explore-toolbar { display:block; position:sticky; top:76px; z-index:30; background:#fff; border-bottom:1px solid #EDE4D6; }
+  .ts-toolbar-inner { max-width:1280px; margin-inline:auto; padding:14px 40px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+  .ts-toolbar-title { display:flex; align-items:baseline; gap:10px; margin:0; font-family:var(--font-display); font-size:22px; font-weight:700; color:#3F2A18; }
+  .ts-toolbar-title span { font-family:var(--font-app); font-size:13px; font-weight:500; color:#8B7D70; }
+  .ts-view-switch { display:inline-flex; gap:3px; padding:3px; border:1px solid #E6DFCF; border-radius:999px; background:#FBF9F5; }
+  .ts-view-switch button { display:inline-flex; align-items:center; gap:6px; height:34px; padding-inline:16px; border:1px solid transparent; border-radius:999px; background:none; color:#5C421B; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:600; }
+  .ts-view-switch button.on { background:#fff; border-color:#E6DFCF; box-shadow:0 1px 3px rgba(79,51,16,.14); color:#8C6423; }
+
+  /* أربع بطاقات في الصف: لا خريطة ولا عمود فلاتر يقتطع العرض، فالمساحة
+     كلها للباقات. والبطاقة أقصر — صورة 16/11 وعنوان أصغر — حتى يظهر
+     صفّان في الشاشة الأولى بدل صفٍّ واحد. */
+  .ts-grid { grid-template-columns:repeat(4, minmax(0, 1fr)) !important; gap:18px !important; }
+  .ts-explore-shell .ts-seq { padding:10px !important; border:1px solid #EDE4D6; box-shadow:0 10px 28px -24px rgba(79,51,16,.52); transition:transform .18s ease,box-shadow .18s ease; }
+  .ts-explore-shell .ts-seq:hover { transform:translateY(-4px); box-shadow:0 18px 36px -24px rgba(79,51,16,.45); }
+  .ts-grid-card > img { aspect-ratio:16 / 11 !important; }
+  .ts-grid-card > span:nth-of-type(1) { font-size:15px !important; }
+
+  /* القائمة: صفٌّ أفقي بالعرض الكامل — صورة، تفاصيل، ثم عمود السعر
+     والإجراء مفصولٌ بخطّ كصفّ نتائج Booking. */
+  .ts-list { gap:14px; }
+  .ts-list-row { grid-template-columns:250px minmax(0,1fr) 226px; align-items:stretch; gap:18px; padding:14px; transition:box-shadow .18s ease; }
+  .ts-list-row:hover { box-shadow:0 14px 30px -26px rgba(79,51,16,.5); }
+  .ts-list-row > img { height:100%; aspect-ratio:auto; min-height:168px; }
+  .ts-list-main { gap:8px; padding-block:2px; }
+  .ts-list-title { font-size:20px; }
+  .ts-list-side { flex-direction:column; align-items:flex-end; justify-content:center; gap:10px; padding-inline-start:18px; border-inline-start:1px solid #F0EADD; text-align:end; }
+  .ts-list-side .ts-card-cta { width:100%; }
+
+  /* رحلة حسب الطلب: بطاقةٌ بين الباقات لا قسمٌ مستقل. لونها يميّزها
+     كخيارٍ مختلف، وحجمها حجم أخواتها فلا تزاحم ما يُحجَز. */
+  .ts-vip-card { display:flex; flex-direction:column; justify-content:flex-end; gap:9px; padding:16px; border:1px solid #E4CE9E; border-radius:14px; background:linear-gradient(158deg,#A2762C 0%,#6B4E1D 62%,#5C421B 100%); color:#fff; }
+  .ts-vip-badge { display:inline-flex; align-items:center; align-self:flex-start; gap:6px; height:26px; padding-inline:10px; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:11px; font-weight:700; letter-spacing:.06em; }
+  .ts-vip-title { font-family:var(--font-display); font-size:19px; font-weight:600; }
+  .ts-vip-note { font-size:12.5px; font-weight:400; line-height:1.6; color:rgba(255,255,255,.88); }
+  .ts-vip-cta { display:flex; align-items:center; justify-content:center; gap:8px; height:42px; margin-top:3px; border-radius:999px; background:#fff; color:#6B4E1D; font-size:14px; font-weight:600; }
+  .ts-vip-card.as-row { flex-direction:row; align-items:center; justify-content:flex-start; gap:20px; padding:18px 22px; }
+  .ts-vip-card.as-row .ts-vip-badge { align-self:center; }
+  .ts-vip-card.as-row .ts-vip-note { flex:1; min-width:0; }
+  .ts-vip-card.as-row .ts-vip-cta { flex:0 0 auto; margin-top:0; padding-inline:24px; }
+
+  .ts-sacred {
+    width:calc(100% - 80px); max-width:1280px; margin:20px auto 0;
+    min-height:220px; padding:36px 40px; border-radius:24px;
+    border: 2px solid rgba(232,212,168,.5);
+  }
+  .ts-sacred-copy { max-width:22ch; }
+  .ts-sacred-text { font-size:32px; line-height:1.7; }
+  .ts-sacred-kind { margin-bottom:16px; font-size:12px; }
+  .ts-sacred-src { margin-top:18px; font-size:12px; }
+  
+  /* Desktop: Show hadith, hide marketing copy */
+  .ts-sacred-mobile-text { display:none !important; }
+  .ts-sacred-hadith { display:block !important; }
+  .ts-sacred-hadith-eng { display:block !important; }
+  .ts-sacred-mobile-meaning { display:none !important; }
+  
+  .ts-sacred-meaning {
+    font-size:13px;
+    line-height:1.7;
+    margin:12px auto 0;
+  }
+
+  .ts-listing-shell { max-width:1280px; width:100%; margin-inline:auto; box-shadow:0 20px 48px -42px rgba(67,41,13,.6); }
+  .ts-listing-shell > .flex-1 { padding-bottom:106px !important; }
+  .ts-listing-shell section { padding-inline:40px !important; }
+  .ts-listing-shell .ts-booking-steps { border:1px solid #EDE4D6; border-radius:20px; margin:0 40px 24px; padding:28px !important; }
+  .ts-listing-shell .ts-sticky-bar { max-width:1280px; width:100%; left:auto; right:auto; padding-inline:40px !important; }
+}
+
+/* تسجيل الدخول على الديسكتوب نافذة مركزة، لا نموذج ممدود بعرض الشاشة. */
+@media (min-width: 1024px) {
+  .ts-flow-screen.ts-flow-auth { min-height:100vh !important; background:linear-gradient(135deg,#FFFCF7,#F8F0E2) !important; }
+  .ts-flow-auth .ts-flow-header { position:absolute !important; top:0; inset-inline:0; background:transparent !important; }
+  .ts-flow-auth .ts-flow-body { flex:0 0 auto; width:min(500px, calc(100vw - 48px)); margin:auto; padding:34px !important; border:1px solid #E6DFCF; border-radius:20px; background:#fff; box-shadow:0 24px 60px -38px rgba(67,41,13,.45); }
+  .ts-flow-auth .ts-flow-body h1 { font-size:30px !important; }
+  .ts-flow-auth .ts-flow-footer { position:static !important; width:min(500px, calc(100vw - 48px)); margin:0 auto 42px; padding:12px 0 0 !important; border:0 !important; background:transparent !important; box-shadow:none !important; }
+  .ts-flow-auth .ts-flow-footer > button { box-shadow:0 10px 20px -15px rgba(110,73,20,.55); }
+
+  /* «حجوزاتي» امتداد لمسار الحجز لا لوحة تحكم: بطاقة طلب واحدة واضحة
+     في مركز الصفحة، فلا تتمدد المهلة والخط الزمني على شاشة اللابتوب. */
+  .ts-track-shell { width:min(500px,calc(100vw - 48px)); margin-inline:auto; padding-inline:0 !important; padding-top:34px !important; padding-bottom:40px; }
+  .ts-account-shell { width:min(500px,calc(100vw - 48px)); margin-inline:auto; padding-inline:0 !important; padding-top:34px !important; padding-bottom:40px; }
+  .ts-custom-shell, .ts-custom-success { width:min(680px,calc(100vw - 48px)); margin-inline:auto; padding-top:34px !important; padding-bottom:40px !important; }
+  .ts-custom-two-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+
+  .ts-account-name-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+}
+
+@media (max-width: 1023px) {
+  .ts-account-name-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+}
+
+/* ══════════════ صفحة الباقة ══════════════
+   خليّتا الحجز وصفّ «تمّ الاختيار» يعملان على العرضين: الأكورديون المرقّم
+   سقط لأن الخطوة المنتهية كانت تُطوى فيغيب ما اختاره المستفيد. */
+.ts-book-grid { display:grid; gap:14px; }
+.ts-book-cell { min-width:0; background:#fff; border:1px solid #EDE4D6; border-radius:14px; padding:14px; }
+.ts-book-cell-title { margin-bottom:10px; color:#5C421B; font-size:14px; font-weight:600; }
+/* المرحلة التالية لا تبقى بيضاء مثل ما قبلها: التدرج الذهبي الخفيف يلفت
+   النظر إلى القرار المطلوب من دون أن يبدو كتنبيه خطأ. */
+.ts-book-cell.ts-book-active { background:#FFF8EA; border-color:#D6A957; box-shadow:0 10px 26px -24px rgba(141,97,27,.65); }
+.ts-book-cell.ts-book-active .ts-book-cell-title { color:#7D561A; }
+
+.ts-done-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:11px 13px; border:1px solid #E9E3D6; border-radius:12px; background:#F6F4EF; }
+.ts-done-check { display:grid; place-items:center; flex-shrink:0; width:20px; height:20px; border-radius:999px; background:#1E7A44; color:#fff; }
+.ts-done-icon { display:flex; flex-shrink:0; color:#8B7D70; }
+.ts-done-label { color:#625B4D; font-size:12.5px; }
+.ts-done-value { color:#5C421B; font-size:13.5px; font-weight:600; }
+.ts-done-edit { margin-inline-start:auto; padding:4px 6px; border:none; background:none; color:#8C6423; cursor:pointer; font-family:var(--font-app); font-size:12.5px; font-weight:700; text-decoration:underline; }
+
+/* ما يظهر على الديسكتوب وحده — والعكس مضمون بلا صنف: العنصر بلا الصنف
+   يظهر في العرضين. */
+@media (max-width: 1023px) {
+  .ts-only-desktop { display:none !important; }
+}
+
+/* ══════════ صفحة الباقة على الديسكتوب ══════════
+   شبكة اثني عشر عموداً لا أقساماً بعرض الصفحة تحت بعضها: الصور والمعلومات
+   صفّاً أول، والحجز مع ملخّصه صفّاً ثانياً، ثم أزواج، ثم ثلاثيات،
+   والتقييمات أربعٌ في صفّ. البياض بين اللوحات مقصود، والصفحة تقصر. */
+@media (min-width: 1024px) {
+  .ts-listing-shell > .ts-listing-grid {
+    display:grid; grid-template-columns:repeat(12, minmax(0,1fr));
+    gap:20px; align-items:start;
+    max-width:1280px; margin-inline:auto; padding:22px 40px 44px !important;
+  }
+  /* الملخّص الجانبي يحلّ محلّ الشريط السفلي، فلا يُدفَع الحجز إلى الأسفل. */
+  .ts-listing-shell .ts-sticky-bar { display:none !important; }
+
+  /* كل لوحة بطاقةٌ قائمة بنفسها: الحدّ يفصل، فلا حاجة لأشرطة لونية متناوبة. */
+  .ts-panel { min-width:0; background:#fff; border:1px solid #EDE4D6; border-radius:16px; padding:20px !important; }
+  .ts-panel > section { background:transparent !important; padding:0 !important; }
+  .ts-panel > section > div:first-child { margin-bottom:12px !important; }
+
+  /* عناوين أصغر: الديسكتوب يقرأ سلّم أحجامٍ أهدأ من الجوال. */
+  .ts-listing-shell h1 { font-size:23px !important; line-height:1.3 !important; }
+  .ts-listing-shell h2 { font-size:16px !important; }
+  .ts-listing-shell .ts-gallery-title { display:none; }
+
+  .ts-p-gallery { order:-1; grid-column:span 7; padding:12px !important; }
+  .ts-p-head    { grid-column:span 5; }
+  .ts-p-book    { grid-column:span 8; }
+  .ts-p-aside   { grid-column:span 4; position:sticky; top:92px; padding:0 !important; border:none !important; background:transparent !important; }
+  .ts-p-toggle  { display:none; }
+  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport { grid-column:span 6; }
+  /* الترتيب: المعلومات المختصرة قبل التقييمات — والاثنتان بعد الأزواج. */
+  .ts-p-know    { grid-column:span 12; order:5; }
+  .ts-p-reviews { grid-column:span 12; order:6; }
+
+  /* حقائق الرحلة بجانب الصور — تشغل ما كان فراغاً في صدر الصفحة. */
+  .ts-facts { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid #F0EADD; }
+  .ts-fact { display:flex; align-items:center; gap:8px; min-width:0; }
+  .ts-fact svg { flex-shrink:0; color:#B7893F; }
+  .ts-fact small { display:block; color:#8B7D70; font-size:11px; }
+  .ts-fact b { display:block; overflow:hidden; color:#5C421B; font-size:13px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* التاريخ والعدد جنباً إلى جنب، والسكن يمتدّ تحتهما. */
+  .ts-book-grid { grid-template-columns:1fr 1fr; gap:16px; }
+  .ts-book-room { grid-column:1 / -1; }
+
+  /* ملخّص الحجز */
+  .ts-aside-card { padding:18px; border:1px solid #EDE4D6; border-radius:16px; background:#fff; box-shadow:0 12px 30px -26px rgba(79,51,16,.5); }
+  .ts-aside-head { margin-bottom:12px; color:#3F2A18; font-family:var(--font-display); font-size:16px; font-weight:700; }
+  .ts-aside-rows { display:flex; flex-direction:column; gap:9px; padding-bottom:12px; border-bottom:1px solid #F0EADD; }
+  .ts-aside-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; color:#625B4D; font-size:13px; }
+  .ts-aside-row b { color:#5C421B; font-weight:600; text-align:end; }
+  .ts-aside-total { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-block:13px; }
+  .ts-aside-total span { color:#5C421B; font-size:13.5px; font-weight:600; }
+  .ts-aside-total b { color:#3F2A18; font-size:19px; font-weight:700; }
+  .ts-aside-missing { margin-top:9px; color:#8C6423; font-size:12px; text-align:center; }
+
+  /* الإلغاء · الشروط · الملاحظات — صفٌّ واحد من ثلاثة أعمدة. */
+  /* auto-fit لا repeat(3): باقةٌ بلا ملاحظات لها بندان، وثلاثة أعمدة
+     تترك ثلثاً فارغاً بلا سبب. */
+  .ts-know-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:0 26px; }
+
+  /* أربع بطاقات رأي في صفّ، والرابط تحتها متوسّطاً. */
+  /* أربعٌ حين تتوفّر، وأقلّ منها يتوسّع ليملأ الصفّ بدل بطاقتين نحيلتين. */
+  .ts-reviews-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; }
+  .ts-review-card { display:flex; flex-direction:column; gap:9px; min-width:0; padding:14px; border:1px solid #EDE4D6; border-radius:14px; background:#fff; cursor:pointer; text-align:start; font-family:var(--font-app); }
+  .ts-review-card:hover { border-color:#E4CE9E; }
+  .ts-review-head { display:flex; align-items:center; gap:8px; min-width:0; }
+  .ts-review-avatar { display:grid; place-items:center; flex-shrink:0; width:30px; height:30px; border-radius:999px; background:#F7EEDC; color:#B7893F; font-size:13px; font-weight:600; }
+  .ts-review-name { overflow:hidden; color:#5C421B; font-size:13px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+  .ts-review-score { margin-inline-start:auto; flex-shrink:0; padding:2px 7px; border-radius:8px; background:#F7EEDC; color:#8C6423; font-size:11px; font-weight:700; }
+  .ts-review-text { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3; color:#625B4D; font-size:12.5px; line-height:1.7; }
+  .ts-reviews-all { margin-top:14px; text-align:center; }
+  .ts-reviews-all button { padding:10px 22px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#5C421B; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:600; }
+}
+
+/* ══════════ تسلسل قرار الحجز على الديسكتوب ══════════
+   لا تُعامل صفحة الحجز كلوحة تحكم: القرار واحدٌ متدرج، أمّا الصور
+   والبرنامج والفندق فتأتي بعده عند طلبها. هذه الطبقة في آخر الملف عمداً
+   لتستبدل شبكة البطاقات القديمة من دون تغيير تجربة الجوال. */
+@media (min-width: 1024px) {
+  .ts-listing-shell > .ts-listing-grid {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:16px;
+    max-width:1080px;
+    padding:28px 40px 52px !important;
+  }
+
+  /* الصور تعريفٌ بالباقة، لذا تبقى في الأعلى دائماً وليست من التفاصيل. */
+  .ts-p-head { order:0; width:100%; grid-column:1 / -1; }
+  .ts-p-gallery { order:-1; width:100%; grid-column:1 / -1; padding:12px !important; }
+  /* معرض عرض لا سلايدر عملاق: أربع لقطات متساوية تُعرّف بالباقة من أول
+     نظرة، بدل تمديد صورة واحدة حتى تفقد جودتها البصرية. */
+  .ts-p-gallery .ts-hgallery {
+    display:grid !important;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:8px;
+    height:250px !important;
+    overflow:hidden !important;
+    scroll-snap-type:none !important;
+    border-radius:12px;
+  }
+  .ts-p-gallery .ts-hgallery img {
+    width:100% !important;
+    height:250px !important;
+    min-width:0;
+    border-radius:9px;
+    scroll-snap-align:none !important;
+  }
+  .ts-p-gallery .ts-hgallery img:nth-child(n + 4) { display:none !important; }
+  .ts-p-gallery .ts-hgallery ~ span,
+  .ts-p-gallery .ts-hgallery ~ [role="tablist"] { display:none !important; }
+  /* الفندق والسكن يستخدمان النسق نفسه: ثلاث صور متساوية، وآخرها يوضح
+     أن في المعرض صوراً إضافية من دون أن يمدّد الأولى. */
+  .ts-media-triplet { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; height:190px; }
+  .ts-media-triplet button { position:relative; overflow:hidden; min-width:0; padding:0; border:0; border-radius:10px; background:#F3EFE8; cursor:pointer; }
+  .ts-media-triplet img { display:block; width:100%; height:100%; object-fit:cover; }
+  .ts-media-triplet span { position:absolute; inset:0; display:grid; place-items:center; background:rgba(35,24,12,.56); color:#fff; font-size:18px; font-weight:700; }
+  .ts-info-collapsed { display:none !important; }
+  /* فاصل التفاصيل: لا يبدأ القسم كسلسلة بطاقات؛ يظهر كحدٍّ واضح بعد الحجز. */
+  .ts-listing-shell .ts-p-toggle { display:block; order:4; width:100%; grid-column:1 / -1; padding:18px 0 !important; border:0; border-top:1px solid #EDE4D6; border-bottom:1px solid #EDE4D6; border-radius:0; background:transparent !important; }
+  .ts-p-toggle button { max-width:420px; margin-inline:auto; border-color:transparent !important; pointer-events:none; }
+  .ts-facts { grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-top:14px; padding-top:13px; }
+  .ts-fact { padding-inline:8px; }
+  .ts-fact + .ts-fact { border-inline-start:1px solid #F0EADD; }
+
+  /* المراحل في مسار عمودي هادئ: موعد ← عدد ← سكن، لا أربع بطاقات
+     متنافسة في الشاشة نفسها. */
+  .ts-p-book { order:1; width:100%; grid-column:1 / -1; }
+  .ts-book-grid { display:flex; flex-direction:column; gap:10px; }
+  .ts-book-cell, .ts-book-room { width:100%; }
+  .ts-book-cell { padding:16px 18px; border-radius:14px; }
+  .ts-book-cell-title { display:flex; align-items:center; gap:8px; margin-bottom:13px; font-size:15px; }
+  .ts-book-cell-title::before { content:""; width:7px; height:7px; border-radius:50%; background:#B7893F; box-shadow:0 0 0 4px #FBF3E5; }
+  .ts-room-options { display:grid !important; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); align-items:stretch; }
+
+  /* الشريط الثابت هو ملخص الحجز الوحيد على الديسكتوب؛ لا نكرر بطاقة
+     ثانية داخل الصفحة ثم نترك القرار يختفي عند نزول المستفيد للتفاصيل. */
+  .ts-p-aside { display:none; }
+  .ts-aside-card { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:18px; padding:14px 18px; border-radius:14px; }
+  .ts-aside-head { grid-column:1; grid-row:1; margin:0; font-size:15px; }
+  .ts-aside-rows { grid-column:1; grid-row:2; display:flex; flex-direction:row; flex-wrap:wrap; gap:8px 18px; padding:0; border:0; }
+  .ts-aside-row { gap:6px; font-size:12.5px; }
+  .ts-aside-row + .ts-aside-row { padding-inline-start:18px; border-inline-start:1px solid #EDE4D6; }
+  .ts-aside-total { grid-column:2; grid-row:1 / span 2; flex-direction:column; align-items:flex-end; gap:3px; padding:0; }
+  .ts-aside-total b { font-size:21px; white-space:nowrap; }
+  .ts-aside-card > button { grid-column:3; grid-row:1 / span 2; width:180px; }
+  .ts-aside-missing { grid-column:1 / -1; margin:0; text-align:start; }
+  .ts-aside-card > div[style*="text-align"] { display:none; }
+
+  /* التفاصيل تأتي في تسلسل واحد أسفل زرها، لا في صفوف متكسّرة. */
+  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport, .ts-p-know, .ts-p-reviews { width:100%; }
+  /* القاعدة الأقدم كانت تجعل هذه البطاقات تمتد 6 أعمدة من شبكة سابقة؛
+     في شبكة العمودين يجب أن يأخذ كل زوج خانة واحدة فقط. */
+  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport { grid-column:auto; }
+  .ts-p-offers { order:6; }
+  .ts-p-program { order:7; }
+  .ts-p-stay { order:8; }
+  .ts-p-transport { order:9; }
+  .ts-p-reviews { order:10; grid-column:1 / -1; }
+  .ts-p-know { order:11; grid-column:1 / -1; }
+
+  /* الملخص وزر التالي يتبعان المستفيد خلال قسم التفاصيل أيضاً. */
+  .ts-listing-shell .ts-sticky-bar {
+    display:flex !important;
+    position:fixed !important;
+    bottom:18px;
+    left:50%;
+    right:auto;
+    width:min(760px, calc(100vw - 80px));
+    transform:translateX(-50%);
+    z-index:60;
+    padding:12px 16px !important;
+    border:1px solid #E6DFCF;
+    border-radius:16px;
+    box-shadow:0 16px 40px -18px rgba(67,41,13,.35);
+  }
+  .ts-listing-shell > .ts-listing-grid { padding-bottom:130px !important; }
 }

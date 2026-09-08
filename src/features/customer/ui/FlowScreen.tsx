@@ -18,7 +18,7 @@ export type FlowStep = 1 | 2 | 3 | 4;
 
 export function FlowScreen({
   onBack, onClose, title, subtitle, align = "start", step,
-  cta, ctaLabel, ctaDisabled, ctaBusy, secondary, error, children,
+  cta, ctaLabel, ctaDisabled, ctaBusy, secondary, error, children, variant,
 }: {
   onBack?: () => void;
   onClose?: () => void;
@@ -34,6 +34,7 @@ export function FlowScreen({
   secondary?: ReactNode;
   error?: string;
   children?: ReactNode;
+  variant?: "auth" | "account";
 }) {
   const dir = useDir();
   const [scrolled, setScrolled] = useState(false);
@@ -52,9 +53,9 @@ export function FlowScreen({
   const hasBar = !!cta || !!secondary || !!step;
 
   return (
-    <div className="flex flex-col flex-1" style={{ background: C.white, minHeight: "100%" }}>
+    <div className={`ts-flow-screen${variant === "auth" ? " ts-flow-auth" : ""}${variant === "account" ? " ts-flow-account" : ""} flex flex-col flex-1`} style={{ background: C.white, minHeight: "100%" }}>
       {/* ═══ الرأس ═══ */}
-      <div className="sticky top-0 z-30 flex items-center"
+      <div className="ts-flow-header sticky top-0 z-30 flex items-center"
         style={{
           background: C.white, paddingInline: SPACE.page, height: 60, gap: 8,
           borderBottom: `1px solid ${scrolled ? C.line : "transparent"}`,
@@ -76,7 +77,7 @@ export function FlowScreen({
       <div ref={topRef} style={{ height: 1, flexShrink: 0 }} />
 
       {/* ═══ الجسم ═══ */}
-      <div className="flex-1 flex flex-col"
+      <div className="ts-flow-body flex-1 flex flex-col"
         style={{ paddingInline: SPACE.page, paddingTop: 12, paddingBottom: hasBar ? STICKY_H : 24 }}>
         <h1 style={{ ...T.h1, fontSize: 28, color: C.ink, margin: 0, textAlign: align === "center" ? "center" : "start" }}>
           {title}
@@ -98,7 +99,7 @@ export function FlowScreen({
 
       {/* ═══ الشريط السفلي ═══ */}
       {hasBar && (
-        <div className="sticky bottom-0 z-30 flex flex-col"
+        <div className="ts-flow-footer sticky bottom-0 z-30 flex flex-col"
           style={{
             background: C.white, borderTop: `1px solid ${C.line}`, boxShadow: SHADOW.sheet,
             paddingInline: SPACE.page, paddingTop: step ? 0 : 12, gap: 10,

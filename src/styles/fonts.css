@@ -1,7 +1,7 @@
 /* خطّ التطبيق — يدعم ملف الهوية «القاهرة» للنص و«ريم كوفي» للعناوين.
    يظل الخط المحلي DG Shamael احتياطياً فورياً إن تعذّر تحميل الخطين، حتى
    لا تتعطّل قراءة رحلة العميل بسبب الشبكة. */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Reem+Kufi:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Reem+Kufi:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap');
 
 /* خطّ التطبيق المحلي — DG Shamael.
    استُبدل به استيراد Google Fonts الذي كان يجلب ثلاث عائلات
@@ -32,6 +32,12 @@
      التعليق في src/features/customer/i18n.ts. */
   --font-app: 'Cairo', 'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'Reem Kufi', 'Cairo', 'DG Shamael', system-ui, sans-serif;
+  /* خطّ النصّ المقدَّس — القرآن والحديث. ملف الهوية يخصّه بأميري وحده،
+     ولهذا سببٌ لا يخصّ الذوق: النسخ العثماني يُقرأ مشكولاً كما يُقرأ في
+     المصحف، وحرفُ الواجهة (القاهرة) يضيق بالتشكيل فتتراكم الحركات على
+     الحروف. لا يُستعمل إلا في الاقتباس المقدَّس — عنوانٌ أو زرٌّ بأميري
+     يُذهب تمييزه. */
+  --font-quote: 'Amiri', 'Noto Naskh Arabic', 'Cairo', serif;
 }
 
 /* عناصر النماذج لا ترث الخطّ من body افتراضياً — ولهذا كان الكود مبثوثاً

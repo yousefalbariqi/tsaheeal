@@ -15,7 +15,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
-import { useStore, clearSyncError, flushSync } from "@/store/useStore";
+import { useStore, clearSyncError, flushSync, writeLocalOnly } from "@/store/useStore";
 import { toast } from "sonner";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
@@ -23,6 +23,11 @@ import { onPickMedia } from "@/lib/mediaUpload";
 import { useEditor } from "@/lib/useEditor";
 import { useInternalSettings } from "@/data/useSettings";
 import { readiness, type PkgTab, type Readiness } from "./readiness";
+import { packageDeleteImpact, packageDeleteBlockers, countAr, tripsCount, bookingsCount, tripsDetail, bookingsDetail, type PackageDeleteImpact } from "./deletion";
+import { setArchiveReason, permanentlyDelete } from "@/data/repository";
+import { useRole } from "@/lib/useRole";
+import { DeleteDialog } from "@/components/DeleteDialog";
+import { PermanentDeleteDialog } from "@/components/EntityActions";
 
 /* شعارات مميزات الباقة — قائمة يختار منها المستخدم */
 const PKG_FEATURE_ICONS: Record<string,{icon:React.FC<{size?:number;style?:React.CSSProperties}>;label:string}> = {
@@ -363,6 +368,165 @@ function LeaveGuard({onSaveAndLeave,onDiscard,onCancel,saving}:{onSaveAndLeave:(
   );
 }
 
+/* ═══════════ منطقة الخطر — أرشفة الباقة أو محوها ═══════════
+
+   موضعها آخر تبويب «الإعدادات» لا صفّ إجراءاتٍ في الجدول: الحذف من
+   قائمةٍ فيها عشرون صفّاً ضغطةٌ في مكان ضغطةٍ أخرى، ومن داخل الباقة
+   بعد سبعة تبويبات قرارٌ يعرف صاحبُه ما يحذف.
+
+   ولا يُسأل «هل أنت متأكد؟» على فراغ: الأرقام قبل الأزرار — كم رحلةً
+   تُنسب إليها، وكم حجزاً، وكم مالاً محصَّلاً عليها، وما الذي يُمحى معها.
+   «سيؤثر على البيانات المرتبطة» جملةٌ لا تُعين على قرار. */
+function ImpactRow({ icon: Icon, title, value, detail, note, tone, divided }: {
+  icon: React.FC<{ size?: number; style?: React.CSSProperties }>;
+  title: string; value: string; detail?: string; note?: string;
+  tone: "clear" | "warn" | "neutral";
+  /** فاصلٌ علويّ — لكل صفٍّ بعد الأول. */
+  divided?: boolean;
+}) {
+  const c = tone === "warn" ? { bg: "#FBE6E6", fg: "#BE2626", br: "#F3C9C9" }
+    : tone === "clear" ? { bg: "#E3F3E8", fg: "#1E7A44", br: "#C4E4CE" }
+    : { bg: B.bg, fg: B.text3, br: B.border };
+  return (
+    <div className="flex items-start gap-3 py-3" style={{ borderTop: divided ? `1px solid ${B.border}` : "none" }}>
+      <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: c.bg, border: `1px solid ${c.br}`, color: c.fg }}>
+        <Icon size={14} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-sm font-bold" style={{ color: B.black }}>{title}</span>
+          <span className="text-sm font-extrabold" style={{ color: c.fg }}>{value}</span>
+          {detail && <span className="text-xs" style={{ color: B.muted }}>{detail}</span>}
+        </div>
+        {note && <p className="text-xs mt-0.5 leading-relaxed" style={{ color: B.text3 }}>{note}</p>}
+      </div>
+    </div>
+  );
+}
+
+function PackageDangerZone({ pkg, canWrite, isAdmin, onArchive, onPermanentDelete }: {
+  /* النموذج الحيّ لا الصفّ المحفوظ: عدّ ما يُمحى يجب أن يطابق ما يراه
+     الموظف في التبويبات الآن، بما فيه ما أضافه ولم يُحفظ بعد. */
+  pkg: Pkg;
+  canWrite: boolean;
+  isAdmin: boolean;
+  onArchive: (reason: string) => void;
+  onPermanentDelete: (reason: string) => Promise<void>;
+}) {
+  const trips = useStore(s => s.trips);
+  const bookings = useStore(s => s.bookings);
+  const [dialog, setDialog] = useState<null | "archive" | "delete">(null);
+  const [busy, setBusy] = useState(false);
+
+  const impact: PackageDeleteImpact = useMemo(() => packageDeleteImpact(pkg, trips, bookings), [pkg, trips, bookings]);
+  const blockers = useMemo(() => packageDeleteBlockers(impact), [impact]);
+
+  /* بلا صلاحية كتابة لا يُعرض القسم أصلاً — لا زرٌّ معطَّل يَعِد بعملٍ
+     ترفضه القاعدة. وكتابة الباقات محروسة بالمدير في الحالين. */
+  if (!canWrite) return null;
+
+  const { trips: t, bookings: b, owned } = impact;
+  const ownedParts = [
+    owned.stages && `${countAr(owned.stages, "مرحلة", "مرحلتان", "مراحل", "مرحلة")} برنامج`,
+    owned.rooms && countAr(owned.rooms, "خيار غرفة", "خيارا غرف", "خيارات غرف", "خيار غرفة"),
+    owned.features && countAr(owned.features, "ميزة", "ميزتان", "مميزات", "ميزة"),
+    owned.policies && countAr(owned.policies, "سياسة", "سياستان", "سياسات", "سياسة"),
+    owned.reviews && countAr(owned.reviews, "رأي", "رأيان", "آراء", "رأياً"),
+    owned.images && countAr(owned.images, "صورة", "صورتان", "صور", "صورة"),
+  ].filter(Boolean) as string[];
+
+  const runDelete = async (reason: string) => {
+    setBusy(true);
+    try {
+      await onPermanentDelete(reason);
+      setDialog(null);
+      toast.success("حُذفت الباقة نهائياً");
+    } catch (e) {
+      toast.error("تعذّر حذف الباقة", { description: (e as Error)?.message ?? String(e), duration: 9000 });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div>
+        <h3 className="text-sm font-bold" style={{ color: "#BE2626" }}>حذف الباقة</h3>
+        <p className="text-xs mt-0.5" style={{ color: B.muted }}>
+          الأرشفة تُخفي الباقة من العمل اليومي وتُبقي رحلاتها وحجوزاتها منسوبةً إليها. الحذف النهائي يمحوها من قاعدة البيانات.
+        </p>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: "1px solid #F3C9C9" }}>
+        {/* لوحة الفحص — ما يرتبط بالباقة الآن، قبل أي زرّ. */}
+        <div className="px-5 py-2" style={{ background: "#FDF6F6" }}>
+          <span className="text-xs font-extrabold" style={{ color: "#BE2626" }}>ما يرتبط بهذه الباقة في السجل الحالي</span>
+        </div>
+        <div className="px-5">
+          <ImpactRow icon={CalendarDays} tone={t.total ? "warn" : "clear"} title="الرحلات"
+            value={t.total ? tripsCount(t.total) : "لا توجد"}
+            detail={tripsDetail(t) || undefined}
+            note={t.total ? "لا تُحذف مع الباقة — تبقى في القاعدة وتفقد نسبها إليها، فتظهر في شاشة الرحلات بلا اسم باقة." : undefined} />
+
+          <ImpactRow icon={BookOpen} divided tone={b.total ? "warn" : "clear"} title="الحجوزات"
+            value={b.total ? bookingsCount(b.total) : "لا توجد"}
+            detail={bookingsDetail(b) || undefined}
+            note={b.total
+              ? `تحتفظ بمعرّف الباقة نصّاً، فيرى المستفيد حجزه بلا اسم باقة ولا برنامج.${b.paidCount ? ` والمحصَّل المتحقَّق منه عليها ${sar(b.paidTotal)}.` : ""}`
+              : undefined} />
+
+          <ImpactRow icon={Package} divided tone="neutral" title="محتوى الباقة"
+            value={ownedParts.length ? ownedParts.join(" · ") : "فارغ"}
+            note="يُمحى مع الباقة في الحذف النهائي، ويبقى معها كما هو في الأرشفة." />
+        </div>
+
+        {/* المانع يُقال قبل الضغط لا بعده. */}
+        {blockers.length > 0 && (
+          <div className="mx-5 mb-4 rounded-xl px-4 py-3" style={{ background: "#FBF3D6", border: "1px solid #EBD9A0" }}>
+            <div className="flex items-center gap-1.5 text-xs font-bold mb-1" style={{ color: "#8A6A08" }}>
+              <AlertTriangle size={12} />الحذف النهائي غير متاح لهذه الباقة
+            </div>
+            <p className="text-xs leading-relaxed m-0" style={{ color: "#6b5a2a" }}>
+              أرشِفها بدلاً منه: تُخفى من العمل اليومي وتبقى رحلاتها وحجوزاتها مقروءةً منسوبةً إليها.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 px-5 py-4" style={{ borderTop: `1px solid ${B.border}`, background: B.bg }}>
+          <button onClick={() => setDialog("archive")}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+            style={{ background: "#FBF3D6", border: "1px solid #EBD9A0", color: "#8A6A08" }}>
+            <Archive size={14} />أرشفة الباقة
+          </button>
+          {isAdmin && (
+            <button onClick={() => setDialog("delete")}
+              title={blockers.length ? "الحذف غير متاح — الباقة مرتبطة بغيرها" : "حذف الباقة نهائياً"}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+              style={{ background: blockers.length ? "#fff" : "#FBE6E6", border: "1px solid #F3C9C9", color: "#BE2626", opacity: blockers.length ? 0.6 : 1 }}>
+              <Trash2 size={14} />حذف نهائي
+            </button>
+          )}
+          <span className="text-xs self-center" style={{ color: B.muted }}>
+            {isAdmin ? "كلا الإجراءين يطلب سبباً يُحفظ في سجل التدقيق." : "الحذف النهائي لمدير النظام وحده."}
+          </span>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {dialog === "archive" && (
+          <DeleteDialog onCancel={() => setDialog(null)}
+            onConfirm={reason => { onArchive(reason); setDialog(null); }} />
+        )}
+        {dialog === "delete" && (
+          <PermanentDeleteDialog name={pkg.name || pkg.id} label="الباقة" blockers={blockers} busy={busy}
+            onConfirm={runDelete} onCancel={() => !busy && setDialog(null)} />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 /* ─── Package Detail ─── */
 function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports:Transport[];hotels:Hotel[];onSave:(p:Pkg)=>void;onBack:()=>void}) {
   const [tab,setTab]=useState<PkgTab>("info");
@@ -370,6 +534,10 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
   const {form,setForm,set,dirty}=ed;
   const [leaving,setLeaving]=useState(false);
   const [draftReady,setDraftReady]=useState(false);
+  const [deleting,setDeleting]=useState(false);
+  const setPackages=useStore(s=>s.setPackages);
+  const {canWrite,isAdmin}=useRole();
+  const mayWrite=canWrite("packages");
   const autosaveDelay = useRef(900);
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
@@ -396,6 +564,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
 
   useEffect(()=>{
     if (!draftReady) return;
+    /* صفٌّ في طريقه إلى الحذف لا يُحفظ ولا تُكتب له مسودة: upsert_package
+       بعد محو الصفّ يبعثه من جديد، والمسودة تعيده عند فتح الصفحة. */
+    if (deleting) return;
     if (!dirty) { clearPackageDraft(form.id); return; }
     if (!dirty) { clearPackageDraft(form.id); return; }
     writePackageDraft(form);
@@ -404,10 +575,41 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
     autosaveDelay.current = 900;
     const timer = window.setTimeout(()=>{ void ed.save(commit); },delay);
     return ()=>window.clearTimeout(timer);
-  },[draftReady,form,dirty,ed.state,ed.save,commit]);
+  },[draftReady,deleting,form,dirty,ed.state,ed.save,commit]);
   /* الرجوع بتعديل غير محفوظ يسأل قبل أن يبتلعه — الخسارة الصامتة أخطر
      ما في الصفحة، لأن الموظف لا يعلم أصلاً أن شيئاً ضاع. */
   const back=()=>{ if(dirty) setLeaving(true); else onBack(); };
+
+  /* ── الأرشفة والحذف ──
+     كلاهما يرفع علم الحذف ويمسح المسودة أولاً، ثم يخرج إلى القائمة بلا
+     حارس مغادرة: السؤال عن «تعديلات غير محفوظة» في باقةٍ حُذفت لغوٌ.
+
+     والفرق بينهما في المسار لا في النصّ وحده: الأرشفة كتابةٌ عادية يمرّ
+     حذفُها المحلي على المزامنة فتنادي archive_entity (وترتدّ وتُنبّه إن
+     رفضت القاعدة)، والحذف النهائي ينادي دالّته أولاً ثم يُنزع الصفّ
+     بـwriteLocalOnly — وإلّا قرأت المزامنة الغياب أرشفةً لصفٍّ لم يبق. */
+  const archivePkg=(reason:string)=>{
+    setDeleting(true);
+    clearPackageDraft(pkg.id);
+    setArchiveReason(reason);
+    setPackages(prev=>prev.filter(p=>p.id!==pkg.id));
+    toast.success("أُرشفت الباقة",{description:"أُخفيت من العمل اليومي وتبقى في سجل التدقيق."});
+    onBack();
+  };
+  const deletePkg=async(reason:string)=>{
+    setDeleting(true);
+    try {
+      await permanentlyDelete("packages",pkg.id,reason);
+      clearPackageDraft(pkg.id);
+      writeLocalOnly(()=>setPackages(prev=>prev.filter(p=>p.id!==pkg.id)));
+      onBack();
+    } catch(e) {
+      /* فشل الحذف يُعيد الصفحة إلى العمل: الرمي يصل إلى منطقة الخطر
+         فتعرض رسالة القاعدة العربية ويبقى الموظف حيث هو. */
+      setDeleting(false);
+      throw e;
+    }
+  };
 
   // Images (main + gallery)
   const gallery=form.gallery??[];
@@ -1170,6 +1372,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 </div>
               </div>
             </div>
+            <div className="mt-2" style={{height:1,background:B.border}}/>
+            <PackageDangerZone pkg={form} canWrite={mayWrite} isAdmin={isAdmin}
+              onArchive={archivePkg} onPermanentDelete={deletePkg}/>
           </motion.div>}
         </AnimatePresence>
       </div>

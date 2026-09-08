@@ -3,9 +3,10 @@
    الحقول مقسومة كتلتين: الرحلة ثم مقدّم الطلب، وكلٌّ في بطاقة مستقلة. */
 import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft } from "lucide-react";
 import { B } from "@/lib/theme";
-import { BirthDateSelect } from "@/components/BirthDateSelect";
+import { TasaheelMark } from "@/components/TasaheelMark";
+import { ArabicDateRangePicker } from "@/components/ArabicDateRangePicker";
 import { SearchSelect } from "@/components/SearchSelect";
 import { Spinner } from "@/components/Spinner";
 import { submitCustomRequest } from "../data";
@@ -14,10 +15,10 @@ import { G } from "../ui/tokens";
 const TXT = {
   ar: {
     title: "رحلة حسب الطلب", lead: "نسّق رحلتك كما تريد: نحجز الفنادق ونرتّب الطيران ونجهّز العرض ثم نتواصل معك.",
-    tripInfo: "معلومات الرحلة", myInfo: "بياناتك",
-    depart: "تاريخ الذهاب", ret: "تاريخ العودة", persons: "عدد المعتمرين",
-    dest: "المدينة المطلوبة", room: "نوع السكن المطلوب", hotel: "مستوى الفندق",
-    tripNotes: "ملاحظات على الرحلة", notes: "ملاحظات إضافية",
+    tripInfo: "معلومات الرحلة", myInfo: "معلومات التواصل",
+    travelDates: "موعد الرحلة", persons: "عدد المعتمرين",
+    dest: "المدينة المطلوبة", hotel: "مستوى الفندق",
+    tripNotes: "ملاحظات الرحلة",
     name: "الاسم", phone: "رقم الجوال", city: "مدينتك",
     namePh: "الاسم الكامل", phonePh: "05XXXXXXXX", cityPh: "مثال: الرياض",
     notesPh: "أي طلب خاص: كرسي متحرك، قرب من الحرم، برنامج معيّن…",
@@ -30,10 +31,10 @@ const TXT = {
   },
   en: {
     title: "Tailor-made trip", lead: "Plan your trip your way: we book the hotels, arrange the flights, prepare the offer and get back to you.",
-    tripInfo: "Trip details", myInfo: "Your details",
-    depart: "Departure date", ret: "Return date", persons: "Number of pilgrims",
-    dest: "Destination", room: "Preferred room type", hotel: "Hotel level",
-    tripNotes: "Trip notes", notes: "Extra notes",
+    tripInfo: "Trip details", myInfo: "Contact details",
+    travelDates: "Travel dates", persons: "Number of pilgrims",
+    dest: "Destination", hotel: "Hotel level",
+    tripNotes: "Trip notes",
     name: "Name", phone: "Mobile number", city: "Your city",
     namePh: "Full name", phonePh: "05XXXXXXXX", cityPh: "e.g. Riyadh",
     notesPh: "Any special request: wheelchair, close to the Haram, a specific programme…",
@@ -47,7 +48,6 @@ const TXT = {
 } as const;
 
 const DESTS = ["مكة", "مكة والمدينة"];
-const ROOMS = ["سكن مشترك", "غرفة خاصة — شخصان", "غرفة خاصة — ٣ أفراد", "غرفة خاصة — ٤ أفراد"];
 const LEVELS = ["٣ نجوم", "٤ نجوم", "٥ نجوم", "حسب الأنسب سعراً"];
 
 const validPhone = (p: string) => /^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
@@ -69,8 +69,8 @@ function Field({ label, error, optional, children }: {
   );
 }
 
-export function CustomRequestScreen({ lang, dir, onDone }: {
-  lang: string; dir: "rtl" | "ltr"; onDone: () => void;
+export function CustomRequestScreen({ lang, dir, onDone, onBack }: {
+  lang: string; dir: "rtl" | "ltr"; onDone: () => void; onBack: () => void;
 }) {
   const x = (TXT as any)[lang] ?? TXT.ar;
 
@@ -78,13 +78,11 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
   const [returnDate, setReturn] = useState("");
   const [persons, setPersons] = useState(1);
   const [destination, setDest] = useState(DESTS[0]);
-  const [roomType, setRoom] = useState("");
   const [hotelLevel, setLevel] = useState("");
   const [tripNotes, setTripNotes] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
-  const [notes, setNotes] = useState("");
 
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -94,7 +92,6 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
   const err = {
     departDate: !departDate ? x.required : "",
     returnDate: !returnDate ? x.required : returnDate < departDate ? x.badDates : "",
-    roomType: !roomType ? x.required : "",
     hotelLevel: !hotelLevel ? x.required : "",
     name: !name.trim() ? x.required : "",
     phone: !phone.trim() ? x.required : !validPhone(phone) ? x.badPhone : "",
@@ -109,9 +106,9 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
     setBusy(true);
     try {
       const id = await submitCustomRequest({
-        departDate, returnDate, persons, destination, roomType, hotelLevel,
+        departDate, returnDate, persons, destination, roomType: "", hotelLevel,
         tripNotes: tripNotes.trim(), name: name.trim(), phone: phone.replace(/\s/g, ""),
-        city: city.trim(), notes: notes.trim(),
+        city: city.trim(), notes: "",
       });
       setReqNo(id);
     } catch {
@@ -127,7 +124,7 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
   const card = { background: "#fff", border: `1px solid ${B.border}` };
 
   if (reqNo) return (
-    <div className="px-5 py-10 flex-1 flex flex-col items-center text-center gap-4">
+    <div className="ts-custom-success px-5 py-10 flex-1 flex flex-col items-center text-center gap-4">
       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", damping: 14 }}
         className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "#E3F3E8" }}>
         <Check size={34} style={{ color: G.green }} />
@@ -144,46 +141,48 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
   );
 
   return (
-    <div className="px-4 py-4 flex flex-col gap-4">
+    <div className="ts-custom-shell px-4 py-4 flex flex-col gap-4">
+      <header className="ts-mobile-custom-header">
+        <button type="button" onClick={onBack} className="ts-mobile-listing-back">
+          <ChevronLeft size={22} style={{ transform: dir === "rtl" ? "scaleX(-1)" : undefined }} />
+          {x.back}
+        </button>
+        <TasaheelMark size={42} plain />
+      </header>
       <p className="text-xs" style={{ color: B.muted }}>{x.lead}</p>
 
       {/* ── معلومات الرحلة ── */}
       <div className="rounded-2xl p-4 flex flex-col gap-4" style={card}>
         <div className="font-extrabold text-sm" style={{ color: G.green }}>{x.tripInfo}</div>
 
-        <Field label={x.depart} error={show("departDate")}>
-          <BirthDateSelect lang={lang} dir={dir} value={departDate} onChange={setDepart}
-            invalid={!!show("departDate")} future />
-        </Field>
-        <Field label={x.ret} error={show("returnDate")}>
-          <BirthDateSelect lang={lang} dir={dir} value={returnDate} onChange={setReturn}
-            invalid={!!show("returnDate")} future />
+        <Field label={x.travelDates} error={show("departDate") || show("returnDate")}>
+          <ArabicDateRangePicker departDate={departDate} returnDate={returnDate}
+            onChange={({ departDate: depart, returnDate: ret }) => { setDepart(depart); setReturn(ret); }}
+            invalid={!!(show("departDate") || show("returnDate"))} />
         </Field>
 
         <Field label={x.persons}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center gap-5" style={{ minHeight: 58 }}>
             <button type="button" onClick={() => setPersons(n => Math.max(1, n - 1))}
-              className="w-10 h-10 rounded-full text-lg font-bold cursor-pointer"
+              className="w-12 h-12 rounded-full text-xl font-bold cursor-pointer"
               style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.black }}>−</button>
-            <span className="text-base font-extrabold" style={{ minWidth: 28, textAlign: "center", color: B.black }}>{persons}</span>
+            <span className="text-xl font-extrabold" style={{ minWidth: 36, textAlign: "center", color: B.black }}>{persons}</span>
             <button type="button" onClick={() => setPersons(n => Math.min(60, n + 1))}
-              className="w-10 h-10 rounded-full text-lg font-bold cursor-pointer"
+              className="w-12 h-12 rounded-full text-xl font-bold cursor-pointer"
               style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.black }}>+</button>
           </div>
         </Field>
 
-        <Field label={x.dest}>
-          <SearchSelect dir={dir} searchable={false} value={destination} onChange={setDest}
-            options={DESTS.map(d => ({ value: d, label: d }))} placeholder={x.pick} />
-        </Field>
-        <Field label={x.room} error={show("roomType")}>
-          <SearchSelect dir={dir} searchable={false} value={roomType} onChange={setRoom} invalid={!!show("roomType")}
-            options={ROOMS.map(r => ({ value: r, label: r }))} placeholder={x.pick} />
-        </Field>
-        <Field label={x.hotel} error={show("hotelLevel")}>
-          <SearchSelect dir={dir} searchable={false} value={hotelLevel} onChange={setLevel} invalid={!!show("hotelLevel")}
-            options={LEVELS.map(l => ({ value: l, label: l }))} placeholder={x.pick} />
-        </Field>
+        <div className="ts-custom-two-fields">
+          <Field label={x.dest}>
+            <SearchSelect dir={dir} searchable={false} value={destination} onChange={setDest}
+              options={DESTS.map(d => ({ value: d, label: d }))} placeholder={x.pick} />
+          </Field>
+          <Field label={x.hotel} error={show("hotelLevel")}>
+            <SearchSelect dir={dir} searchable={false} value={hotelLevel} onChange={setLevel} invalid={!!show("hotelLevel")}
+              options={LEVELS.map(l => ({ value: l, label: l }))} placeholder={x.pick} />
+          </Field>
+        </div>
         <Field label={x.tripNotes} optional={x.optional}>
           <textarea value={tripNotes} onChange={e => setTripNotes(e.target.value)} rows={2}
             placeholder={x.notesPh} className={inp} style={{ ...ist(), resize: "vertical" }} />
@@ -205,10 +204,6 @@ export function CustomRequestScreen({ lang, dir, onDone }: {
         <Field label={x.city} error={show("city")}>
           <input value={city} onChange={e => setCity(e.target.value)} placeholder={x.cityPh}
             className={inp} style={ist(show("city"))} />
-        </Field>
-        <Field label={x.notes} optional={x.optional}>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-            className={inp} style={{ ...ist(), resize: "vertical" }} />
         </Field>
       </div>
 

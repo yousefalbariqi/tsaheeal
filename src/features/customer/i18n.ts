@@ -121,7 +121,7 @@ const D: Record<Lang, Dict> = {
     didntGet:"ألم يصلك الرمز؟", sendNewCode:"إرسال رمز جديد", tryAnotherWay:"تجربة طريقة أخرى",
     resendBySms:"إرسال الرمز برسالة نصية", sentWhatsapp:"أُرسل الرمز عبر واتساب", sentSms:"أُرسل الرمز برسالة نصية",
     completeAccount:"أكمل بيانات حسابك", accountHint:"نحتاجها لإصدار التذاكر — تأكد من مطابقتها لوثيقتك الرسمية",
-    legalName:"الاسم القانوني", firstName:"الاسم الأول", lastName:"اسم العائلة",
+    legalName:"الاسم الكريم", firstName:"الاسم الأول", lastName:"الاسم الأخير",
     email:"البريد الإلكتروني", emailOptional:"البريد الإلكتروني (اختياري)", saveAndContinue:"حفظ ومتابعة",
     loginToBook:"سجّل الدخول لإتمام الحجز", verifiedBadge:"مُوثَّق", myAccount:"بياناتي",
     claimedBookings:"وجدنا {n} طلباً سابقاً بهذا الرقم وأضفناه لحسابك",
@@ -135,6 +135,10 @@ const D: Record<Lang, Dict> = {
     // ── واجهة Airbnb ──
     // ── إجراءات البطاقة والمعرض (الموجة ٠) ──
     noUpcoming:"بلا رحلات قادمة", noUpcomingShort:"لا رحلات",
+    bookingSummary:"ملخص الحجز", editWord:"تعديل", doneWord:"تم", quickFacts:"معلومات الرحلة", showAllReviewsShort:"عرض جميع التقييمات",
+    signup:"إنشاء حساب", viewGrid:"شبكة", viewList:"قائمة", viewTrip:"عرض الرحلة",
+    tripsFound:"{n} رحلة متاحة", tripFound:"رحلة واحدة متاحة", pricesInSar:"الأسعار بالريال السعودي",
+    vipNote:"نرتّب لك رحلةً على مقاسك — سكناً ونقلاً وبرنامجاً.",
     nextTrip:"أقرب رحلة", seatsLeftCard:"{n} مقعداً متبقياً", seatsLeftCardOne:"مقعد واحد متبقٍ", byBus:"بالحافلة", byFlight:"بالطيران", incl:"يشمل", inclHousing:"السكن", inclTransport:"النقل", moreTrips:"+{n} رحلات أخرى",
     priceBreakdown:"تفصيل السعر", perNightGroup:"سعر الليلة للمجموعة", nightsCount:"عدد الليالي", transportIncl:"النقل", inclTax:"شامل ضريبة القيمة المضافة", priceNote:"السعر نهائي — لا رسوم تُضاف عند الدفع.",
     seatHeldUntil:"مقاعدك محجوزة لك حتى {t}", seatHoldExpired:"انتهت مهلة حجز المقاعد — اختر من جديد", seatHeldByOther:"هذا المقعد يختاره معتمرٌ آخر الآن",
@@ -142,7 +146,7 @@ const D: Record<Lang, Dict> = {
     savedToast:"حُفظت الباقة في قائمتك", unsavedToast:"أُزيلت من قائمتك",
     shareCopied:"نُسخ رابط الباقة", shareFailed:"تعذّرت المشاركة — انسخ الرابط من شريط العنوان",
     photoOf:"الصورة {i} من {n}", goToPhoto:"اذهب إلى الصورة {i}",
-    bookYourTrip:"احجز رحلتك", viewPhotos:"الصور", photosLabel:"صور", guests:"أفراد", selectThisRoom:"اختيار هذا السكن", playVideo:"تشغيل الفيديو", all:"الكل", search:"ابحث عن باقتك", explore:"استكشاف", packagesIn:"باقات {city}",
+    bookYourTrip:"احجز رحلتك", viewPhotos:"الصور", photosLabel:"صور", guests:"أشخاص", selectThisRoom:"اختيار هذا السكن", confirmPeople:"تأكيد عدد المعتمرين", playVideo:"تشغيل الفيديو", all:"الكل", search:"ابحث عن باقتك", explore:"استكشاف", packagesIn:"باقات {city}",
     whatOffers:"ما تقدمه هذه الباقة", showAllAmenities:"عرض الميزات الـ {n}",
     program:"برنامج الرحلة", stay:"السكن", transport:"وسيلة النقل",
     guestReviews:"تقييمات المعتمرين", showAllReviews:"إظهار كل التقييمات", noReviews:"لا توجد تقييمات بعد",
@@ -177,7 +181,7 @@ const D: Record<Lang, Dict> = {
     // فوق العتبة يُعرض سقف لا العدد الحقيقي: الرقم الكبير لا يفيد المستفيد
     seatsPlenty:"+{n} متاح",
     // ── توزيع الغرف ──
-    roomSplitTitle:"كيف تريد توزيع الغرف؟", roomsUnit:"غرف", roomWord:"غرفة", perRoom:"لكل غرفة",
+    roomSplitTitle:"اختر نوع السكن", roomsUnit:"غرف", roomWord:"غرفة", perRoom:"لكل غرفة",
     fromPrice:"من", splitOptionsN:"{n} توزيعات",
     room1:"غرفة واحدة", room2:"غرفتان", roomsN:"{n} غرف",
     bed1:"سرير واحد", bed2:"سريران", bedsN:"{n} أسرّة", oneBedEach:"سرير لكل فرد",
@@ -249,6 +253,10 @@ const D: Record<Lang, Dict> = {
     stepLogin:"Log in", stepData:"Details", stepSeats:"Seats", stepConfirm:"Review",
     // ── Airbnb-style UI ──
     noUpcoming:"No upcoming trips", noUpcomingShort:"No trips",
+    bookingSummary:"Booking summary", editWord:"Edit", doneWord:"Done", quickFacts:"Trip at a glance", showAllReviewsShort:"See all reviews",
+    signup:"Sign up", viewGrid:"Grid", viewList:"List", viewTrip:"View trip",
+    tripsFound:"{n} trips available", tripFound:"1 trip available", pricesInSar:"Prices in Saudi riyals",
+    vipNote:"We arrange the trip around you — stay, transport, and plan.",
     nextTrip:"Next trip", seatsLeftCard:"{n} seats left", seatsLeftCardOne:"1 seat left", byBus:"By bus", byFlight:"By flight", incl:"Includes", inclHousing:"housing", inclTransport:"transport", moreTrips:"+{n} more trips",
     priceBreakdown:"Price breakdown", perNightGroup:"Per night for the group", nightsCount:"Nights", transportIncl:"Transport", inclTax:"VAT included", priceNote:"Final price — nothing added at payment.",
     seatHeldUntil:"Your seats are held until {t}", seatHoldExpired:"Seat hold expired — pick again", seatHeldByOther:"Another pilgrim is choosing this seat right now",
@@ -256,7 +264,7 @@ const D: Record<Lang, Dict> = {
     savedToast:"Package saved to your list", unsavedToast:"Removed from your list",
     shareCopied:"Package link copied", shareFailed:"Couldn't share — copy the link from the address bar",
     photoOf:"Photo {i} of {n}", goToPhoto:"Go to photo {i}",
-    bookYourTrip:"Book your trip", viewPhotos:"Photos", photosLabel:"photos", guests:"guests", selectThisRoom:"Select this room", playVideo:"Play video", all:"All", search:"Find your package", explore:"Explore", packagesIn:"Packages in {city}",
+    bookYourTrip:"Book your trip", viewPhotos:"Photos", photosLabel:"photos", guests:"guests", selectThisRoom:"Select this room", confirmPeople:"Confirm guests", playVideo:"Play video", all:"All", search:"Find your package", explore:"Explore", packagesIn:"Packages in {city}",
     whatOffers:"What this package offers", showAllAmenities:"Show all {n} features",
     program:"Trip programme", stay:"Stay", transport:"Transport",
     guestReviews:"Pilgrim reviews", showAllReviews:"Show all reviews", noReviews:"No reviews yet",
@@ -284,7 +292,7 @@ const D: Record<Lang, Dict> = {
     confirmDate:"Confirm date", dayAvailable:"Available", dayFull:"Full", seatsLeftShort:"{n} seats left",
     seatsPlenty:"{n}+ available",
     // ── Room distribution ──
-    roomSplitTitle:"How would you like the rooms split?", roomsUnit:"rooms", roomWord:"room", perRoom:"per room",
+    roomSplitTitle:"Choose accommodation", roomsUnit:"rooms", roomWord:"room", perRoom:"per room",
     fromPrice:"from", splitOptionsN:"{n} options",
     room1:"One room", room2:"Two rooms", roomsN:"{n} rooms",
     bed1:"1 bed", bed2:"2 beds", bedsN:"{n} beds", oneBedEach:"A bed each",

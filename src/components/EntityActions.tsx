@@ -28,7 +28,7 @@ import { Spinner } from "@/components/Spinner";
 /* ═══ حوار الحذف النهائي ═══════════════════════════════════════════
    منفصلٌ عن حوار الأرشفة قصداً: لونه ونصّه وإقرارُه يجب أن يقولا «هذا
    مختلف». وبلا إقرارٍ صريح يصير الحذف النهائي ضغطتين كالأرشفة تماماً. */
-function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, onCancel }: {
+export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, onCancel }: {
   name: string;
   /** اسم الكيان في الجملة: «الفندق» · «الطلب المخصّص». */
   label: string;

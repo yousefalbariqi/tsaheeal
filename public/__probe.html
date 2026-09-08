@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8">
+<style>body{font:13px monospace;margin:0;padding:8px;background:#fff}
+iframe{width:var(--w,390px);height:800px;border:1px solid #ccc}
+#out{white-space:pre-wrap;font-size:12px;line-height:1.5}</style>
+<div id="out">loading…</div>
+<iframe id="f" src="/"></iframe>
+<script>document.documentElement.style.setProperty('--w',(new URLSearchParams(location.search).get('w')||390)+'px')</script>
+<script>
+const f = document.getElementById('f'), out = document.getElementById('out');
+setTimeout(() => {
+  try {
+    const d = f.contentDocument, w = f.contentWindow;
+    const vw = d.documentElement.clientWidth;
+    const lines = ['viewport=' + vw + '  scrollWidth=' + d.documentElement.scrollWidth];
+    const bad = [];
+    d.querySelectorAll('*').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > vw + 1 || r.right > vw + 1 || r.left < -1) {
+        bad.push(`${el.tagName.toLowerCase()}.${(el.className.baseVal ?? el.className ?? '').toString().split(' ').filter(Boolean).slice(0,3).join('.')} w=${Math.round(r.width)} L=${Math.round(r.left)} R=${Math.round(r.right)}`);
+      }
+    });
+    lines.push('offenders=' + bad.length);
+    out.textContent = lines.concat(bad.slice(0, 22)).join('\n');
+  } catch (e) { out.textContent = 'ERR ' + e.message; }
+}, 6000);
+</script>

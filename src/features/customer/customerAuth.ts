@@ -22,7 +22,7 @@ export type OtpChannel = "sms" | "whatsapp";
 /** لكل حالة رسالة عربية مختلفة — «فشل» واحدة لا تُرشد المستخدم لشيء. */
 export type AuthErrorKind =
   | "invalid_phone" | "rate_limited" | "wrong_code" | "expired"
-  | "provider_disabled" | "signups_disabled" | "network" | "same_phone" | "unknown";
+  | "provider_disabled" | "signups_disabled" | "network" | "same_phone" | "setup_required" | "unknown";
 
 export interface AuthFail { ok: false; kind: AuthErrorKind; retryAfterSec?: number; raw?: string }
 export interface SendOk   { ok: true; channel: OtpChannel; cooldownSec: number }
@@ -124,6 +124,7 @@ export function authErrorMessage(f: AuthFail, t: (k: string) => string): string 
     case "signups_disabled":  return t("errSignupDisabled");
     case "network":           return t("errNetwork");
     case "same_phone":        return t("errSamePhone");
+    case "setup_required":    return "تجهيز تسجيل الدخول غير مكتمل — طبّق ترحيل قاعدة البيانات ثم أعد المحاولة";
     default:                  return t("errUnknown");
   }
 }
@@ -177,6 +178,54 @@ export async function signInNoOtp(phone: string): Promise<{ ok: true; session: C
 
   if (!data.session) return { ok: false, kind: "unknown" };
   return { ok: true, session: await bootstrapSession(data.session) };
+}
+
+/** فحص مسار الدخول بعد الرقم: لا يعيد أي بيانات حساب، فقط هل أنشئ حساب
+    برقم الجوال من قبل. الدالة المقابلة في القاعدة لا تكشف البريد أو الهوية. */
+export async function customerAccountExists(phone: string): Promise<{ ok: true; exists: boolean } | AuthFail> {
+  if (!isSaudiMobile(phone)) return { ok: false, kind: "invalid_phone" };
+  if (!isCustomerAuthEnabled) return notReady();
+  const { data, error } = await customerSupabase!.rpc("customer_phone_account_exists", { p_phone: e164(phone) });
+  if (error) {
+    const e = error as { code?: string; status?: number; message?: string };
+    if (e.status === 404 || e.code === "PGRST202" || /customer_phone_account_exists/i.test(e.message ?? ""))
+      return { ok: false, kind: "setup_required", raw: e.message };
+    return mapAuthError(error);
+  }
+  return { ok: true, exists: !!data };
+}
+
+export async function signInWithCustomerPassword(phone: string, password: string): Promise<{ ok: true; session: CustomerSession } | AuthFail> {
+  if (!isSaudiMobile(phone)) return { ok: false, kind: "invalid_phone" };
+  if (!isCustomerAuthEnabled) return notReady();
+  const { data, error } = await customerSupabase!.auth.signInWithPassword({ phone: e164(phone), password });
+  if (error || !data.session) return { ok: false, kind: "wrong_code", raw: error?.message };
+  return { ok: true, session: await bootstrapSession(data.session) };
+}
+
+export async function signUpCustomer(phone: string, email: string, password: string): Promise<{ ok: true; session: CustomerSession } | AuthFail> {
+  if (!isSaudiMobile(phone)) return { ok: false, kind: "invalid_phone" };
+  if (!isCustomerAuthEnabled) return notReady();
+  /* GoTrue يقبل هوية دخول واحدة فقط في signUp: phone أو email، لا كليهما.
+     الجوال هو هوية هذا التطبيق (حجوزاته مربوطة بـ auth_phone)، والبريد
+     بيانات تواصل تُكتب في customer_profiles بعد قيام الجلسة. */
+  const { data, error } = await customerSupabase!.auth.signUp({ phone: e164(phone), password });
+  if (error || !data.session) {
+    const message = error?.message ?? "";
+    if (/already registered|already been registered|email.*exist|phone.*exist/i.test(message))
+      return { ok: false, kind: "same_phone", raw: message };
+    return mapAuthError(error);
+  }
+  const session = await bootstrapSession(data.session);
+  const { error: profileError } = await customerSupabase!
+    .from("customer_profiles")
+    .update({ email: email.trim() })
+    .eq("id", session.userId);
+  if (profileError) console.error("[auth] تعذّر حفظ بريد الحساب الجديد:", profileError);
+  return { ok: true, session: {
+    ...session,
+    profile: session.profile ? { ...session.profile, email: email.trim() } : session.profile,
+  } };
 }
 
 /* الخطأ الغالب هنا ليس خطأ المستخدم بل إعدادٌ في لوحة Supabase، وهو

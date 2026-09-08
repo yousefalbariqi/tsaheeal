@@ -18,6 +18,25 @@ export const useDir = () => useContext(DirCtx);
 export const backArrow = (dir: "rtl" | "ltr") =>
   dir === "ltr" ? { transform: "scaleX(-1)" } : undefined;
 
+/** هل العرض ديسكتوب؟ يُستعمل حيث لا يكفي CSS: عنصرٌ يجب ألّا يوجد في
+    الشجرة أصلاً على الجوال — كمُدوِّر التقييمات ومؤقّته الذي يعمل كل
+    أربع ثوانٍ. الإخفاء بالـCSS يُبقيه يعمل خلف الستار. */
+export function useIsDesktop(min = 1024): boolean {
+  const q = `(min-width:${min}px)`;
+  const [is, setIs] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.(q).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.(q);
+    if (!mq) return;
+    const on = () => setIs(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [q]);
+  return is;
+}
+
 /** يتابع تفضيل تقليل الحركة ويتحدّث إن غيّره المستخدم أثناء التصفّح. */
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(prefersReducedMotion);
@@ -424,6 +443,26 @@ export function StepRow({ n, title, done, children, last, open = true, value, on
   return (
     <div className="flex gap-3">
       {dir === "rtl" ? <>{body}{rail}</> : <>{rail}{body}</>}
+    </div>
+  );
+}
+
+/** صفّ «تمّ الاختيار» — يحلّ محلّ محرّرٍ انتهى عمله.
+
+    العلّة: كان اختيار التاريخ يُطوى فيغيب عن الشاشة، ويبقى زرّ ذهبي كبير
+    مكانه. فلا المستفيد يرى ما اختار، ولا يعرف أن الزرّ لخطوةٍ أخرى. الصفّ
+    هنا فاتحٌ لا ذهبي: القرار وقع فلا يُنادى عليه، ويبقى «تعديل» في طرفه. */
+export function DoneRow({ icon, label, value, editLabel, onEdit }: {
+  icon?: ReactNode; label: string; value: string;
+  editLabel: string; onEdit: () => void;
+}) {
+  return (
+    <div className="ts-done-row">
+      <span className="ts-done-check" aria-hidden><Check size={13} /></span>
+      {icon && <span className="ts-done-icon" aria-hidden>{icon}</span>}
+      <span className="ts-done-label">{label}</span>
+      <b className="ts-done-value">{value}</b>
+      <button type="button" onClick={onEdit} className="ts-done-edit">{editLabel}</button>
     </div>
   );
 }
@@ -921,8 +960,10 @@ const THUMB = 62;
 /** صورة رئيسية مع شريط مصغّرات. يتكيّف مع العدد:
     عنصر واحد → بلا شريط · ≤4 → شريط ساكن · أكثر → يتمرّر ويتبع النشط.
     التقدّم التلقائي يتوقف نهائياً عند أول تفاعل — وإلا قاوم المستخدمَ كلما تصفّح. */
-export function MediaGallery({ items, height = 210, onOpen }: {
+export function MediaGallery({ items, height = 210, onOpen, layout = "default" }: {
   items: GalleryItem[]; height?: number; onOpen?: (i: number) => void;
+  /** معرض موجز لسطح المكتب: ثلاث صور كحد أقصى بدل صورة عملاقة. */
+  layout?: "default" | "triplet";
 }) {
   const reduced = useReducedMotion();
   const [i, setI] = useState(0);
@@ -958,6 +999,20 @@ export function MediaGallery({ items, height = 210, onOpen }: {
   const cur = items[i];
 
   const take = (n: number) => { setTouched(true); setPlaying(null); setI(n); };
+
+  if (layout === "triplet") {
+    return (
+      <div className="ts-media-triplet">
+        {items.slice(0, 3).map((m, n) => (
+          <button key={n} type="button" onClick={() => { setTouched(true); onOpen?.(n); }}
+            aria-label={`عرض الصورة ${n + 1}`}>
+            <img src={m.kind === "video" ? (m.poster ?? "") : m.url} alt="" loading="lazy" />
+            {n === 2 && items.length > 3 && <span>+{items.length - 3}</span>}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1029,7 +1084,7 @@ export function StickyBar({ price, note, chip, cta, onCta, ctaDisabled, variant 
   cta: string; onCta?: () => void; ctaDisabled?: boolean; variant?: "green" | "dark";
 }) {
   return (
-    <div style={{
+    <div className="ts-sticky-bar" style={{
       position: "sticky", bottom: 0, zIndex: 30, background: C.white,
       borderTop: `1px solid ${C.line}`, boxShadow: SHADOW.sheet,
       paddingInline: SPACE.page, paddingBlock: 12,

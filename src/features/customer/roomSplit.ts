@@ -35,6 +35,39 @@ export interface RoomSplitLimits {
   raw?: number;
 }
 
+/** خيارات الحجز العام البسيطة.
+
+    صفّ الأسعار هو فئة السكن نفسها: «سكن مشترك · 3 أشخاص» يصف عدد النزلاء
+    في الغرفة، لا عدد معتمري الطلب. تظهر كل الفئات المسجلة كما هي، ويدفع
+    العميل سعر الفئة للفرد × عدد معتمري طلبه، بلا توزيع غرف افتراضي. */
+export function bookingRoomChoices(
+  tiers: RoomPrice[] | undefined,
+  persons: number,
+): RoomSplit[] {
+  if (!tiers?.length || !Number.isInteger(persons) || persons < 1) return [];
+
+  // صفّان متماثلان (النوع + سعة الغرفة) لا يصنعان خيارين؛ الأرخص يكفي.
+  const choices = new Map<string, RoomPrice>();
+  for (const tier of tiers) {
+    if (!tier || !(tier.persons > 0) || !(tier.perNight >= 0)) continue;
+    const type = tier.type?.trim();
+    if (!type) continue;
+    const key = `${type}|${tier.persons}`;
+    const previous = choices.get(key);
+    if (!previous || tier.perNight < previous.perNight) choices.set(key, tier);
+  }
+
+  return [...choices.values()].map(tier => ({
+    key: `${tier.type.trim()}|${tier.persons}`,
+    type: tier.type.trim(),
+    rooms: [tier],
+    capacity: tier.persons,
+    spare: 0,
+    // إجمالي ليلة الطلب = سعر الفرد في الفئة × عدد المعتمرين المختار.
+    perNight: tier.perNight * persons,
+  }));
+}
+
 /** إجمالي التوزيع لكامل الإقامة. */
 export const splitTotal = (s: RoomSplit, nights: number) => s.perNight * Math.max(1, nights);
 
