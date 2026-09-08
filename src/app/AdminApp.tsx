@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { confirmLeave, hasUnsaved } from "@/lib/useUnsavedGuard";
 import { Package, AlertTriangle, RotateCw, Lock } from "lucide-react";
 import { Toaster } from "sonner";
 import { B } from "@/lib/theme";
@@ -23,7 +24,8 @@ import { BookingsPage } from "@/features/bookings";
 import { DashboardPage } from "@/features/dashboard";
 import { SettingsPage } from "@/features/settings";
 import { LoginPage } from "@/features/auth/LoginPage";
-import { isSupabaseEnabled } from "@/supabase/client";
+import { SetPasswordPage } from "@/features/auth/SetPasswordPage";
+import { isSupabaseEnabled, isSeedDataEnabled } from "@/supabase/client";
 import { Spinner } from "@/components/Spinner";
 
 function ComingSoonPage({view}:{view:string}) {
@@ -111,14 +113,14 @@ function SavingPill() {
   if (!syncing) return null;
   return (
     <div className="fixed bottom-5 left-5 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold"
-      style={{background:B.black,color:"#fff",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>
-      <Spinner size={12} color="#fff" track="rgba(255,255,255,0.25)"/>جارٍ الحفظ…
+      style={{background:"#F8F1E4",color:B.black,border:`1px solid ${B.border}`,boxShadow:"0 4px 16px rgba(140,100,35,.14)"}}>
+      <Spinner size={12} color={B.black} track="rgba(140,100,35,.18)"/>جارٍ الحفظ…
     </div>
   );
 }
 
-/** الشاشة الافتراضية — الطلبات: أكثر ما يُفتح في اليوم. */
-const DEFAULT_VIEW = "bookings";
+/** الشاشة الافتراضية هي الرئيسية؛ المسار والاسم الآن متطابقان. */
+const DEFAULT_VIEW = "dashboard";
 
 export default function AdminApp() {
   /* الشاشة في المسار لا في الحالة: بلا ذلك كل شاشات اللوحة على /admin
@@ -131,7 +133,15 @@ export default function AdminApp() {
   const [navNonce,setNavNonce]=useState(0);
   /* العدّاد يبقى: نقر الشاشة النشطة نفسها لا يغيّر المسار، وكان يعيد
      تركيب الصفحة فيصفّر نماذجها ومرشّحاتها — سلوك يعتمده الموظف. */
-  const nav=(v:string)=>{ if(v!==activeView) navigate(`/admin/${v}`); setNavNonce(n=>n+1); };
+  /* التنقّل يسأل قبل أن يهدم مسوّدةً قائمة: beforeunload لا يرى تنقّل
+     React Router (الصفحة لا تُغادَر، إنما يُستبدل ما فيها)، فكان الضغط
+     على بندٍ آخر في القائمة يمحو إعداداتٍ نصفَ مكتوبة بلا سؤال. */
+  const nav=(v:string)=>{
+    if(v===activeView){ setNavNonce(n=>n+1); return; }
+    if(!confirmLeave(hasUnsaved())) return;
+    navigate(`/admin/${v}`);
+    setNavNonce(n=>n+1);
+  };
   /* /admin وحده يُحوَّل إلى مساره الكامل — استبدالاً حتى لا يعيده زر الرجوع. */
   useEffect(()=>{ if(!viewInPath) navigate(`/admin/${DEFAULT_VIEW}`,{replace:true}); },[viewInPath,navigate]);
   const transports = useStore(s=>s.transports);
@@ -143,11 +153,16 @@ export default function AdminApp() {
   const session    = useStore(s=>s.session);
   const isStaff    = useStore(s=>s.isStaff);
   const profileReady = useStore(s=>s.profileReady);
+  const passwordRecovery = useStore(s=>s.passwordRecovery);
   const loaded     = useStore(s=>s.loaded);
   const loadError  = useStore(s=>s.loadError);
   const currentUser= useStore(s=>s.currentUser);
   const signOut    = useStore(s=>s.signOut);
   const [mobileSidebar,setMobileSidebar]=useState(false);
+
+  if (!isSupabaseEnabled && !isSeedDataEnabled) {
+    return <LoadErrorScreen message="قاعدة بيانات الإنتاج غير مهيأة. لا تُعرض بيانات تجريبية في هذا النشر." onRetry={()=>window.location.reload()}/>;
+  }
 
   const knownViews = ["dashboard","hotels","transport","packages","trips","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support","settings"];
 
@@ -179,6 +194,8 @@ export default function AdminApp() {
   if(isSupabaseEnabled){
     if(!authReady)    return null;
     if(!session)      return <LoginPage/>;
+    /* رابط الدعوة يفتح جلسةً من نوع استعادة: كلمة المرور أولاً ثم اللوحة. */
+    if(passwordRecovery) return <SetPasswordPage/>;
     if(!profileReady) return null;
     if(!isStaff)      return <NotStaffScreen onSignOut={signOut}/>;
     if(loadError)     return <LoadErrorScreen message={loadError} onRetry={()=>useStore.getState().hydrate()}/>;

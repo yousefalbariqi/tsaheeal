@@ -9,17 +9,42 @@
    السلوك السابق حرفياً، ولا شاشة تنكسر لغياب صفٍّ في القاعدة. */
 import { supabase, isSupabaseEnabled } from "@/supabase/client";
 
+/** عنوان المؤسسة أو الفرع المُصدِر — يُطبع على الفاتورة والتذكرة.
+
+    كان «الرياض» مكتوبةً في ترويسة الفاتورة و«فرع الرياض — العليا» في
+    مصفوفةٍ ثابتة داخل شاشة الفواتير، بينما الفرع في الدمّام. مستندٌ
+    رسميّ يحمل مدينةً ليست مدينة مُصدِره. */
+export interface OrgAddress {
+  city: string;
+  /** سطر العنوان: الشارع والحيّ. */
+  line: string;
+  /** رابط الموقع على الخرائط — يُطبع على التذكرة ليصل إليه المعتمر. */
+  mapUrl: string;
+}
+
 /** ما يقرأه الزائر المجهول — تطبيق المستفيد يحتاجه قبل أي دخول. */
 export interface PublicSettings {
   orgName: string;
   /** السجل التجاري — يظهر في الفاتورة والتذكرة وصفحة الدفع. */
   crNumber: string;
+  /** الرقم الضريبي (١٥ رقماً). فارغٌ = المنشأة غير مسجّلة في ضريبة
+      القيمة المضافة، وحينها لا تُصدَر فاتورة ضريبية بل أوّلية. */
+  vatNumber: string;
   domain: string;
-  /** رقم واتساب خدمة العملاء — الزرّ العائم في كل شاشات المستفيد. */
+  /** عنوان المؤسسة — مصدر المدينة على كل مستند. */
+  address: OrgAddress;
+  /** رقم واتساب خدمة العملاء — الزرّ العائم في كل شاشات المستفيد.
+      مخزَّن بصيغة E.164 (+966…): الرقم مفتاحٌ لرابط واتساب ولقوالب
+      الرسائل، ونفسه بأربع صيغ يعني أربعة أرقام لا رقماً واحداً. */
   supportPhone: string;
   /** نافذة العمل بالساعات (توقيت الرياض) — عليها يُحسب وعد الردّ. */
   openHour: number;
   closeHour: number;
+  /** أيام العمل: 0 الأحد … 6 السبت. نافذةُ ساعاتٍ بلا أيام كانت تجعل
+      وعد الردّ يمشي يوم الجمعة والمكتب مغلق. */
+  workDays: number[];
+  /** إجازات واستثناءات بصيغة YYYY-MM-DD — يوم إجازةٍ لا يُحتسب أصلاً. */
+  holidays: string[];
   /** وعد الردّ بساعات العمل. */
   slaHours: number;
 }
@@ -42,10 +67,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pub: {
     orgName: "تساهيل العمرة",
     crNumber: "1010537391",
+    /* فارغ عمداً: رقمٌ مخترع على فاتورةٍ ضريبية مخالفة. يُملأ من شاشة
+       الإعدادات بعد تأكيد تسجيل المنشأة في ضريبة القيمة المضافة. */
+    vatNumber: "",
     domain: "tasaaheel.sa",
-    supportPhone: "0501234567",
+    address: { city: "", line: "", mapUrl: "" },
+    supportPhone: "+966501234567",
     openHour: 6,
     closeHour: 22,
+    /* السبت–الخميس: الجمعة وحدها إجازة. يُعدَّل من الشاشة. */
+    workDays: [0, 1, 2, 3, 4, 6],
+    holidays: [],
     slaHours: 2,
   },
   internal: {
@@ -56,11 +88,28 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
 };
 
+/** يدمج الإعدادات العامة فوق الافتراضات.
+
+    `address` كائنٌ متداخل، والنشر السطحي يستبدله كاملاً: صفٌّ حُفظ قبل
+    إضافة `mapUrl` كان سيُقرأ بلا mapUrl لا بقيمتها الافتراضية. والمصفوفتان
+    تُصانان من قيمةٍ غير مصفوفة في الصفّ المحفوظ — jsonb يقبل أي شكل،
+    و`workDays` نصّاً يجعل `.includes` ترمي عند أول حساب لوعد الردّ. */
+const mergePub = (raw: unknown): PublicSettings => {
+  const o = (raw ?? {}) as Partial<PublicSettings>;
+  const pub = { ...DEFAULT_SETTINGS.pub, ...o };
+  return {
+    ...pub,
+    address: { ...DEFAULT_SETTINGS.pub.address, ...(o.address ?? {}) },
+    workDays: Array.isArray(pub.workDays) ? pub.workDays : DEFAULT_SETTINGS.pub.workDays,
+    holidays: Array.isArray(pub.holidays) ? pub.holidays : DEFAULT_SETTINGS.pub.holidays,
+  };
+};
+
 /** يدمج المقروء فوق الافتراضات — حقلٌ أُضيف بعد آخر حفظ يأتي بقيمته. */
 const merge = (raw: unknown): AppSettings => {
   const o = (raw ?? {}) as Partial<AppSettings>;
   return {
-    pub: { ...DEFAULT_SETTINGS.pub, ...(o.pub ?? {}) },
+    pub: mergePub(o.pub),
     internal: { ...DEFAULT_SETTINGS.internal, ...(o.internal ?? {}) },
   };
 };
@@ -108,7 +157,9 @@ export async function fetchPublicSettings(): Promise<PublicSettings> {
     else console.error("[settings] تعذّر جلب العام:", error);
     return DEFAULT_SETTINGS.pub;
   }
-  return { ...DEFAULT_SETTINGS.pub, ...((data ?? {}) as Partial<PublicSettings>) };
+  /* نفس الدمج العميق: هذا المسار هو ما يقرأه تطبيق المستفيد بلا جلسة،
+     وكان نشراً سطحياً يُسقط `address` كاملاً لو نقصه حقل. */
+  return mergePub(data);
 }
 
 /** الحفظ — دمجٌ في القاعدة، فحفظ شاشةٍ لا يمحو حفظ أخرى. */
@@ -124,15 +175,31 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<void> {
    واحد لا يتغيّر أثناء الجلسة. الوعد يُخزَّن فيُشترك فيه الجميع. */
 let cached: Promise<PublicSettings> | null = null;
 
+/* ── لقطة متزامنة ──
+   الوعد لا يكفي كل المستهلكين: بناء رابط التحقّق يحدث داخل JSX وداخل
+   نصّ رسالة واتساب — مواضع لا تنتظر. واللقطة هي آخر قيمة وصلت فعلاً،
+   وتبدأ بالافتراضات (وهي القيم العاملة اليوم) فلا تكون فارغة قطّ. */
+let snapshot: PublicSettings = DEFAULT_SETTINGS.pub;
+
+/** آخر إعدادات عامّة وصلت — للمواضع المتزامنة. تبدأ بالافتراضات. */
+export const currentPublicSettings = (): PublicSettings => snapshot;
+
 export function publicSettings(): Promise<PublicSettings> {
-  return (cached ??= fetchPublicSettings().catch(e => {
-    /* الفشل لا يُخزَّن: انقطاع لحظي يجب أن يُعاد بعده لا أن يُثبَّت
-       على الافتراضات لبقيّة الجلسة. */
-    cached = null;
-    console.error("[settings] تعذّر جلب الإعدادات العامة:", e);
-    return DEFAULT_SETTINGS.pub;
-  }));
+  return (cached ??= fetchPublicSettings()
+    .then(v => { snapshot = v; return v; })
+    .catch(e => {
+      /* الفشل لا يُخزَّن: انقطاع لحظي يجب أن يُعاد بعده لا أن يُثبَّت
+         على الافتراضات لبقيّة الجلسة. */
+      cached = null;
+      console.error("[settings] تعذّر جلب الإعدادات العامة:", e);
+      return DEFAULT_SETTINGS.pub;
+    }));
 }
 
-/** يُبطل المخزون بعد حفظ الإعدادات — وإلا بقيت الشاشات على القيمة القديمة. */
-export const invalidatePublicSettings = () => { cached = null; };
+/** يُبطل المخزون بعد حفظ الإعدادات — وإلا بقيت الشاشات على القيمة القديمة.
+    واللقطة تُحدَّث فوراً بالمحفوظ: إبطال المخزون وحده كان يترك الروابط
+    المبنيّة متزامناً على النطاق القديم حتى أول قراءة تالية. */
+export function invalidatePublicSettings(next?: PublicSettings): void {
+  cached = null;
+  if (next) snapshot = next;
+}

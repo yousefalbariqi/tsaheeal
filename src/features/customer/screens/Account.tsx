@@ -201,7 +201,7 @@ export function Account(p: AccountProps) {
       {toast && (
         <div style={{
           position: "fixed", insetInline: SPACE.page, bottom: 96, zIndex: 40,
-          background: C.ink, color: C.white, borderRadius: R.card,
+          background: C.greenDeep, color: C.white, borderRadius: R.card,
           padding: "12px 14px", ...T.meta, textAlign: "center",
         }}>
           {toast}

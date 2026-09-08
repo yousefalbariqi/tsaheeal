@@ -16,8 +16,27 @@ export function OrgLine({ style, className }: { style?: React.CSSProperties; cla
   );
 }
 
-/** الاسم والسجل وحدهما — ترويسة الفاتورة تعرض المدينة بدل النطاق. */
+/** الاسم والسجل وحدهما — ترويسة الفاتورة تعرض المدينة بدل النطاق.
+
+    `suffix` كان يُمرَّر نصّاً من موضع الاستدعاء، وكان في الفاتورة
+    «الرياض» مكتوبةً بينما الفرع في الدمّام. صار افتراضُه مدينةَ
+    الإعدادات، ولا يُمرَّر إلا حين يكون للمستند مصدرٌ أخصّ (فرع الرحلة).
+    وحين لا مدينة مضبوطة لا يُطبع فاصلٌ معلّق بلا ما بعده. */
 export function OrgCr({ suffix }: { suffix?: string }) {
   const s = usePublicSettings();
-  return <>السجل التجاري: {s.crNumber}{suffix ? ` · ${suffix}` : ""}</>;
+  const tail = (suffix ?? s.address.city).trim();
+  return <>السجل التجاري: {s.crNumber}{tail ? ` · ${tail}` : ""}</>;
+}
+
+/** الرقم الضريبي — لا يُطبع سطرُه إن لم تكن المنشأة مسجّلة. */
+export function OrgVat() {
+  const s = usePublicSettings();
+  return s.vatNumber ? <>الرقم الضريبي: {s.vatNumber}</> : null;
+}
+
+/** عنوان المُصدِر سطراً واحداً: العنوان ثم المدينة. */
+export function OrgAddressLine() {
+  const s = usePublicSettings();
+  const parts = [s.address.line, s.address.city].map(x => x.trim()).filter(Boolean);
+  return parts.length ? <>{parts.join("، ")}</> : null;
 }

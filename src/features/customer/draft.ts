@@ -26,7 +26,7 @@ export const emptyPax = (): Pax => ({
 });
 
 const KEY = "tasaheel_booking_draft";
-const VERSION = 1;
+const VERSION = 2;
 /* عمر المسوّدة — تبويب متروك مفتوحاً أياماً لا يعيد أسعاراً ورحلات
    قديمة إلى شاشة المراجعة. الرحلة قد امتلأت أو انطلقت أصلاً. */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -37,6 +37,7 @@ export interface BookingDraft {
   tripId: string | null;
   persons: number;
   split: RoomSplit | null;
+  bookingMode: "full" | "transport";
   pax: Pax[];
   agreed: boolean;
   activePax: number;
@@ -66,6 +67,7 @@ export function readDraft(): BookingDraft | null {
       tripId: typeof d.tripId === "string" ? d.tripId : null,
       persons: d.persons as number,
       split: (d.split ?? null) as RoomSplit | null,
+      bookingMode: d.bookingMode === "transport" ? "transport" : "full",
       /* كل معتمر يُدمج فوق سجل فارغ: حقلٌ أُضيف بعد كتابة المسوّدة
          يأتي بقيمته الافتراضية بدل undefined يصل إلى القاعدة. */
       pax: (d.pax as Pax[]).map(p => ({ ...emptyPax(), ...p })),

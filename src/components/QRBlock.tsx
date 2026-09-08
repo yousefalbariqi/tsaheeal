@@ -11,12 +11,14 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { B } from "@/lib/theme";
+import { invVerifyUrl } from "@/lib/utils";
 
-/** يبني رابط التحقّق المطلق. window غائب في أي تصيير خارج المتصفح. */
-export function verifyUrl(id: string): string {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return `${origin}/inv/${encodeURIComponent(id)}/verify`;
-}
+/** يبني رابط التحقّق المطلق.
+
+    كان يبني من `window.location.origin` بينما تطبع الفاتورة تحته نطاقاً
+    مثبَّتاً في الشفرة — فالمطبوع والمرمَّز مختلفان، ومن يمسح الرمز لا
+    يصل حيث يقرأ. الآن كلاهما من `invVerifyUrl` وحدها (lib/utils). */
+export const verifyUrl = invVerifyUrl;
 
 export function QRBlock({ seed, size = 96, value }: { seed: string; size?: number; value?: string }) {
   const [src, setSrc] = useState<string | null>(null);

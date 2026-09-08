@@ -56,9 +56,17 @@ export const EMPTY_PLAN: LinkPlan = { create: [], attach: [], bookings: 0 };
 export const planIsEmpty = (p: LinkPlan) => !p.create.length && !p.attach.length;
 
 /** يحسب ما يلزم بلا أن يكتب شيئاً — ليُعرض للموظف قبل التنفيذ. */
+/** مفتاح الوثيقة — رقمها بلا مسافات؛ أقوى من الجوال: جوالٌ واحد قد يحجز
+    لأسرةٍ كاملة، ورقمُ وثيقةٍ لشخصٍ واحد. */
+const docKey = (n: string | undefined): string => (n ?? "").replace(/\s/g, "").trim();
+
 export function planLink(bens: Beneficiary[], bookings: Booking[]): LinkPlan {
   const byPhone = new Map<string, Beneficiary>();
-  for (const b of bens) { const k = keyOf(b); if (k && !byPhone.has(k)) byPhone.set(k, b); }
+  const byDoc = new Map<string, Beneficiary>();
+  for (const b of bens) {
+    const k = keyOf(b); if (k && !byPhone.has(k)) byPhone.set(k, b);
+    const d = docKey(b.idNumber); if (d && !byDoc.has(d)) byDoc.set(d, b);
+  }
 
   /* ملفّات ستُنشأ في هذه الجولة — حجزان لنفس الجوال يُنشئان ملفاً واحداً
      لا ملفّين. بلا هذا يصير العميل الذي حجز ثلاث مرّات ثلاثة أشخاص. */
@@ -69,7 +77,9 @@ export function planLink(bens: Beneficiary[], bookings: Booking[]): LinkPlan {
   for (const bk of bookings) {
     const k = normPhone(bk.clientPhone);
     if (!k) continue;                       // حجز بلا جوال — لا مفتاح للمطابقة
-    const known = byPhone.get(k);
+    /* الوثيقة أولاً ثم الجوال — «ألا يدمج الأشخاص اعتماداً على الاسم فقط»:
+       الاسم لا يدخل في المطابقة أصلاً. */
+    const known = byDoc.get(docKey(leadPilgrim(bk)?.idNumber)) ?? byPhone.get(k);
     if (known) {
       if (known.bookingIds.includes(bk.id)) continue;
       if (!add.has(known.id)) add.set(known.id, new Set());
@@ -85,9 +95,12 @@ export function planLink(bens: Beneficiary[], bookings: Booking[]): LinkPlan {
       name: bk.clientName || p?.name || "—",
       phone: bk.clientPhone,
       idNumber: p?.idNumber ?? "",
+      docType: p?.docType,
       nationality: p?.nationality ?? "",
       gender: p?.gender ?? "male",
       birthDate: p?.birthDate ?? "",
+      source: "manual",
+      createdFrom: bk.id,
       /* التقييم صفر لا افتراضٌ حسن: التقييم حكم موظفٍ لا قيمة تُخترع. */
       rating: 0,
       notes: "",
@@ -113,4 +126,45 @@ export function applyLink(bens: Beneficiary[], plan: LinkPlan): Beneficiary[] {
     return { ...b, bookingIds: [...new Set([...b.bookingIds, ...extra])] };
   });
   return [...merged, ...plan.create];
+}
+
+/* ═══ كشف التكرار ═══
+   «اكشف التكرار بالجوال + الهوية/الجواز». الاسم لا يدخل: «محمد أحمد»
+   اثنان في كل رحلة. زوجٌ واحد لكل ملفَّين وإن تطابقا بالمفتاحَين. */
+export interface DupPair { a: Beneficiary; b: Beneficiary; reason: "phone" | "doc" }
+
+export function findDuplicates(bens: Beneficiary[]): DupPair[] {
+  const seen = new Set<string>();
+  const out: DupPair[] = [];
+  const push = (a: Beneficiary, b: Beneficiary, reason: "phone" | "doc") => {
+    const key = a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`;
+    if (seen.has(key)) return;
+    seen.add(key); out.push({ a, b, reason });
+  };
+  const byDoc = new Map<string, Beneficiary>();
+  const byPhone = new Map<string, Beneficiary>();
+  for (const x of bens) {
+    const d = docKey(x.idNumber);
+    if (d) { const prev = byDoc.get(d); if (prev) push(prev, x, "doc"); else byDoc.set(d, x); }
+    const k = normPhone(x.phone);
+    if (k && k.length >= 9) { const prev = byPhone.get(k); if (prev) push(prev, x, "phone"); else byPhone.set(k, x); }
+  }
+  return out;
+}
+
+/** يدمج محلياً: يُكمل الفارغ في المُبقى ويجمع الحجوزات — للقاعدة بلا ترحيل. */
+export function mergeLocally(keep: Beneficiary, drop: Beneficiary): Beneficiary {
+  return {
+    ...keep,
+    phone: keep.phone || drop.phone,
+    contactPhone: keep.contactPhone || drop.contactPhone,
+    idNumber: keep.idNumber || drop.idNumber,
+    docType: keep.docType || drop.docType,
+    docExpiry: keep.docExpiry || drop.docExpiry,
+    nationality: keep.nationality || drop.nationality,
+    birthDate: keep.birthDate || drop.birthDate,
+    notes: [keep.notes, drop.notes].filter(Boolean).join("\n"),
+    rating: Math.max(keep.rating || 0, drop.rating || 0),
+    bookingIds: [...new Set([...keep.bookingIds, ...drop.bookingIds])],
+  };
 }

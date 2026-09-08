@@ -9,21 +9,30 @@
    الموظف يعرفه إن فتح شاشة الطلبات وقرأ التواريخ صفّاً صفّاً.
 
    كل الأرقام مشتقّة من المخزن لحظةَ الرسم — لا حالة ثانية تتفارق معه. */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { useNavigate } from "react-router";
 import {
   AlertTriangle, ArrowLeft, BookOpen, CalendarClock, CreditCard,
   Sparkles, TrendingUp, Users,
 } from "lucide-react";
 import { B } from "@/lib/theme";
+import { tripState, isSellable } from "@/lib/trip";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useStore } from "@/store/useStore";
 import { todayYMD } from "@/lib/utils";
+import { sar } from "@/lib/money";
+import { businessElapsed, configureSla, SLA_MS } from "@/features/customer/sla";
+import { fetchSettings } from "@/data/settings";
+import { isSupabaseEnabled, supabase } from "@/supabase/client";
 import type { Booking, Trip } from "@/types";
 
-const money = (n: number) => Math.round(n).toLocaleString("en-US");
+type ServerMetrics = { monthRevenue: number; todayBookings: number; pendingBookings: number; unlinkedBookings: number };
+
+/* كانت هنا دالّة money محليّة تلصق «ر.س» بعدها في الرسم — الصياغة الآن
+   من lib/money وحدها كي لا تتفرّق بين الشاشات. */
 
 /** يوم بإزاحة — لنافذة «الأسبوع القادم» بلا مكتبة تواريخ. */
 function ymdPlus(days: number): string {
@@ -41,14 +50,33 @@ function sentAt(b: Booking): number | null {
   return null;
 }
 
-const hoursSince = (t: number) => (Date.now() - t) / 3_600_000;
+/** كم انتظر أقدم بند، ومن يتولّاه. */
+type Oldest = { at: number | null; staff?: string } | null;
 
-/** بطاقة «يحتاج إجراءً» — الرقم والنقل إلى شاشته. */
-function ActionRow({ icon: Icon, label, count, note, tone, onGo }: {
+/** مدّة الانتظار بأكبر وحدة تُقرأ: يومان أوضح من «٥١ ساعة». */
+function waited(at: number): string {
+  const h = Math.floor((Date.now() - at) / 3_600_000);
+  if (h < 1) return "أقل من ساعة";
+  if (h < 24) return `${h} ساعة`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "يوماً" : d === 2 ? "يومين" : `${d} أيام`;
+}
+
+/* سطر «الأقدم والمسؤول» لكل بند لا للمتأخّر وحده: العدد يقول كم بقي،
+   ولا يقول ما إن كان أقدمها ينتظر ساعةً أو ثلاثة أيام، ولا من يتولّاه.
+   والرقمان معاً هما ما يحدّد أيّها يُفتح أولاً. */
+function oldestNote(o: Oldest): string | null {
+  if (!o || o.at === null) return null;
+  return `الأقدم منذ ${waited(o.at)} · المسؤول: ${o.staff?.trim() || "غير معيّن"}`;
+}
+
+/** بطاقة «يحتاج إجراءً» — الرقم، وأقدم انتظار، والنقل إلى شاشته. */
+function ActionRow({ icon: Icon, label, count, note, tone, onGo, oldest }: {
   icon: typeof BookOpen; label: string; count: number; note: string;
-  tone: { bg: string; br: string; fg: string }; onGo: () => void;
+  tone: { bg: string; br: string; fg: string }; onGo: () => void; oldest?: Oldest;
 }) {
   if (!count) return null;
+  const wait = oldestNote(oldest ?? null);
   return (
     <button onClick={onGo}
       className="w-full flex items-center gap-3 px-4 py-3.5 text-start cursor-pointer rounded-xl"
@@ -59,6 +87,7 @@ function ActionRow({ icon: Icon, label, count, note, tone, onGo }: {
           {label} · <span style={{ fontFamily: "var(--font-app)" }}>{count}</span>
         </span>
         <span className="block text-xs mt-0.5" style={{ color: tone.fg, opacity: 0.8 }}>{note}</span>
+        {wait && <span className="block text-xs mt-1 font-bold" style={{ color: tone.fg }}>{wait}</span>}
       </span>
       <ArrowLeft size={15} style={{ color: tone.fg, flexShrink: 0, opacity: 0.7 }} />
     </button>
@@ -73,16 +102,34 @@ const TONE = {
 };
 
 export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; onNav: (v: string) => void }) {
+  const navigate = useNavigate();
   const bookings = useStore(s => s.bookings);
   const trips = useStore(s => s.trips);
   const packages = useStore(s => s.packages);
   const payments = useStore(s => s.payments);
   const customRequests = useStore(s => s.customRequests);
   const beneficiaries = useStore(s => s.beneficiaries);
+  const [serverMetrics, setServerMetrics] = useState<ServerMetrics | null>(null);
+  const [slaReady, setSlaReady] = useState(false);
 
   const today = todayYMD();
   const weekEnd = useMemo(() => ymdPlus(7), []);
   const monthPrefix = today.slice(0, 7);
+
+  useEffect(() => {
+    let active = true;
+    void fetchSettings().then(settings => {
+      configureSla(settings.pub);
+      if (active) setSlaReady(true);
+    });
+    if (isSupabaseEnabled && supabase) {
+      void supabase.rpc("admin_dashboard_metrics").then(({ data, error }) => {
+        if (!active || error || !data) return;
+        setServerMetrics(data as ServerMetrics);
+      });
+    }
+    return () => { active = false; };
+  }, []);
 
   const pkgName = useMemo(() => {
     const m = new Map(packages.map(p => [p.id, p.name]));
@@ -95,20 +142,21 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
 
   const m = useMemo(() => {
     const pending = bookings.filter(b => b.status === "new" || b.status === "reviewing");
-    /* الوعد ساعتا عمل؛ العتبة هنا بالساعة الجدارية عن قصد: هذه شاشة
-       تشغيل تريد «تأخّر» لا حسابَ الوعد بدقّته. الحساب الدقيق في
-       features/customer/sla.ts وهو ما يُعرض للمستفيد. */
-    const late = pending.filter(b => { const t = sentAt(b); return t !== null && hoursSince(t) > 2; });
+    /* نفس ساعات العمل ووعد الرد اللذين يراهما المستفيد، مع استثناء
+       الحالات الملغاة والمنتهية لأن pending محصور في القابلة للمعالجة. */
+    const late = pending.filter(b => { const t = sentAt(b); return t !== null && businessElapsed(t, Date.now(), SLA_MS()) >= SLA_MS(); });
     const awaitingPay = bookings.filter(b => b.status === "awaiting_payment");
     const failedPay = payments.filter(p => p.payStatus === "failed");
     const newRequests = customRequests.filter(r => r.status === "new");
 
-    const monthRevenue = bookings
-      .filter(b => ["paid", "verified", "confirmed"].includes(b.status) && b.createdAt?.startsWith(monthPrefix))
-      .reduce((a, b) => a + b.total, 0);
+    const monthRevenue = payments
+      .filter(p => p.payStatus === "verified" && p.payDate?.startsWith(monthPrefix))
+      .reduce((a, p) => a + p.total, 0);
 
+    /* «القادمة هذا الأسبوع» من الحالة المشتقّة: الملغاة كانت تدخلها
+       لأن عمودها ما زال open أو full حتى لحظة الإلغاء وبعدها. */
     const upcoming = trips
-      .filter(t => t.status === "open" || t.status === "full")
+      .filter(t => { const s = tripState(t); return s === "open" || s === "full"; })
       .filter(t => t.departureDate >= today && t.departureDate <= weekEnd)
       .sort((a, b) => a.departureDate.localeCompare(b.departureDate));
 
@@ -118,8 +166,35 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
       .sort((a, b) => (sentAt(b) ?? 0) - (sentAt(a) ?? 0))
       .slice(0, 8);
 
-    return { pending, late, awaitingPay, failedPay, newRequests, monthRevenue, upcoming, todayBookings, recent };
-  }, [bookings, trips, payments, customRequests, today, weekEnd, monthPrefix]);
+    /* الأقدم في كل مجموعة — لا في المتأخّرة وحدها. */
+    const oldestOf = <T,>(rows: T[], at: (r: T) => number | null, staff: (r: T) => string | undefined) => {
+      const sorted = [...rows].sort((a, b) => (at(a) ?? Infinity) - (at(b) ?? Infinity));
+      const first = sorted[0];
+      return first ? { at: at(first), staff: staff(first) } : null;
+    };
+    const inWindow = pending.filter(b => !late.includes(b));
+    /* تاريخ الفاتورة تاريخُ يومٍ بلا ساعة، فيُقرأ بداية يومه — تقديرٌ
+       متحفّظ لا يزعم دقّةً لا نملكها، كما في sentAt. */
+    const dayStart = (d?: string) => { if (!d) return null; const t = Date.parse(d.replace(" ", "T")); return Number.isNaN(t) ? null : t; };
+
+    return {
+      pending, late, awaitingPay, failedPay, newRequests, monthRevenue, upcoming, todayBookings, recent,
+      oldestLate:    oldestOf(late,        sentAt,                    b => b.staff),
+      oldestPending: oldestOf(inWindow,    sentAt,                    b => b.staff),
+      oldestAwait:   oldestOf(awaitingPay, sentAt,                    b => b.staff),
+      oldestFailed:  oldestOf(failedPay,   p => dayStart(p.createdAt), () => undefined),
+      oldestRequest: oldestOf(newRequests, r => dayStart(r.createdAt), r => r.staff),
+      pendingInWindow: inWindow.length,
+    };
+  }, [bookings, trips, payments, customRequests, today, weekEnd, monthPrefix, slaReady]);
+
+  const metrics = {
+    monthRevenue: serverMetrics?.monthRevenue ?? m.monthRevenue,
+    todayBookings: serverMetrics?.todayBookings ?? m.todayBookings.length,
+    pendingBookings: serverMetrics?.pendingBookings ?? m.pending.length,
+    unlinkedBookings: serverMetrics?.unlinkedBookings ?? bookings.filter(b => !beneficiaries.some(x => x.bookingIds.includes(b.id))).length,
+  };
+  const goBookings = (params: Record<string,string>) => navigate(`/admin/bookings?${new URLSearchParams(params).toString()}`);
 
   const seatBar = (t: Trip) => {
     const pct = t.seats > 0 ? Math.min(100, Math.round((t.bookedSeats / t.seats) * 100)) : 0;
@@ -136,9 +211,9 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
       <main className="flex-1 px-4 md:px-8 pb-12 pt-5 flex flex-col gap-5">
         {/* ── الأرقام ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="إيراد هذا الشهر" value={`${money(m.monthRevenue)} ر.س`} sub="مدفوع ومؤكَّد" accent />
-          <StatCard label="طلبات اليوم" value={m.todayBookings.length} sub="وصلت اليوم" />
-          <StatCard label="قيد المراجعة" value={m.pending.length} sub="بانتظار قرار موظف" />
+          <button onClick={()=>navigate(`/admin/payments?collected_month=${monthPrefix}`)} aria-label="افتح الفواتير المحصّلة هذا الشهر" title="افتح الفواتير المحصّلة هذا الشهر" className="text-right cursor-pointer" style={{background:"none",border:"none",padding:0}}><StatCard label="إيراد هذا الشهر" value={sar(metrics.monthRevenue)} sub="دفعات ناجحة بتاريخ التحصيل" accent /></button>
+          <button onClick={()=>goBookings({created_on:today})} aria-label="افتح الطلبات المُنشأة اليوم" title="افتح الطلبات المُنشأة اليوم" className="text-right cursor-pointer" style={{background:"none",border:"none",padding:0}}><StatCard label="طلبات اليوم" value={metrics.todayBookings} sub="أُنشئت اليوم" /></button>
+          <button onClick={()=>goBookings({status:"reviewing"})} aria-label="افتح الطلبات قيد المراجعة" title="افتح الطلبات قيد المراجعة" className="text-right cursor-pointer" style={{background:"none",border:"none",padding:0}}><StatCard label="قيد المراجعة" value={metrics.pendingBookings} sub="بانتظار قرار موظف" /></button>
           <StatCard label="رحلات الأسبوع" value={m.upcoming.length} sub="تنطلق خلال ٧ أيام" />
         </div>
 
@@ -150,23 +225,23 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
           </div>
           <div className="flex flex-col gap-2.5">
             <ActionRow icon={AlertTriangle} tone={TONE.red}
-              label="طلبات تجاوزت وعد الردّ" count={m.late.length}
-              note="مضى على إرسالها أكثر من ساعتين ولم يُتّخذ قرار"
-              onGo={() => onNav("bookings")} />
+              label="طلبات تجاوزت وعد الردّ" count={m.late.length} oldest={m.oldestLate}
+              note="مضى على إرسالها خارج ساعات الإغلاق ولم يُتّخذ قرار"
+              onGo={() => goBookings({status:"reviewing", sla:"late"})} />
             <ActionRow icon={BookOpen} tone={TONE.amber}
-              label="طلبات قيد المراجعة" count={m.pending.length - m.late.length}
+              label="طلبات قيد المراجعة" count={m.pendingInWindow} oldest={m.oldestPending}
               note="داخل الوعد — تُراجَع وتُقبل أو تُرفض"
-              onGo={() => onNav("bookings")} />
+              onGo={() => goBookings({status:"reviewing"})} />
             <ActionRow icon={CreditCard} tone={TONE.violet}
-              label="بانتظار الدفع" count={m.awaitingPay.length}
+              label="بانتظار الدفع" count={m.awaitingPay.length} oldest={m.oldestAwait}
               note="أُرسل رابط الدفع ولم يُسدَّد بعد"
               onGo={() => onNav("payments")} />
             <ActionRow icon={AlertTriangle} tone={TONE.red}
-              label="عمليات دفع فاشلة" count={m.failedPay.length}
+              label="عمليات دفع فاشلة" count={m.failedPay.length} oldest={m.oldestFailed}
               note="تحتاج تواصلاً مع العميل أو إعادة إرسال الرابط"
               onGo={() => onNav("payments")} />
             <ActionRow icon={Sparkles} tone={TONE.blue}
-              label="طلبات مخصّصة جديدة" count={m.newRequests.length}
+              label="طلبات مخصّصة جديدة" count={m.newRequests.length} oldest={m.oldestRequest}
               note="رحلات حسب الطلب بانتظار عرض سعر"
               onGo={() => onNav("customRequests")} />
             {/* لا شيء معلّق: يُقال صريحاً بدل قسمٍ فارغ يُقرأ عطلاً. */}
@@ -233,15 +308,23 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
                       <span className="block truncate text-xs" style={{ color: B.muted }}>
                         {pkgName(b.packageId ?? tripOf(b.tripId)?.packageId)} · {b.persons} معتمر
                       </span>
+                      <span className="block text-xs mt-0.5" style={{ color: B.muted, fontFamily: "var(--font-app)" }}>
+                        {b.id} · {b.createdAt || "—"}
+                      </span>
                     </span>
                     <span className="text-xs font-bold flex-shrink-0" style={{ color: B.gold, fontFamily: "var(--font-app)" }}>
-                      {money(b.total)} ر.س
+                      {sar(b.total)}
                     </span>
-                    <StatusBadge status={b.status} />
+                    <StatusBadge status={b.status} entity="booking" />
                   </div>
                 ))}
           </section>
         </div>
+
+        {metrics.unlinkedBookings > 0 && <button onClick={()=>goBookings({beneficiary:"unlinked"})}
+          className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-right cursor-pointer" style={{background:"#FBE6E6",border:"1px solid #F3C9C9"}}>
+          <AlertTriangle size={18} style={{color:"#BE2626"}}/><span><strong className="text-sm" style={{color:"#BE2626"}}>{metrics.unlinkedBookings} طلبات غير مربوطة بمستفيد</strong><span className="block text-xs mt-0.5" style={{color:"#8D3838"}}>تحتاج ربطًا قبل المتابعة.</span></span>
+        </button>}
 
         {/* ── سطر ختامي: أرقام السجل ── */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -250,7 +333,7 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
             ["إجمالي الطلبات", bookings.length, "منذ البداية", "bookings"],
             ["الباقات النشطة", packages.filter(p => p.status === "active").length, "معروضة للحجز", "packages"],
             ["المستفيدون", beneficiaries.length, "في السجل", "beneficiaries"],
-            ["الرحلات المفتوحة", trips.filter(t => t.status === "open").length, "قابلة للحجز", "trips"],
+            ["الرحلات المفتوحة", trips.filter(t => isSellable(t)).length, "قابلة للحجز", "trips"],
           ] as const).map(([label, value, sub, view]) => (
             <button key={label} onClick={() => onNav(view)}
               className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-start cursor-pointer"

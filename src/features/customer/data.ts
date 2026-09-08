@@ -7,7 +7,7 @@ import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
 import { SEED_HOTELS } from "@/data/hotels";
 import { SEED_TRANSPORTS } from "@/data/transports";
-import { supabase, isSupabaseEnabled } from "@/supabase/client";
+import { supabase, isSupabaseEnabled, isSeedDataEnabled } from "@/supabase/client";
 import { customerSupabase } from "@/supabase/customerClient";
 import { useStore, writeLocalOnly } from "@/store/useStore";
 import { waNormalize, newId} from "@/lib/utils";
@@ -66,7 +66,10 @@ export async function fetchCatalog(): Promise<Catalog> {
   } catch (e) {
     console.error("[customer] فشل جلب الكتالوج، استخدام seed:", e);
   }
-  return { packages: SEED_PACKAGES, trips: SEED_TRIPS, hotels: SEED_HOTELS, transports: SEED_TRANSPORTS };
+  /* لا نخلط بيانات اختبار مع نشر إنتاج ناقص الإعدادات. */
+  return isSeedDataEnabled
+    ? { packages: SEED_PACKAGES, trips: SEED_TRIPS, hotels: SEED_HOTELS, transports: SEED_TRANSPORTS }
+    : { packages: [], trips: [], hotels: [], transports: [] };
 }
 
 /** المقاعد المحجوزة لرحلة (لتلوينها في الكروكي). */
@@ -84,10 +87,35 @@ export async function fetchTakenSeats(tripId: string): Promise<number[]> {
   return [...taken];
 }
 
+/* ── حجز المقعد مؤقتاً (ترحيل 20260917) ──
+   يُنادى بعد كل تغييرٍ في المقاعد المختارة: يستبدل ما للحامل على الرحلة
+   بالمختار الآن ويعيد وقت الانتهاء. قاعدةٌ بلا الترحيل تعيد unsupported
+   فتعمل الشاشة كما كانت بلا حجزٍ مؤقت. */
+export type HoldFail = "seat_taken" | "seat_held" | "unsupported" | "other";
+export async function holdSeats(tripId: string, seats: number[]): Promise<{ expiresAt: string | null; fail?: HoldFail; seat?: number }> {
+  if (!hasRealSession()) return { expiresAt: null, fail: "unsupported" };
+  const { data, error } = await cust().rpc("hold_seats", { p_trip_id: tripId, p_seats: seats });
+  if (error) {
+    const m = String(error.message ?? "");
+    if (String((error as { code?: string }).code ?? "") === "PGRST202" || /Could not find the function/i.test(m)) return { expiresAt: null, fail: "unsupported" };
+    const taken = /seat_taken:(\d+)/.exec(m); if (taken) return { expiresAt: null, fail: "seat_taken", seat: Number(taken[1]) };
+    const held = /seat_held:(\d+)/.exec(m);   if (held)  return { expiresAt: null, fail: "seat_held",  seat: Number(held[1]) };
+    console.error("[holdSeats]", error);
+    return { expiresAt: null, fail: "other" };
+  }
+  return { expiresAt: (data as string | null) ?? null };
+}
+export async function releaseSeatHolds(tripId: string | null): Promise<void> {
+  if (!hasRealSession()) return;
+  const { error } = await cust().rpc("release_seat_holds", { p_trip_id: tripId });
+  if (error && !/Could not find the function/i.test(String(error.message))) console.error("[releaseSeatHolds]", error);
+}
+
 export interface BookingPayload {
   tripId: string; packageId: string;
   clientName: string; clientPhone: string;
   roomType: string; persons: number; total: number;
+  bookingMode?: "full_package" | "transport_only";
   /** توزيع الغرف — يُحفظ في booking_rooms، و roomType يبقى ملخّصه المقروء. */
   rooms?: BookingRoom[];
   seats: number[];
@@ -211,6 +239,11 @@ export async function myBookings(phoneForSeed?: string): Promise<TrackResult[]> 
 export interface PayView {
   id: string; clientName: string; packageName: string; roomType: string;
   persons: number; total: number; paymentStatus: string; status: string;
+  /** هل ما زال الرابط يقبل الدفع؟ undefined قبل ترحيل الموجة ٢. */
+  payOpen?: boolean;
+  /** سبب الإغلاق بالعربية — يُعرض بدل «رابط غير صالح» المبهم. */
+  closedReason?: string;
+  dueAt?: string;
 }
 
 export async function fetchBookingForPay(bookingId: string, token: string): Promise<PayView | null> {
@@ -220,7 +253,9 @@ export async function fetchBookingForPay(bookingId: string, token: string): Prom
     const r = Array.isArray(data) ? data[0] : data;
     if (!r) return null;
     return { id: r.id, clientName: r.client_name, packageName: r.package_name, roomType: r.room_type,
-             persons: r.persons, total: r.total, paymentStatus: r.payment_status, status: r.status };
+             persons: r.persons, total: r.total, paymentStatus: r.payment_status, status: r.status,
+             payOpen: r.pay_open ?? undefined, closedReason: r.closed_reason ?? undefined,
+             dueAt: r.due_at ?? undefined };
   }
   const st = useStore.getState();
   const b = st.bookings.find(x => x.id === bookingId);
@@ -243,6 +278,10 @@ export interface VerifyResult {
   ticketNo?: string; bookingId: string; clientName: string;
   packageName: string; tripDate: string; tripTime: string;
   departurePoint: string; persons: number; status: string;
+  /** طور المستند نفسه — لا حالة حجزه. تذكرةٌ أُلغيت وحدها كانت تُقرأ
+      على الباب بحالة حجزها «مؤكد». undefined قبل ترحيل الموجة ٢. */
+  docPhase?: string;
+  usedAt?: string;
 }
 
 /** خطأ يعني «الدالة غير موجودة» — القاعدة لم تُرحَّل بعد إلى الموجة ٤.
@@ -270,6 +309,7 @@ export async function verifyDoc(id: string): Promise<VerifyResult | null> {
     clientName: r.client_name, packageName: r.package_name,
     tripDate: r.trip_date, tripTime: r.trip_time, departurePoint: r.departure_point,
     persons: r.persons, status: r.status,
+    docPhase: r.doc_phase ?? undefined, usedAt: r.used_at ?? undefined,
   };
 }
 

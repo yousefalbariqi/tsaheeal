@@ -8,18 +8,23 @@
    النصّ المتناوب كان يشغّل مؤقّتاً لكل بطاقة — مع عشرين باقة يصير عشرين
    مؤقّتاً تعمل معاً. */
 import { useMemo, useState } from "react";
-import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ClipboardList, ArrowLeft } from "lucide-react";
-import type { Pkg, Trip, Hotel } from "@/types";
+import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ClipboardList, ArrowLeft, CalendarDays, ShieldCheck, WalletCards, HeartHandshake } from "lucide-react";
+import type { Pkg, Trip, Hotel, Transport } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { C, T, R, SPACE, SHADOW, STICKY_H, FONT, flipRTL, money } from "../ui/tokens";
-import { LangSwitch, TrustTicker, useDir, useSequencePulse } from "../ui/kit";
+import { LangSwitch, TrustRow, useDir } from "../ui/kit";
 import { pkgCover, CUSTOM_TRIP_COVER } from "../gallery";
-import { LANGS, trustOf, type Lang } from "../i18n";
+import { LANGS, trustOf, cityLabel, type Lang } from "../i18n";
+import { startingPrice } from "@/features/packages/readiness";
+
+import { durationLabel } from "../plural";
 
 export interface ExploreProps {
   packages: Pkg[];
   hotels: Hotel[];
   tripsOf: (p: Pkg) => Trip[];
+  /** لقراءة وسيلة النقل على البطاقة — «نوع النقل» من الملاحظة. */
+  transports?: Transport[];
   onOpen: (p: Pkg) => void;
   onCustom: () => void;
   t: (k: string) => string;
@@ -27,11 +32,8 @@ export interface ExploreProps {
   setLang: (l: Lang) => void;
 }
 
-/** أقل سعر إجمالي للفرد في الباقة — نفس حساب الشاشة القديمة. */
-function minTotal(p: Pkg): number {
-  const nightly = p.roomPrices.map(r => r.perNight).filter(Boolean);
-  return nightly.length ? Math.min(...nightly) * (p.nights || 1) : p.marketPrice;
-}
+/* سعر «يبدأ من» اليدوي من الباقة؛ لا يُشتق من الغرف أو المواصلات. */
+const minTotal = startingPrice;
 
 /** «مكة والمدينة» → ["مكة","المدينة"] — الباقة المشتركة تظهر في فلتر كل مدينة.
     الفصل على « و» بمسافة قبلها لا على «و» وحدها: الثانية تشطر أسماءً
@@ -50,7 +52,7 @@ const cityRank = (c: string): number => {
 /** رتبة الباقة = أصغر رتبة مدينة فيها — فباقة «مكة والمدينة» تُعدّ مكّية. */
 const pkgRank = (p: Pkg): number => Math.min(...citiesOf(p).map(cityRank), CITY_ORDER.length);
 
-export function Explore({ packages, hotels, tripsOf, onOpen, onCustom, t, lang, setLang }: ExploreProps) {
+export function Explore({ packages, hotels, transports = [], tripsOf, onOpen, onCustom, t, lang, setLang }: ExploreProps) {
   const [city, setCity] = useState<string>("");   // "" = الكل
   const dir = useDir();
 
@@ -65,34 +67,66 @@ export function Explore({ packages, hotels, tripsOf, onOpen, onCustom, t, lang, 
      آخراً قد لا يبلغه من نظر ثوانٍ ثم مرّر. */
   const trust = useMemo(() => {
     const base = trustOf(lang);
-    return cities.length ? [base[0], cities.join(" و"), ...base.slice(1)] : base;
+    /* أسماء المدن كاملةً: «المدينة» وحدها بجانب «مكة» تُقرأ اسماً عامّاً.
+       والفاصل يتبع اللغة — «و» عربيةً و«&» إنجليزيةً. */
+    const names = cities.map(c => cityLabel(c, lang));
+    const joined = lang === "ar" ? names.join(" و") : names.join(" & ");
+    return names.length ? [base[0], joined, ...base.slice(1)] : base;
   }, [cities, lang]);
 
   /* المتاحة أولاً: أول ما تراه العين يجب أن يكون قابلاً للحجز. ثم مكة قبل
-     المدينة — فباقات المدينة تظهر مستقلةً أسفل باقات مكة حين تُضاف بياناتها. */
-  const shown = useMemo(() => {
-    const list = city ? packages.filter(p => citiesOf(p).includes(city)) : packages;
-    return [...list].sort((a, b) =>
-      (tripsOf(a).length ? 0 : 1) - (tripsOf(b).length ? 0 : 1) ||
-      pkgRank(a) - pkgRank(b));
-  }, [packages, city, tripsOf]);
+     المدينة — فباقات المدينة تظهر مستقلةً أسفل باقات مكة حين تُضاف بياناتها.
 
-  /* النبضة تمشي على البطاقات القابلة للحجز وحدها، وهي مقدّمة الشبكة بعد
-     الترتيب أعلاه. نبض بطاقة مكتملة يجذب العين إلى ما لا يمكن الضغط عليه. */
-  const bookable = useMemo(() => shown.filter(p => tripsOf(p).length > 0).length, [shown, tripsOf]);
-  const pulseAt = useSequencePulse(bookable);
+     والقائمة تُشطر شطرين لا تُرتَّب وحسب (بطلب الفريق: «الباقة المعطلة
+     تظهر بحجم بطاقة كاملة»). الترتيب كان ينزّلها أسفل الشبكة، لكنها
+     تبقى بنفس الوزن البصري — صورة كبيرة وعنوان بحجم أخواتها — فتنافس
+     على العين ما يمكن حجزه فعلاً، ومساحةُ شاشةٍ تُنفَق على ما لا
+     يُضغط. الآن: المتاحة شبكةً، وغير المتاحة صفوفاً مضغوطة تحتها. */
+  const { open, closed } = useMemo(() => {
+    const list = city ? packages.filter(p => citiesOf(p).includes(city)) : packages;
+    const byRank = (a: Pkg, b: Pkg) => pkgRank(a) - pkgRank(b);
+    return {
+      open:   list.filter(p => tripsOf(p).length > 0).sort(byRank),
+      closed: list.filter(p => tripsOf(p).length === 0).sort(byRank),
+    };
+  }, [packages, city, tripsOf]);
 
   /* ثلاث شرائح تتقاسم العرض بالتساوي؛ وأقلّ من ذلك تأخذ عرض نصّها
      (شريحتان بنصف الشاشة لكلٍّ تبدوان منتفختين)، وأكثر تُمرَّر أفقياً. */
-  const tabs = [{ key: "", label: t("all") }, ...cities.map(c => ({ key: c, label: c }))];
+  const tabs = [{ key: "", label: t("all") }, ...cities.map(c => ({ key: c, label: cityLabel(c, lang) }))];
   const spread = tabs.length === 3;
   const scroll = tabs.length > 3;
+  const copy = lang === "ar" ? {
+    eyebrow: "رفيقك إلى العمرة",
+    title: "رحلةٌ مرتّبة، وقلبٌ مطمئن",
+    lead: "ابدأ باختيار وجهتك، ثم سنعرض لك الباقات والموعد والسكن بوضوح خطوةً خطوة.",
+    helper: "إلى أين تريد الذهاب؟",
+    helperNote: "اختر وجهتك الآن، وحدّد الموعد وعدد المعتمرين داخل الباقة التي تناسبك.",
+    available: "الباقات المتاحة",
+    promises: [
+      { title: "سعر واضح", note: "يظهر قبل أن تبدأ الحجز", Icon: WalletCards },
+      { title: "تفاصيل موثّقة", note: "السكن والنقل والموعد أمامك", Icon: ShieldCheck },
+      { title: "معك خطوة بخطوة", note: "دعم عند الحاجة عبر واتساب", Icon: HeartHandshake },
+    ],
+  } : {
+    eyebrow: "Your Umrah companion",
+    title: "A thoughtful journey, with peace of mind",
+    lead: "Start with your destination. We will show the package, date, and stay clearly, step by step.",
+    helper: "Where would you like to go?",
+    helperNote: "Choose your destination now; select the date and pilgrims inside the package.",
+    available: "Available packages",
+    promises: [
+      { title: "Clear prices", note: "Shown before you book", Icon: WalletCards },
+      { title: "Verified details", note: "Stay, transport, and date in view", Icon: ShieldCheck },
+      { title: "With you throughout", note: "Help through WhatsApp when needed", Icon: HeartHandshake },
+    ],
+  };
 
   return (
     <div className="flex flex-col flex-1" style={{ background: C.white, paddingBottom: STICKY_H }}>
 
       {/* ═══ الرأس ═══ */}
-      <div style={{ paddingInline: SPACE.page, paddingTop: 10 }}>
+      <div className="ts-umrah-hero" style={{ paddingInline: SPACE.page, paddingTop: 10 }}>
         {/* اللغة في الطرف، والشعار متمركز فوقها لا بجانبها */}
         <div className="flex">
           <LangSwitch compact lang={lang} setLang={setLang} langs={LANGS} label={t("language")} />
@@ -100,23 +134,43 @@ export function Explore({ packages, hotels, tripsOf, onOpen, onCustom, t, lang, 
 
         <div className="flex flex-col items-center text-center" style={{ marginTop: -8 }}>
           <TasaheelMark size={92} plain />
-          <h1 style={{ fontFamily: "var(--font-app)", fontSize: 30, fontWeight: 800, color: C.ink, margin: "10px 0 0" }}>
-            {t("brand")}
+          <span style={{ color: C.greenDeep, fontSize: 12, fontWeight: 700, letterSpacing: ".08em", marginTop: 10 }}>
+            {copy.eyebrow}
+          </span>
+          <h1 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 600, color: C.ink, margin: "8px 0 0", lineHeight: 1.45 }}>
+            {copy.title}
           </h1>
-          <p style={{ ...T.body, color: C.ink2, margin: "8px 0 0" }}>{t("tagline")}</p>
+          <p style={{ ...T.body, color: C.ink2, margin: "8px 0 0", maxWidth: 560 }}>{copy.lead}</p>
 
-          {/* شريط الثقة — ممتدّ لحافّتي الشاشة بهامش سالب يلغي هامش الصفحة:
-              التلاشي عند الحافّة الحقيقية هو ما يجعله يُقرأ شريطاً زاحفاً لا
-              سطراً مقصوصاً في منتصف الصفحة. */}
-          <div style={{ alignSelf: "stretch", marginInline: -SPACE.page, marginTop: 14 }}>
-            <TrustTicker items={trust} />
+          {/* صفّ ثقة ساكن — لا زحف ولا تلاشي عند الحافّة، فلا هامش سالب:
+              ذاك كان يمدّ الشريط الزاحف إلى حافّتي الشاشة ليتلاشى عندهما.
+              الصفّ الساكن يلتزم هامش الصفحة كبقيّة المحتوى. */}
+          <div style={{ alignSelf: "stretch", marginTop: 14 }}>
+            <TrustRow items={trust} />
           </div>
         </div>
       </div>
 
       {/* ═══ العنوان + فلتر المدن ═══ */}
-      <div style={{ paddingInline: SPACE.page, marginTop: 28 }}>
-        <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("choosePackage")}</h2>
+      <div style={{ paddingInline: SPACE.page, marginTop: 24 }}>
+        <div className="ts-trust-promises">
+          {copy.promises.map(({ title, note, Icon }) => (
+            <div key={title} className="ts-trust-promise">
+              <span className="ts-trust-icon"><Icon size={19} aria-hidden /></span>
+              <span><b>{title}</b><small>{note}</small></span>
+            </div>
+          ))}
+        </div>
+        <div className="ts-journey-helper" style={{ marginTop: 20 }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <span style={{ color: C.greenDeep, fontSize: 12, fontWeight: 700, letterSpacing: ".06em" }}>{copy.available}</span>
+              <h2 style={{ ...T.h2, color: C.ink, fontFamily: FONT.display, fontSize: 25, margin: "3px 0 0" }}>{copy.helper}</h2>
+              <p style={{ ...T.small, color: C.ink2, margin: "4px 0 0" }}>{copy.helperNote}</p>
+            </div>
+            <MapPin size={25} style={{ color: C.greenDeep, flexShrink: 0 }} aria-hidden />
+          </div>
+        </div>
         <div className="flex" style={{ gap: 10, marginTop: 14, overflowX: scroll ? "auto" : "visible", scrollbarWidth: "none" }}>
           {tabs.map(tab => {
             const on = city === tab.key;
@@ -138,51 +192,120 @@ export function Explore({ packages, hotels, tripsOf, onOpen, onCustom, t, lang, 
       </div>
 
       {/* ═══ شبكة الباقات ═══ */}
-      <div className="flex-1" style={{ paddingInline: SPACE.page, marginTop: 14 }}>
-        {shown.length === 0 ? (
+      <div className="flex-1" style={{ paddingInline: SPACE.page, marginTop: 30 }}>
+        {open.length === 0 && closed.length === 0 ? (
           <div style={{ padding: "64px 0", textAlign: "center", ...T.body, color: C.ink2 }}>{t("noPackages")}</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {shown.map((p, i) => {
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 14 }}>
+            {open.map(p => {
               const hotel = hotels.find(h => h.id === p.hotelId);
-              const sold = tripsOf(p).length === 0;
               return (
-                <button key={p.id} onClick={() => { if (!sold) onOpen(p); }} disabled={sold}
+                <button key={p.id} onClick={() => onOpen(p)}
                   className="ts-seq flex flex-col text-start"
-                  data-pulse={!sold && i === pulseAt ? "on" : undefined}
                   style={{
                     // الحدّ في .ts-seq لا هنا: النمط السطري يتقدّم على الورقة
                     // فيمنع نبضه (انظر تعليق .ts-seq في ui/kit.tsx)
                     background: C.white, borderRadius: R.card,
-                    padding: 8, gap: 8, cursor: sold ? "not-allowed" : "pointer",
-                    opacity: sold ? 0.55 : 1, fontFamily: FONT.sans,
+                    padding: 8, gap: 8, cursor: "pointer", fontFamily: FONT.sans,
                   }}>
                   <img src={pkgCover(p)} alt="" loading="lazy"
                     style={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 10, display: "block" }} />
                   <span className="block w-full text-center" style={{ ...T.h3, fontSize: 16, color: C.ink, paddingInline: 2 }}>
                     {p.name}
                   </span>
+                  {/* البطاقة تقول ما يقرّر به المستفيد لا صورةً إعلانية:
+                      أقرب تاريخ، المدة، وسيلة النقل، المقاعد المتبقية، وما
+                      يشمله السعر — نصّ الملاحظة. كلها من البيانات لا من نصٍّ ثابت. */}
+                  {(() => {
+                    const trs = tripsOf(p); const nt = trs[0];
+                    const tr = transports.find(x => x.id === (nt?.transportId || p.transportId));
+                    const left = nt ? Math.max(0, nt.seats - nt.bookedSeats) : 0;
+                    const incl = [
+                      (p.nights > 0 && p.hotelId) ? t("inclHousing") : null,
+                      tr ? t("inclTransport") : null,
+                      ...(p.features ?? []).slice(0, 2).map(f => f.text),
+                    ].filter(Boolean);
+                    return (
+                      <span className="flex flex-col w-full" style={{ gap: 3, paddingInline: 2 }}>
+                        <span className="flex items-center justify-between" style={{ gap: 6, ...T.small, fontSize: 12, fontWeight: 400, color: C.ink2 }}>
+                          <span className="inline-flex items-center min-w-0" style={{ gap: 4 }}>
+                            <CalendarDays size={12} style={{ flexShrink: 0 }} />
+                            {nt ? <span style={{ fontFamily: "var(--font-app)", direction: "ltr" }}>{nt.departureDate}</span> : "—"}
+                            {trs.length > 1 && <span style={{ color: C.ink3 }}>{t("moreTrips").replace("{n}", String(trs.length - 1))}</span>}
+                          </span>
+                          <span style={{ whiteSpace: "nowrap" }}>{durationLabel(p.days, p.nights, lang)}</span>
+                        </span>
+                        <span className="flex items-center justify-between" style={{ gap: 6, ...T.small, fontSize: 12, fontWeight: 400, color: C.ink2 }}>
+                          <span>{tr ? (tr.mode === "flight" ? t("byFlight") : t("byBus")) : ""}</span>
+                          {nt && (
+                            <span style={{ fontWeight: left <= 5 ? 600 : 400, color: left <= 5 ? C.green : C.ink2, whiteSpace: "nowrap" }}>
+                              {left === 1 ? t("seatsLeftCardOne") : t("seatsLeftCard").replace("{n}", String(left))}
+                            </span>
+                          )}
+                        </span>
+                        {incl.length > 0 && (
+                          <span className="truncate" style={{ ...T.small, fontSize: 11, fontWeight: 400, color: C.ink3 }}>
+                            {t("incl")} {incl.join(" · ")}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })()}
                   <span className="flex items-center justify-between w-full" style={{ gap: 6, paddingInline: 2, paddingBottom: 2 }}>
                     {/* اسم المدينة أولاً ثم الدبوس — كترتيب اللقطة في RTL */}
                     <span className="inline-flex items-center min-w-0" style={{ gap: 3, ...T.small, fontWeight: 400, color: C.ink2 }}>
-                      <span className="truncate">{hotel?.city ?? p.destination}</span>
+                      <span className="truncate">{cityLabel(hotel?.city ?? p.destination, lang)}</span>
                       <MapPin size={13} style={{ flexShrink: 0 }} />
                     </span>
-                    {sold
-                      ? <span style={{ ...T.small, color: C.ink2, flexShrink: 0 }}>{t("soldOut")}</span>
-                      : <span className="inline-flex items-baseline" style={{ gap: 3, flexShrink: 0, whiteSpace: "nowrap" }}>
-                          {/* «يبدأ من» أخفت وأصغر من الرقم: هو تحفّظ على السعر
-                              لا جزء منه، ولو ساواه وزناً لتنافس العنصران على العين
-                              والرقم هو المقصود. */}
-                          <span style={{ ...T.small, fontSize: 11, fontWeight: 400, color: C.ink2 }}>{t("from")}</span>
-                          <span style={{ ...T.small, fontWeight: 600, color: C.green }}>
-                            {money(minTotal(p))} {t("currency")}
-                          </span>
-                        </span>}
+                    <span className="inline-flex items-baseline" style={{ gap: 3, flexShrink: 0, whiteSpace: "nowrap" }}>
+                      {/* «يبدأ من» أخفت وأصغر من الرقم: هو تحفّظ على السعر
+                          لا جزء منه، ولو ساواه وزناً لتنافس العنصران على العين
+                          والرقم هو المقصود. */}
+                      <span style={{ ...T.small, fontSize: 11, fontWeight: 400, color: C.ink2 }}>{t("from")}</span>
+                      <span style={{ ...T.small, fontWeight: 600, color: C.green }}>
+                        {money(minTotal(p))} {t("currency")}
+                      </span>
+                    </span>
                   </span>
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {/* ═══ باقات بلا رحلة قادمة ═══
+            صفوف مضغوطة لا بطاقات: هي معروضة للعلم بوجودها لا للحجز،
+            فلا تأخذ وزن ما يُحجَز. ومصغّرة ٤٤ بكسل تكفي للتعرّف، وسطرٌ
+            واحد يقول السبب. غير قابلة للضغط أصلاً — لا زرّ معطَّل يُضغط
+            فلا يقع شيء. */}
+        {closed.length > 0 && (
+          <div style={{ marginTop: open.length ? 22 : 4 }}>
+            <div style={{ ...T.small, color: C.ink3, marginBottom: 8 }}>{t("noUpcoming")}</div>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+              {closed.map(p => {
+                const hotel = hotels.find(h => h.id === p.hotelId);
+                return (
+                  <li key={p.id} className="flex items-center"
+                    style={{
+                      gap: 10, padding: 8, borderRadius: R.card,
+                      background: C.fill, border: `1px solid ${C.line}`,
+                    }}>
+                    <img src={pkgCover(p)} alt="" loading="lazy"
+                      style={{
+                        width: 44, height: 44, objectFit: "cover", borderRadius: 8,
+                        flexShrink: 0, display: "block", filter: "grayscale(1)", opacity: 0.7,
+                      }} />
+                    <span className="flex-1 min-w-0 flex flex-col" style={{ gap: 1 }}>
+                      <span className="truncate" style={{ ...T.body, fontWeight: 600, color: C.ink2 }}>{p.name}</span>
+                      <span className="truncate" style={{ ...T.small, fontWeight: 400, color: C.ink3 }}>
+                        {cityLabel(hotel?.city ?? p.destination, lang)}
+                      </span>
+                    </span>
+                    <span style={{ ...T.small, color: C.ink3, flexShrink: 0 }}>{t("noUpcomingShort")}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
 

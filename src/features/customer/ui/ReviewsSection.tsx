@@ -4,8 +4,7 @@
    يُتخطّى، والتعليق المفرد يُقرأ فعلاً. ولأن المفرد يُوهم أن الرأي واحد،
    يبيّن العدد في الرأس والنقاط تحته أن هناك غيره.
 
-   الدرجة العامة متوسط درجات الآراء نفسها (rating في PkgReview)، فلا
-   يمكن أن يتناقض الرقم مع ما تحته. الآراء بلا درجة تُعرض ولا تُحتسب. */
+   الرأي بسيط: اسم وتقييم من خمس ونص وصورة اختيارية. */
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { PkgReview } from "@/types";
@@ -17,15 +16,11 @@ const ROTATE_MS = 4000;
 /** فوقه تُستبدل النقاط بعدّاد: صفٌّ طويل من النقاط يصير زخرفة لا دلالة. */
 const MAX_DOTS = 7;
 
-/** أول عتبة تتحقق هي الوصف — السلّم تنازلي. */
-const SCORE_STEPS: [number, string][] = [
-  [9, "score9"], [8.5, "score85"], [8, "score8"], [7, "score7"], [6, "score6"], [0, "score0"],
-];
-const scoreKey = (v: number) => SCORE_STEPS.find(([min]) => v >= min)![1];
-
-/** العربية تصرّف المعدود: مفرد، مثنى، جمع (3–10)، ثم تمييز منصوب (11+). */
-const countKey = (n: number) =>
-  n === 1 ? "oneReview" : n === 2 ? "twoReviews" : n <= 10 ? "fewReviews" : "manyReviews";
+const ratingOutOfFive = (rating?:number) => {
+  if(typeof rating!=="number") return null;
+  /* تحفظ الآراء القديمة من 10 كما كانت، وتظهر بجانب الجديدة من 5 بلا كسر العرض. */
+  return Math.min(5, Math.max(1, rating>5 ? rating/2 : rating));
+};
 
 export interface ReviewsSectionProps {
   reviews: PkgReview[];
@@ -45,10 +40,6 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
   const onTextRef = useCallback((el: HTMLDivElement | null) => { if (el) setTextEl(el); }, []);
 
   const n = reviews.length;
-  const rated = reviews.filter(r => typeof r.rating === "number");
-  const avg = rated.length
-    ? Math.round((rated.reduce((s, r) => s + (r.rating as number), 0) / rated.length) * 10) / 10
-    : null;
 
   /* الفهرس قد يتجاوز المصفوفة لو قلّت الآراء بين رسمتين. */
   const idx = n ? Math.min(i, n - 1) : 0;
@@ -75,30 +66,8 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
     );
   }
 
-  const countLabel = t(countKey(n)).replace("{n}", String(n));
-
   return (
     <div style={{ paddingInline: SPACE.page }}>
-      {/* ── التقييم العام ── */}
-      {avg !== null && (
-        <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
-          <div style={{
-            background: C.green, color: C.white, borderRadius: R.button,
-            padding: "8px 12px", ...T.h3, fontWeight: 600, lineHeight: 1,
-            display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0,
-          }}>
-            {/* الرقم دائماً LTR: «8.8» تنعكس إلى «8.8» خطأً في سياق RTL */}
-            <span style={{ direction: "ltr" }}>{avg.toFixed(1)}</span>
-          </div>
-          <div className="min-w-0">
-            <div style={{ ...T.h3, color: C.ink }}>{t(scoreKey(avg))}</div>
-            <div style={{ ...T.meta, color: C.ink2 }}>
-              <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{avg.toFixed(1)}</span> {t("outOfTen")} · {countLabel}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── تعليق واحد يتبدّل ── */}
       <div
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
@@ -129,13 +98,13 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
               </span>
               {/* الاسم وحده — بلا دولة ولا علم */}
               <span className="truncate" style={{ ...T.body, fontWeight: 500, color: C.ink }}>{rv.name}</span>
-              {typeof rv.rating === "number" && (
+              {ratingOutOfFive(rv.rating)!==null && (
                 <span style={{
                   marginInlineStart: "auto", ...T.small, fontWeight: 600,
                   color: C.green, background: C.greenTint, borderRadius: R.button,
                   padding: "3px 7px", direction: "ltr", flexShrink: 0,
                 }}>
-                  {rv.rating.toFixed(1)}
+                  ⭐ {ratingOutOfFive(rv.rating)!.toFixed(1).replace(/\.0$/,"")}/5
                 </span>
               )}
             </div>
@@ -147,6 +116,8 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
               {rv.text}
             </div>
 
+            {rv.image && <img src={rv.image} alt={`صورة مرفقة مع رأي ${rv.name}`} style={{width:"100%",height:76,objectFit:"cover",borderRadius:R.button,marginTop:10}}/>}
+
             {clamped && (
               <button type="button" onClick={onReadMore}
                 style={{
@@ -156,6 +127,7 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
                 {t("readMore")}
               </button>
             )}
+
           </motion.div>
         </AnimatePresence>
       </div>

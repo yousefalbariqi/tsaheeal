@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Building2, MapPin, Star, Plus, Pencil, Trash2, X, Check,
+  Building2, MapPin, Star, Plus, Pencil, Trash2, Archive, X, Check,
   Wifi, UtensilsCrossed, ParkingCircle, Waves, Wind, Dumbbell, Coffee,
   ShieldCheck, BellRing, ImagePlus, ArrowRight, ChevronUp, ChevronDown, Film,
 } from "lucide-react";
 import { B } from "@/lib/theme";
+import { useDebounced } from "@/lib/useDebounced";
+import { EntityGate } from "@/components/States";
+import { TabStrip } from "@/components/Tabs";
 import type { MediaKind, HotelFeature, HotelReview, HotelMedia, RoomType, Hotel } from "@/types";
 import { uid, formatKmValue, parseKmToMeters, distanceLabel, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -14,10 +17,19 @@ import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { useStore } from "@/store/useStore";
+import { setArchiveReason } from "@/data/repository";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
 import { Field } from "@/components/Field";
+import { NumericInput } from "@/components/NumericInput";
 import { onPickMedia } from "@/lib/mediaUpload";
+import { sar, SAR } from "@/lib/money";
+import { phoneError } from "@/lib/phone";
+import { cleanHotelName, hasHotelPrefix, hotelDisplayName } from "@/lib/hotelName";
+import { EntityActions } from "@/components/EntityActions";
+import { permanentlyDelete } from "@/data/repository";
+import { writeLocalOnly } from "@/store/useStore";
+import { hotelReadiness, hotelCover, isPublished } from "./readiness";
 
 const HOTEL_FEATURE_ICONS: Record<string, React.FC<{size?:number;style?:React.CSSProperties}>> = {
   wifi:Wifi, breakfast:Coffee, restaurant:UtensilsCrossed,
@@ -40,7 +52,7 @@ function HotelCardHero({name,city,stars,status,cover}:{name:string;city:string;s
             </div>
           </>}
       <div className="absolute top-0 inset-x-0" style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-      <div className="absolute top-3 right-3"><StatusBadge status={status}/></div>
+      <div className="absolute top-3 right-3"><StatusBadge status={status} entity="hotel"/></div>
       <div className="absolute top-3 left-3">
         <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
           style={{background:"rgba(14,12,11,0.7)",color:B.cream,border:"1px solid rgba(255,255,255,0.08)"}}>
@@ -57,18 +69,21 @@ function HotelCardHero({name,city,stars,status,cover}:{name:string;city:string;s
   );
 }
 
-function HotelCard({hotel,onEdit}:{hotel:Hotel;onEdit:()=>void}) {
+function HotelCard({hotel,onEdit,actions}:{hotel:Hotel;onEdit:()=>void;actions?:React.ReactNode}) {
+  /* الجاهزية تُقرأ في البطاقة لا في النموذج وحده: الفريق يريد أن يعرف
+     أيّ الفنادق ناقصةٌ من القائمة، لا أن يفتح عشرةً ليكتشف واحداً. */
+  const ready = hotelReadiness(hotel);
   return (
     <motion.div layout initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:0.95}}
       whileHover={{y:-4}} transition={{duration:0.2}}
       className="rounded-2xl overflow-hidden flex flex-col"
       style={{background:"#fff",border:`1px solid ${B.border}`,boxShadow:"0 2px 12px -4px rgba(21,76,72,0.08)",transition:"box-shadow 0.2s"}}>
-      <HotelCardHero name={hotel.name} city={hotel.city} stars={hotel.stars} status={hotel.status}
-        cover={hotel.media?.find(m=>m.primary&&m.kind==="image")?.url||hotel.media?.find(m=>m.kind==="image")?.url}/>
+      <HotelCardHero name={cleanHotelName(hotel.name)} city={hotel.city} stars={hotel.stars} status={hotel.status}
+        cover={hotelCover(hotel)}/>
       <div className="flex flex-col flex-1 px-5 pt-4 pb-4 gap-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>فندق {hotel.name}</h3>
+            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{hotelDisplayName(hotel.name)}</h3>
             <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
               <MapPin size={11} style={{color:B.gold}}/>
               <span>{hotel.district}</span>
@@ -90,9 +105,28 @@ function HotelCard({hotel,onEdit}:{hotel:Hotel;onEdit:()=>void}) {
             {hotel.features.length>3&&<span className="text-xs px-2.5 py-1 rounded-full" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.muted}}>+{hotel.features.length-3}</span>}
           </div>
         )}
-        <div className="flex gap-2 mt-auto">
-          <button onClick={onEdit} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.primary,color:B.cream,border:"none"}}><Pencil size={13}/>تعديل</button>
+        {ready.fromPrice>0&&(
+          <div className="text-xs font-bold" style={{color:B.text2}}>
+            يبدأ من <span style={{color:"#8a6a08",fontFamily:"var(--font-app)"}}>{sar(ready.fromPrice)}</span> / الليلة للفرد
+          </div>
+        )}
+        {/* ما ينقصه للنشر — بنصّه لا بنسبةٍ مجرّدة: «٤٠٪ مكتمل» لا تقول
+            للموظف ما يفعله، و«غرفة بلا صورة» تقول. */}
+        {ready.blockers.length>0&&(
+          <div className="rounded-xl px-3 py-2 flex flex-col gap-1" style={{background:"#FBF3D6",border:"1px solid #EBD9A0"}}>
+            <span className="text-xs font-bold" style={{color:"#8A6A08"}}>
+              {isPublished(hotel.status)?"منشور وناقص":"ينقصه للنشر"} ({ready.blockers.length})
+            </span>
+            <span className="text-xs leading-relaxed" style={{color:"#6b5a2a"}}>
+              {ready.blockers.map(b=>b.label).join(" · ")}
+            </span>
+          </div>
+        )}
+        <div className="mt-auto">
+          {actions ?? (
+            <button onClick={onEdit} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+              style={{background:B.primary,color:B.cream,border:"none"}}><Pencil size={13}/>تعديل</button>
+          )}
         </div>
       </div>
     </motion.div>
@@ -111,7 +145,7 @@ type HotelTab="info"|"features"|"rooms"|"media"|"reviews";
 function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave:(h:Hotel)=>void;onClose:()=>void;onDelete?:()=>void}) {
   const isEdit=initial!==null;
   const [tab,setTab]=useState<HotelTab>("info");
-  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:500,district:"",phone:"",mapUrl:"",status:"active",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
+  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:500,district:"",phone:"",mapUrl:"",status:"draft",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
   const [distanceKmInput,setDistanceKmInput]=useState(()=>formatKmValue(initial?.distanceM??500));
   const set=<K extends keyof Hotel>(k:K,v:Hotel[K])=>setForm(f=>({...f,[k]:v}));
   const handleDistanceChange = (value:string) => {
@@ -151,6 +185,31 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
   const updMedia=(id:string,field:keyof HotelMedia,val:any)=>set("media",media.map(m=>m.id===id?{...m,[field]:val}:m));
   const setPrimaryMedia=(id:string)=>set("media",media.map(m=>({...m,primary:m.id===id&&m.kind==="image"})));
   const moveMedia=(id:string,dir:-1|1)=>{const arr=[...media];const i=arr.findIndex(m=>m.id===id);const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("media",arr);};
+  /* الجاهزية تُحسب من النموذج لحظةً بلحظة لا من السجل المحفوظ: الموظف
+     يرى الشرط يُستوفى وهو يكتب، فلا يحفظ ثم يكتشف. */
+  const ready = hotelReadiness(form);
+  const nameError = hasHotelPrefix(form.name) ? "كلمة «فندق» تُضاف تلقائياً عند العرض — اكتب الاسم مجرَّداً" : null;
+  const phoneMsg = phoneError(form.phone);
+
+  /* حفظٌ واحدٌ لكل المسارات: يُنظَّف الاسم، ويُمنع النشر بنواقص.
+     منعُ النشر هنا لا في القائمة وحدها: «نشط» تعني ظهور الفندق للعميل،
+     ولا معنى لأن يظهر سكنٌ بلا سعر ولا صورة. */
+  const submit = () => {
+    const clean = { ...form, name: cleanHotelName(form.name) };
+    if (isPublished(clean.status)) {
+      const r = hotelReadiness(clean);
+      if (!r.canPublish) {
+        toast.error("لا يمكن نشر الفندق ناقصاً", {
+          description: r.blockers.map(b=>b.label).join(" · "),
+          duration: 9000,
+        });
+        setTab(r.blockers[0].tab as HotelTab);
+        return;
+      }
+    }
+    onSave(clean);
+  };
+
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
   const TABS:{id:HotelTab;label:string}[]=[{id:"info",label:"معلومات"},{id:"features",label:"المرافق"},{id:"rooms",label:"الغرف"},{id:"media",label:"الصور والفيديو"},{id:"reviews",label:"الآراء"}];
@@ -175,29 +234,25 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
               </div>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              {isEdit&&onDelete&&<button onClick={onDelete} title="حذف الفندق" className="flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:"rgba(190,38,38,0.15)",border:"1px solid rgba(190,38,38,0.4)",color:"#F3C9C9"}}><Trash2 size={13}/>حذف</button>}
-              <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
+              {isEdit&&onDelete&&<button onClick={onDelete} title="أرشفة الفندق" aria-label="أرشفة الفندق" className="flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold cursor-pointer"
+                style={{background:"rgba(138,106,8,0.2)",border:"1px solid rgba(232,217,168,.55)",color:"#F7E9AE"}}><Archive size={13}/>أرشفة</button>}
+              <button onClick={onClose} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
                 style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={15}/></button>
             </div>
           </div>
-          <div className="flex gap-1">
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                className="relative px-4 py-2.5 text-xs font-bold cursor-pointer rounded-t-lg transition-all"
-                style={{background:tab===t.id?"#fff":"transparent",color:tab===t.id?B.black:"#CFC5B6",border:"none"}}>
-                {t.label}
-                {tab===t.id&&<motion.div layoutId="htab" className="absolute inset-x-0 top-0 h-0.5" style={{background:B.gold}}/>}
-              </button>
-            ))}
-          </div>
+          <TabStrip tabs={TABS} active={tab} onChange={t=>setTab(t)} tone="onDark" idPrefix="htl"/>
         </div>
         <div className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:"none"}}>
           <AnimatePresence mode="wait">
-            {tab==="info"&&<motion.div key="hi" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-4">
-              <div><Field label={<>اسم الفندق <span style={{color:B.gold}}>*</span></>}>
-                     <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند" onChange={e=>set("name",e.target.value)}/>
-                   </Field></div>
+            {tab==="info"&&<motion.div role="tabpanel" id="htl-panel-info" aria-labelledby="htl-tab-info" key="info" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
+              <div><Field label={<>اسم الفندق <span style={{color:B.gold}}>*</span> <span className="font-normal" style={{color:B.muted}}>(بلا كلمة «فندق»)</span></>}>
+                     <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند"
+                       onChange={e=>set("name",e.target.value)} onBlur={()=>set("name",cleanHotelName(form.name))}/>
+                   </Field>
+                   {nameError
+                     ? <div className="text-xs font-bold mt-1.5" style={{color:"#B4530C"}}>{nameError}</div>
+                     : form.name.trim()&&<div className="text-xs mt-1.5" style={{color:B.muted}}>يظهر للعميل: <b style={{color:B.text3}}>{hotelDisplayName(form.name)}</b></div>}
+                   </div>
               <div className="grid grid-cols-3 gap-3">
                 <div><Field label="المدينة">
                        <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/>
@@ -205,17 +260,24 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                 <div><Field label="التصنيف">
                        <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/>
                      </Field></div>
-                <div><Field label="المسافة (كيلومتر)">
-                       <input type="text" inputMode="decimal" className={inp} style={ist} value={distanceKmInput} placeholder="0.5" onChange={e=>handleDistanceChange(e.target.value)} onBlur={handleDistanceBlur}/>
-                     </Field></div>
+                <div><Field label="المسافة من الحرم (كم)">
+                       <NumericInput decimal className={inp}
+                         style={{...ist,borderColor:(form.distanceM??0)>0?B.border:"#F3C9C9"}}
+                         value={distanceKmInput} placeholder="0.5" onValueChange={handleDistanceChange} onBlur={handleDistanceBlur}/>
+                     </Field>
+                     {(form.distanceM??0)<=0&&<div className="text-xs font-bold mt-1.5" style={{color:"#BE2626"}}>المسافة بالكيلومتر ورقمها أكبر من صفر</div>}
+                     </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Field label="الحي">
                        <input className={inp} style={ist} value={form.district} placeholder="أجياد" onChange={e=>set("district",e.target.value)}/>
                      </Field></div>
                 <div><Field label="رقم تواصل الفندق">
-                       <input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.phone} placeholder="مثال: +966 12 xxx xxxx" onChange={e=>set("phone",e.target.value)}/>
-                     </Field></div>
+                       <input className={inp} style={{...ist,direction:"ltr",textAlign:"left",borderColor:phoneMsg?"#F3C9C9":B.border}}
+                         value={form.phone} placeholder="مثال: +966 12 543 7777" onChange={e=>set("phone",e.target.value)}/>
+                     </Field>
+                     {phoneMsg&&<div className="text-xs font-bold mt-1.5" style={{color:"#B4530C"}}>{phoneMsg}</div>}
+                     </div>
               </div>
               <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رابط الموقع في خرائط Google</label>
                 <div className="relative">
@@ -224,16 +286,80 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                 </div>
                 {form.mapUrl&&<a href={form.mapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold mt-1.5" style={{color:B.gold}}>فتح الموقع في خرائط Google<ArrowRight size={11}/></a>}
               </div>
+              {/* ── بيانات العقد — إدارية، لا تظهر للعميل ──
+                  «أضف بيانات جهة الاتصال، رقم العقد، فترة العقد، وسياسة
+                  الإلغاء الداخلية كمعلومات إدارية». اختيارية: غيابها لا يمنع
+                  النشر، وتُقرأ عند التفاوض والإلغاء لا عند البيع. */}
+              <div className="rounded-xl p-4 flex flex-col gap-3" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+                <div className="text-xs font-bold" style={{color:B.text3}}>بيانات العقد <span className="font-normal" style={{color:B.muted}}>— إدارية، لا يراها العميل</span></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Field label="جهة الاتصال"><input className={inp} style={ist} value={form.contactPerson??""} placeholder="اسم المسؤول في الفندق" onChange={e=>set("contactPerson",e.target.value)}/></Field></div>
+                  <div><Field label="جوال جهة الاتصال"><input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.contactPhone??""} placeholder="+966 5x xxx xxxx" onChange={e=>set("contactPhone",e.target.value)}/></Field></div>
+                  <div><Field label="رقم العقد"><input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.contractNo??""} placeholder="مثال: C-2026-014" onChange={e=>set("contractNo",e.target.value)}/></Field></div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><Field label="بداية العقد"><input type="date" className={inp} style={{...ist,direction:"ltr"}} value={form.contractFrom??""} onChange={e=>set("contractFrom",e.target.value)}/></Field></div>
+                    <div><Field label="نهايته"><input type="date" className={inp} style={{...ist,direction:"ltr"}} value={form.contractTo??""} onChange={e=>set("contractTo",e.target.value)}/></Field></div>
+                  </div>
+                </div>
+                {form.contractFrom&&form.contractTo&&form.contractTo<form.contractFrom&&<div className="text-xs font-bold" style={{color:"#BE2626"}}>نهاية العقد تسبق بدايته</div>}
+                {form.contractTo&&form.contractTo<new Date().toISOString().slice(0,10)&&<div className="text-xs font-bold" style={{color:"#B4530C"}}>العقد منتهٍ — جدّده قبل ربط باقاتٍ جديدة بهذا الفندق</div>}
+                <div><Field label="سياسة الإلغاء الداخلية"><textarea rows={2} className={inp} style={{...ist,resize:"vertical"}} value={form.cancelPolicyInternal??""} placeholder="مثال: إلغاء مجاني قبل ٧ أيام من الوصول، بعدها تُحتسب ليلة واحدة" onChange={e=>set("cancelPolicyInternal",e.target.value)}/></Field></div>
+              </div>
               <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحالة</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["active","inactive"] as const).map(s=>(
-                    <button key={s} onClick={()=>set("status",s)} className="flex items-center gap-2 py-3 px-4 rounded-xl font-bold text-sm cursor-pointer"
-                      style={{background:form.status===s?(s==="active"?"#E3F3E8":"#FBE6E6"):B.bg,color:form.status===s?(s==="active"?"#1E7A44":"#BE2626"):B.muted,border:`1.5px solid ${form.status===s?(s==="active"?"#C4E4CE":"#F3C9C9"):B.border}`}}>
-                      <span className="w-2 h-2 rounded-full" style={{background:form.status===s?(s==="active"?"#1E7A44":"#BE2626"):B.border}}/>{s==="active"?"نشط ومتاح":"متوقف مؤقتاً"}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    {v:"draft"    as const, label:"مسودة",        hint:"لا يظهر للعميل", on:"#FBF3D6", fg:"#8A6A08", bd:"#EBD9A0"},
+                    {v:"active"   as const, label:"نشط ومتاح",     hint:"يظهر للعميل",    on:"#E3F3E8", fg:"#1E7A44", bd:"#C4E4CE"},
+                    {v:"inactive" as const, label:"متوقف مؤقتاً",  hint:"محجوب مؤقتاً",   on:"#FBE6E6", fg:"#BE2626", bd:"#F3C9C9"},
+                  ]).map(o=>{
+                    const on = form.status===o.v;
+                    /* زرّ «نشط» يُعطَّل لا يُخفى: إخفاؤه يترك الموظف يبحث
+                       عن النشر، وتعطيلُه مع سطر النواقص يقول لماذا. */
+                    const locked = o.v==="active" && !ready.canPublish;
+                    return (
+                      <button key={o.v} onClick={()=>{ if(locked) return; set("status",o.v); }} disabled={locked}
+                        title={locked?"أكمل النواقص أدناه قبل النشر":undefined}
+                        className="flex flex-col items-start gap-0.5 py-2.5 px-3 rounded-xl font-bold text-sm"
+                        style={{background:on?o.on:B.bg,color:on?o.fg:B.muted,border:`1.5px solid ${on?o.bd:B.border}`,
+                          cursor:locked?"not-allowed":"pointer",opacity:locked?0.5:1}}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{background:on?o.fg:B.border}}/>{o.label}
+                        </span>
+                        <span className="text-xs font-normal" style={{color:on?o.fg:B.muted,opacity:.8}}>{o.hint}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* قائمة النواقص — الشرط المانع ثم التنبيه، وكلٌّ يقفز إلى تبويبه.
+                  تُعرض دائماً لا عند الفشل فقط: الموظف يرى ما بقي قبل أن يحاول. */
+              (ready.blockers.length>0||ready.warnings.length>0)&&(
+                <div className="rounded-2xl p-4 flex flex-col gap-2.5"
+                  style={{background:ready.canPublish?"#F7F4EC":"#FBF3D6",border:`1px solid ${ready.canPublish?B.border:"#EBD9A0"}`}}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold" style={{color:ready.canPublish?B.text3:"#8A6A08"}}>
+                      {ready.canPublish?"جاهز للنشر — وبقيت تحسينات":`ينقصه ${ready.blockers.length} للنشر`}
+                    </span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md"
+                      style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)"}}>{ready.percent}%</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {[...ready.blockers,...ready.warnings].map(c=>(
+                      <button key={c.key} onClick={()=>setTab(c.tab as HotelTab)}
+                        className="flex items-center gap-2 text-xs font-semibold text-start cursor-pointer"
+                        style={{background:"none",border:"none",padding:0,color:c.blocking?"#BE2626":B.text2}}>
+                        <span className="w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0"
+                          style={{background:c.blocking?"#FBE6E6":"#fff",border:`1px solid ${c.blocking?"#F3C9C9":B.border}`,fontSize:9,color:c.blocking?"#BE2626":B.muted}}>
+                          {c.blocking?"!":"·"}
+                        </span>
+                        {c.label}
+                        <span style={{color:B.muted,fontWeight:400}}>— {c.blocking?"مطلوب":"مستحسن"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div><Field label={<>رأي تساهيل <span className="font-normal" style={{color:B.muted}}>(يظهر للعميل)</span></>}>
                      <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={form.tasaheelNote} placeholder="ملاحظة الفريق..." onChange={e=>set("tasaheelNote",e.target.value)}/>
                    </Field></div>
@@ -241,7 +367,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                      <textarea className={inp} style={{...ist,resize:"vertical",background:B.bg}} rows={2} value={form.notes} placeholder="ملاحظات خاصة بالفريق الداخلي فقط..." onChange={e=>set("notes",e.target.value)}/>
                    </Field></div>
             </motion.div>}
-            {tab==="features"&&<motion.div key="hf" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-3">
+            {tab==="features"&&<motion.div role="tabpanel" id="htl-panel-features" aria-labelledby="htl-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <p className="font-bold text-sm" style={{color:B.black}}>المرافق والمميزات</p>
                 <button onClick={addFeat} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -258,13 +384,13 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                     <option value="spa">✨ سبا</option><option value="room_service">🛎️ خدمة غرف</option>
                   </select>
                   <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="اسم المرفق" onChange={e=>updFeat(f.id,"text",e.target.value)}/>
-                  <button onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
+                  <button aria-label="حذف الميزة" title="حذف الميزة" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
                     style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
                 </motion.div>
               ))}</AnimatePresence>
               {form.features.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Wifi size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف مرافق بعد</p></div>}
             </motion.div>}
-            {tab==="rooms"&&<motion.div key="hr" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-4">
+            {tab==="rooms"&&<motion.div role="tabpanel" id="htl-panel-rooms" aria-labelledby="htl-tab-rooms" key="rooms" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <p className="font-bold text-sm" style={{color:B.black}}>أنواع الغرف</p>
                 <button onClick={addRoom} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -286,12 +412,12 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                       </div>
                     </div>
                     <div style={{width:80}}><Field label="الأسرّة" labelClass="block text-xs font-bold mb-2" labelStyle={{color:B.muted}}>
-                                              <input type="number" min={1} className={inp} style={ist} value={r.beds} onChange={e=>updRoom(r.id,"beds",Number(e.target.value))}/>
+                                              <NumericInput min={1} className={inp} style={ist} value={r.beds} onValueChange={v=>updRoom(r.id,"beds",Number(v))}/>
                                             </Field></div>
-                    <div style={{width:120}}><Field label="ر.س / ليلة" labelClass="block text-xs font-bold mb-2" labelStyle={{color:B.muted}}>
-                                               <input type="number" min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800}} value={r.pricePerNight} onChange={e=>updRoom(r.id,"pricePerNight",Number(e.target.value))}/>
+                    <div style={{width:120}}><Field label={`${SAR} / ليلة`} labelClass="block text-xs font-bold mb-2" labelStyle={{color:B.muted}}>
+                                               <NumericInput min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800}} value={r.pricePerNight} onValueChange={v=>updRoom(r.id,"pricePerNight",Number(v))}/>
                                              </Field></div>
-                    <button onClick={()=>delRoom(r.id)} className="w-9 h-9 mb-0.5 rounded-xl flex items-center justify-center cursor-pointer"
+                    <button aria-label="حذف نوع الغرفة" title="حذف نوع الغرفة" onClick={()=>delRoom(r.id)} className="w-9 h-9 mb-0.5 rounded-xl flex items-center justify-center cursor-pointer"
                       style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
                   </div>
                   <div className="mt-4 pt-4" style={{borderTop:`1px dashed ${B.border}`}}>
@@ -319,9 +445,9 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                             {ROOM_MEDIA_CATS.map(c=><option key={c} value={c}>{c}</option>)}
                           </select>
                           <div className="flex items-center gap-1">
-                            <button onClick={()=>moveRoomPhoto(r.id,p.id,-1)} disabled={pi===0} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:pi===0?B.border:B.text2}}><ChevronUp size={13}/></button>
-                            <button onClick={()=>moveRoomPhoto(r.id,p.id,1)} disabled={pi===(r.photos??[]).length-1} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:pi===(r.photos??[]).length-1?B.border:B.text2}}><ChevronDown size={13}/></button>
-                            <button onClick={()=>delRoomPhoto(r.id,p.id)} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><Trash2 size={12}/></button>
+                            <button aria-label="تقديم الصورة في الترتيب" title="تقديم الصورة في الترتيب" onClick={()=>moveRoomPhoto(r.id,p.id,-1)} disabled={pi===0} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:pi===0?B.border:B.text2}}><ChevronUp size={13}/></button>
+                            <button aria-label="تأخير الصورة في الترتيب" title="تأخير الصورة في الترتيب" onClick={()=>moveRoomPhoto(r.id,p.id,1)} disabled={pi===(r.photos??[]).length-1} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:pi===(r.photos??[]).length-1?B.border:B.text2}}><ChevronDown size={13}/></button>
+                            <button aria-label="حذف صورة الغرفة" title="حذف صورة الغرفة" onClick={()=>delRoomPhoto(r.id,p.id)} className="flex-1 h-7 rounded-md flex items-center justify-center cursor-pointer" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><Trash2 size={12}/></button>
                           </div>
                         </div>
                       ))}
@@ -332,7 +458,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
               ))}</AnimatePresence>
               {form.roomTypes.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ImagePlus size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف غرف بعد</p></div>}
             </motion.div>}
-            {tab==="media"&&<motion.div key="hmd" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-4">
+            {tab==="media"&&<motion.div role="tabpanel" id="htl-panel-media" aria-labelledby="htl-tab-media" key="media" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <p className="font-bold text-sm flex items-center gap-2" style={{color:B.black}}>الصور والفيديو
                   <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:media.length>=HOTEL_MEDIA_MAX?"#FBE6E6":B.bg,color:media.length>=HOTEL_MEDIA_MAX?"#BE2626":B.muted,border:`1px solid ${media.length>=HOTEL_MEDIA_MAX?"#F3C9C9":B.border}`}}>{media.length} / {HOTEL_MEDIA_MAX}</span>
@@ -374,18 +500,18 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                     )}
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
-                    <button onClick={()=>moveMedia(m.id,-1)} disabled={idx===0} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
+                    <button aria-label="تقديم العنصر في الترتيب" title="تقديم العنصر في الترتيب" onClick={()=>moveMedia(m.id,-1)} disabled={idx===0} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                       style={{background:B.bg,border:`1px solid ${B.border}`,color:idx===0?B.border:B.text2}}><ChevronUp size={14}/></button>
-                    <button onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
+                    <button aria-label="تأخير العنصر في الترتيب" title="تأخير العنصر في الترتيب" onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                       style={{background:B.bg,border:`1px solid ${B.border}`,color:idx===media.length-1?B.border:B.text2}}><ChevronDown size={14}/></button>
-                    <button onClick={()=>delMedia(m.id)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
+                    <button aria-label="حذف الصورة أو الفيديو" title="حذف الصورة أو الفيديو" onClick={()=>delMedia(m.id)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                       style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><Trash2 size={13}/></button>
                   </div>
                 </motion.div>
               ))}</AnimatePresence>
               {media.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ImagePlus size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف صور أو فيديو بعد</p></div>}
             </motion.div>}
-            {tab==="reviews"&&<motion.div key="hrv" initial={{opacity:0,x:10}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-10}} className="flex flex-col gap-4">
+            {tab==="reviews"&&<motion.div role="tabpanel" id="htl-panel-reviews" aria-labelledby="htl-tab-reviews" key="reviews" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <p className="font-bold text-sm" style={{color:B.black}}>آراء المعتمرين</p>
                 <button onClick={addReview} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -400,7 +526,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                     {rv.image&&(
                       <div className="relative rounded-xl overflow-hidden self-start" style={{border:`1px solid ${B.border}`,width:96,height:96}}>
                         <img src={rv.image} alt="صورة مرفقة" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                        <button onClick={()=>updReview(rv.id,"image",undefined)} className="absolute top-1 left-1 w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer"
+                        <button aria-label="إزالة صورة الرأي" title="إزالة صورة الرأي" onClick={()=>updReview(rv.id,"image",undefined)} className="absolute top-1 left-1 w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer"
                           style={{background:"rgba(190,38,38,0.92)",color:"#fff",border:"none"}}><X size={12}/></button>
                       </div>
                     )}
@@ -416,7 +542,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                       </label>
                     </div>
                   </div>
-                  <button onClick={()=>delReview(rv.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer mt-0.5"
+                  <button aria-label="حذف الرأي" title="حذف الرأي" onClick={()=>delReview(rv.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer mt-0.5"
                     style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>
                 </motion.div>
               ))}</AnimatePresence>
@@ -425,7 +551,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
           </AnimatePresence>
         </div>
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={()=>onSave(form)} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold cursor-pointer"
+          <button onClick={submit} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.gold,color:B.black,border:"none"}}><Check size={14}/>حفظ الفندق</button>
           <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
@@ -439,7 +565,7 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
 export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
   /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
      نموذج التعديل تمرّ من هنا، فالموظف لا يملأ نموذجاً ليُرفض في آخره. */
-  const { canWrite } = useRole();
+  const { canWrite, isAdmin } = useRole();
   const mayWrite = canWrite("hotels");
   const openForm = (t: any) => {
     if (!mayWrite) {
@@ -449,14 +575,38 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     setEditTarget(t); setShowModal(true);
   };
   const hotels=useStore(s=>s.hotels); const setHotels=useStore(s=>s.setHotels);
+  /* الارتباط يُفحَص قبل الحذف لا بعده: فندقٌ تحمله باقةٌ منشورة حذفُه
+     يترك مرجعاً معلَّقاً يقرؤه العميل «سكن غير متوفّر». */
+  const packages=useStore(s=>s.packages);
+  const trips=useStore(s=>s.trips);
+  const deleteBlockersFor=(id:string):string[]=>{
+    const pk=packages.filter(p=>p.hotelId===id).length;
+    const tr=trips.filter(t=>t.hotelId===id).length;
+    const out:string[]=[];
+    if(pk) out.push(`مرتبط بـ${pk} ${pk===1?"باقة":"باقات"}`);
+    if(tr) out.push(`مرتبط بـ${tr} ${tr===1?"رحلة":"رحلات"}`);
+    return out;
+  };
   const [showModal,setShowModal]=useState(false);
   const [editTarget,setEditTarget]=useState<Hotel|null>(null);
   const [search,setSearch]=useState("");
+  /* التصفية على القيمة الساكنة لا على كل ضغطة مفتاح. */
+  const query = useDebounced(search);
   const [cityFilter,setCityFilter]=useState<"all"|"مكة"|"المدينة">("all");
-  const [statusFilter,setStatusFilter]=useState<"all"|"active"|"inactive">("all");
+  const [statusFilter,setStatusFilter]=useState<"all"|"draft"|"active"|"inactive">("all");
   const [deleteId,setDeleteId]=useState<string|null>(null);
-  const filtered=hotels.filter(h=>(!search||h.name.includes(search)||h.id.toLowerCase().includes(search.toLowerCase())||h.district.includes(search))&&(cityFilter==="all"||h.city===cityFilter)&&(statusFilter==="all"||h.status===statusFilter));
-  const stats={total:hotels.length,active:hotels.filter(h=>h.status==="active").length,mecca:hotels.filter(h=>h.city==="مكة").length,medina:hotels.filter(h=>h.city==="المدينة").length};
+  /* البحث يُطبَّع طرفيه: من كتب «فندق ايلاف» يجب أن يجد «ايلاف». */
+  const nq=cleanHotelName(query);
+  const filtered=hotels.filter(h=>(!nq||cleanHotelName(h.name).includes(nq)||h.id.toLowerCase().includes(nq.toLowerCase())||h.district.includes(nq)||h.phone.includes(nq))&&(cityFilter==="all"||h.city===cityFilter)&&(statusFilter==="all"||h.status===statusFilter));
+  const stats={
+    total:hotels.length,
+    active:hotels.filter(h=>h.status==="active").length,
+    draft:hotels.filter(h=>h.status==="draft").length,
+    /* «منشور وناقص» — الفنادق التي يراها العميل وفيها شرطٌ مانع.
+       أهمّ رقمٍ في الشاشة: هذه هي التي تُنتج شكوى عميل. */
+    incomplete:hotels.filter(h=>h.status==="active"&&!hotelReadiness(h).canPublish).length,
+    mecca:hotels.filter(h=>h.city==="مكة").length,
+  };
   function handleSave(h:Hotel){setHotels(p=>editTarget?p.map(x=>x.id===h.id?h:x):[h,...p]);setShowModal(false);}
   const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s"});
   return (
@@ -465,15 +615,16 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
       <div className="px-4 md:px-8 pt-4 md:pt-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="إجمالي الفنادق" value={stats.total} sub="في النظام" accent/>
-          <StatCard label="فنادق نشطة" value={stats.active} sub={`${stats.total-stats.active} متوقفة`}/>
-          <StatCard label="فنادق مكة" value={stats.mecca} sub="المكرمة"/>
-          <StatCard label="فنادق المدينة" value={stats.medina} sub="المنورة"/>
+          <StatCard label="منشورة للعميل" value={stats.active} sub={`${stats.total-stats.active} غير منشورة`}/>
+          <StatCard label="مسودات" value={stats.draft} sub="بانتظار الإكمال"/>
+          <StatCard label="منشورة وناقصة" value={stats.incomplete} sub={stats.incomplete?"تحتاج مراجعة الآن":"لا شيء ناقص"}/>
         </div>
         <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <button style={fb(statusFilter==="all")} onClick={()=>setStatusFilter("all")}>الكل</button>
               <button style={fb(statusFilter==="active")} onClick={()=>setStatusFilter("active")}>نشط</button>
+              <button style={fb(statusFilter==="draft")} onClick={()=>setStatusFilter("draft")}>مسودة</button>
               <button style={fb(statusFilter==="inactive")} onClick={()=>setStatusFilter("inactive")}>متوقف</button>
             </div>
             <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
@@ -496,17 +647,51 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
         <div className="mt-5" style={{height:1,background:B.border}}/>
       </div>
       <main className="flex-1 px-4 md:px-8 pb-10 pt-6">
+        <EntityGate entity="hotels" label="الفنادق" skeleton="cards">
         {filtered.length===0
           ?<motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col items-center justify-center py-24 rounded-2xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
             <Building2 size={44} style={{opacity:0.2,color:B.gold,marginBottom:12}}/><p className="font-bold" style={{color:B.black}}>لا توجد فنادق مطابقة</p>
           </motion.div>
           :<motion.div layout className="grid gap-5" style={{gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
-            <AnimatePresence>{filtered.map(h=><HotelCard key={h.id} hotel={h} onEdit={()=>{openForm(h);}}/>)}</AnimatePresence>
+            <AnimatePresence>{filtered.map(h=>(
+              <HotelCard key={h.id} hotel={h} onEdit={()=>{openForm(h);}}
+                actions={
+                  <EntityActions
+                    name={hotelDisplayName(h.name)} label="الفندق"
+                    canWrite={mayWrite} isAdmin={isAdmin}
+                    onEdit={()=>{openForm(h);}}
+                    active={h.status==="active"}
+                    disableLabel="إيقاف مؤقت"
+                    /* التعطيل لا يمرّ بالجاهزية: إيقافُ فندقٍ ناقص مطلوبٌ
+                       دائماً، والتنشيط هو المحروس. */
+                    onToggleActive={next=>{
+                      if(next){
+                        const r=hotelReadiness(h);
+                        if(!r.canPublish){
+                          toast.error("لا يمكن نشر الفندق ناقصاً",{description:r.blockers.map(b=>b.label).join(" · "),duration:9000});
+                          return;
+                        }
+                      }
+                      setHotels(p=>p.map(x=>x.id===h.id?{...x,status:next?"active":"inactive"}:x));
+                      toast.success(next?"نُشر الفندق":"أُوقف الفندق مؤقتاً");
+                    }}
+                    onArchive={reason=>{ setArchiveReason(reason); setHotels(p=>p.filter(x=>x.id!==h.id)); toast.success("أُرشف الفندق"); }}
+                    deleteBlockers={deleteBlockersFor(h.id)}
+                    /* الحذف النهائي ينادي الدالّة أولاً ثم يُنزع الصفّ محلياً
+                       بلا مزامنة — وإلّا قرأت المزامنة الغياب أرشفةً. */
+                    onPermanentDelete={async reason=>{
+                      await permanentlyDelete("hotels",h.id,reason);
+                      writeLocalOnly(()=>setHotels(p=>p.filter(x=>x.id!==h.id)));
+                    }}
+                  />
+                }/>
+            ))}</AnimatePresence>
           </motion.div>
         }
+        </EntityGate>
       </main>
       <AnimatePresence>
-        {deleteId&&<DeleteDialog onConfirm={()=>{setHotels(p=>p.filter(h=>h.id!==deleteId));setDeleteId(null);}} onCancel={()=>setDeleteId(null)}/>}
+        {deleteId&&<DeleteDialog onConfirm={reason=>{setArchiveReason(reason);setHotels(p=>p.filter(h=>h.id!==deleteId));setDeleteId(null);}} onCancel={()=>setDeleteId(null)}/>}
         {showModal&&<HotelModal initial={editTarget} onSave={handleSave} onClose={()=>setShowModal(false)} onDelete={editTarget?()=>{const id=editTarget.id;setShowModal(false);setDeleteId(id);}:undefined}/>}
       </AnimatePresence>
     </div>

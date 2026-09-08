@@ -21,7 +21,7 @@ export function Spinner({ size = 15, color, track, border = 2 }: {
       style={{
         width: size, height: size,
         border: `${border}px solid ${track ?? "rgba(0,0,0,0.3)"}`,
-        borderTopColor: color ?? "#1B1712",
+        borderTopColor: color ?? "#5C421B",
         borderRadius: "50%",
         display: "inline-block",
         flexShrink: 0,

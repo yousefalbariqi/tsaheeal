@@ -1,6 +1,6 @@
-/* نظام تصميم صفحة المستفيد — مستخرج من لقطات Airbnb (موبايل، عرض 390px).
-   القاعدة أبيض ومحايد كما عندهم؛ الأخضر يحل محل الوردي كلون الإجراء، والذهبي للنجوم والشارات.
-   ملاحظة أساسية: Airbnb تستخدم وزن 600 للعناوين و400–500 للنص — لا 800. */
+/* نظام تصميم صفحة المستفيد — تساهيل العمرة.
+   مصدر الألوان هو ملف الهوية المعتمد: الأبيض والعاجي والذهبي الهادئ،
+   لا الأخضر الموروث من النسخة التجريبية. */
 
 import { B } from "@/lib/theme";
 
@@ -9,35 +9,36 @@ import { B } from "@/lib/theme";
    كانت مكرّرة حرفياً في CustomerApp.tsx وscreens/CustomRequest.tsx،
    فتغييرُ الأخضر في أحدهما كان يُبقي الآخر على القديم. */
 export const G = {
-  deep:  "#0B5A41",
-  dark:  "#073A2B",
-  green: B.primary,
-  gold:  B.gold,
-  bg:    "#F5F3EE",
+  // لا سطح أسود في تجربة العميل؛ العمق هنا ذهبي الهوية لا أسود محايد.
+  deep:  "#8C6423",
+  dark:  "#6E4D1B",
+  green: "#B7893F",
+  gold:  "#B7893F",
+  bg:    "#FBF9F5",
 } as const;
 
 export const C = {
-  ink:    "#222222",  // النص الأساسي
-  ink2:   "#6A6A6A",  // النص الثانوي والوصف
-  ink3:   "#B0B0B0",  // المعطّل
-  line:   "#EBEBEB",  // الفواصل بين الأقسام
-  border: "#DDDDDD",  // حدود الحقول والـ chips
-  fill:   "#F7F7F7",  // خلفية الأزرار الثانوية
+  ink:    "#5C421B",  // بني ذهبي مقروء — لا أسود في الواجهة
+  ink2:   "#625B4D",  // النص الثانوي والوصف
+  ink3:   "#A69D8E",  // المعطّل
+  line:   "#E6DFCF",  // فواصل الهوية
+  border: "#E6DFCF",  // حدود الحقول والـ chips
+  fill:   "#FBF9F5",  // العاجي الهادئ
   white:  "#FFFFFF",
-  // أشرطة الأقسام — تتناوب مع الأبيض لتفصل «فصول» الصفحة بلا إضافة أي عنصر
-  band:       "#FAF8F4",  // رملي فاتح جداً
-  bandAction: "#F4F9F7",  // أخضر فاتح جداً — كتلة الحجز وحدها
-  green:      "#1F6F6B",
-  greenLite:  "#2E8F88",
-  greenDeep:  "#154C48",
-  greenTint:  "#EAF5F0",  // خلفية العنصر المختار
-  gold:       "#C0862C",
-  goldTint:   "#FFF7EA",
+  // أشرطة الأقسام تتناوب بهدوء؛ الذهبي لا يستعمل كخلفية كاملة للنص.
+  band:       "#FBF9F5",
+  bandAction: "#F8F1E4",
+  green:      "#B7893F",  // اسمٌ متوافق مع المكوّنات القديمة، اللون ذهبي الهوية
+  greenLite:  "#C89B52",
+  greenDeep:  "#8C6423",
+  greenTint:  "#F7EEDC",
+  gold:       "#B7893F",
+  goldTint:   "#F8F1E4",
   danger:     "#C13515",
   dangerTint: "#FBE6E6",
 } as const;
 
-/** تدرّج زر الإجراء — يقابل تدرّج "حجز" الوردي عندهم. */
+/** تدرّج لطيف للزر الرئيسي؛ الخلفية العميقة تحافظ على تباين النص الأبيض. */
 export const CTA_GRADIENT = `linear-gradient(120deg, ${C.greenLite} 0%, ${C.greenDeep} 100%)`;
 
 /* خطّ واحد للتطبيق كلّه — معرّف في src/styles/fonts.css.
@@ -46,6 +47,7 @@ export const CTA_GRADIENT = `linear-gradient(120deg, ${C.greenLite} 0%, ${C.gree
    المعلومة التي تدلّ عليها. */
 export const FONT = {
   sans: "var(--font-app)",
+  display: "var(--font-display)",
   mono: "var(--font-app)",
 } as const;
 

@@ -1,3 +1,47 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import './admin.css';
+
+/* واجهة المعتمر: زخرفة الهوية موجودة في الخلفية فقط، فلا تنافس قرار الحجز. */
+.ts-explore-shell { width: 100%; max-width: 1280px; margin-inline: auto; }
+.ts-umrah-hero {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 26px;
+  background:
+    radial-gradient(circle at 8% 20%, rgba(232,212,168,.42), transparent 23rem),
+    radial-gradient(circle at 92% 16%, rgba(232,212,168,.36), transparent 21rem),
+    #fff;
+}
+.ts-umrah-hero::before,
+.ts-umrah-hero::after {
+  content: "";
+  position: absolute;
+  width: 122px;
+  height: 122px;
+  pointer-events: none;
+  opacity: .36;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%23B7893F' stroke-width='1'%3E%3Cpolygon points='30,4 36,18 51,18 39,27 44,42 30,33 16,42 21,27 9,18 24,18'/%3E%3C/g%3E%3C/svg%3E");
+}
+.ts-umrah-hero::before { inset-inline-start: -38px; top: 60px; }
+.ts-umrah-hero::after { inset-inline-end: -38px; bottom: 5px; }
+.ts-journey-helper {
+  position: relative;
+  z-index: 1;
+  padding: 17px;
+  background: #fff;
+  border: 1px solid #E6DFCF;
+  border-radius: 16px;
+  box-shadow: 0 14px 28px -24px rgba(91,65,19,.62);
+}
+.ts-trust-promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ts-trust-promise { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 13px; background: #FBF9F5; border: 1px solid #E6DFCF; border-radius: 12px; color: #5C421B; }
+.ts-trust-promise b, .ts-trust-promise small { display: block; }
+.ts-trust-promise b { font-size: 13px; }
+.ts-trust-promise small { margin-top: 1px; color: #625B4D; font-size: 11px; line-height: 1.5; }
+.ts-trust-icon { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #F7EEDC; color: #8C6423; }
+@media (max-width: 620px) {
+  .ts-trust-promises { grid-template-columns: 1fr; }
+  .ts-umrah-hero::before, .ts-umrah-hero::after { opacity: .2; }
+}

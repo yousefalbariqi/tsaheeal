@@ -2,7 +2,7 @@ import { cloneElement, isValidElement, useCallback, useEffect, useId, useMemo, u
   type ReactElement, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Users, X, Search, ArrowLeft, Clock} from "lucide-react";
+import { Check, Users, X, Search, ArrowLeft, Clock, Eye} from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip } from "@/types";
 import { type RoomSplit, splitTotal, splitSummary } from "./roomSplit";
@@ -20,7 +20,8 @@ import { WhatsAppFab } from "@/components/WhatsAppFab";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/app/components/ui/input-otp";
 import { LANGS, dirOf, makeT, type Lang } from "./i18n";
 import { SlaCountdown } from "./ui/SlaCountdown";
-import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, AuthRequiredError, SKIP_SEAT_CHECK, availSeats, type Catalog, type TrackResult } from "./data";
+import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, AuthRequiredError, SKIP_SEAT_CHECK, availSeats, holdSeats, releaseSeatHolds, type Catalog, type TrackResult } from "./data";
+import { isSellable, tripState } from "@/lib/trip";
 import {
   sendOtp, verifyOtp, signInNoOtp, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
   cachedPhoneLocal, isWhatsappEnabled, authErrorMessage, isFail,
@@ -177,7 +178,10 @@ const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","seats","revie
 const TABBED_SCREENS:Screen[]=["packages","track","profile"];
 
 export function CustomerApp(){
-  const [lang,setLang]=useState<Lang>("ar");
+  /* اللغة تُحفظ: «زر EN يجب أن يحفظ اختيار المستخدم». المتصفّح وحده
+     يعرفها — لا تُرسل لأحد. */
+  const [lang,setLangState]=useState<Lang>(()=>{ try{ const v=localStorage.getItem("ts.lang"); return (v==="en"||v==="ar")?v:"ar"; }catch{ return "ar"; } });
+  const setLang=(l:Lang)=>{ setLangState(l); try{ localStorage.setItem("ts.lang",l); }catch{} };
   const t=useMemo(()=>makeT(lang),[lang]);
   const dir=dirOf(lang);
   /* ── الشاشة من المسار ──
@@ -196,6 +200,7 @@ export function CustomerApp(){
   const [trip,setTrip]=useState<Trip|null>(null);
   const [persons,setPersons]=useState(1);
   const [split,setSplit]=useState<RoomSplit|null>(null);
+  const [bookingMode,setBookingMode]=useState<"full"|"transport">("full");
   const [takenSeats,setTakenSeats]=useState<number[]>([]);
   const [pax,setPax]=useState<Pax[]>([emptyPax()]);
   const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
@@ -296,15 +301,47 @@ export function CustomerApp(){
   },[trip?.id]);
   useEffect(()=>()=>{ if(resendTimer.current) clearInterval(resendTimer.current); },[]);
 
-  const activePkgs=cat.packages.filter(p=>p.status==="active" && (p.settings?.allowOnlineBooking!==false));
+  /* معاينة الموظف: /p/PKG-3?preview=1
+
+     صفحة الباقة قبل النشر لا تُبنى نسخةً ثانية داخل اللوحة: نسخةٌ ثانية
+     تتفارق عن الأصل عند أول تعديل، فتُطمئن الموظف على شكلٍ لا يراه أحد.
+     تُفتح الصفحة الحقيقية نفسها ويُرفع عنها شرط «نشطة» وحده.
+
+     لا تفتح باباً جديداً: سياسة القراءة العامة تُتيح صفوف الباقات
+     للجميع أصلاً، ومن يعرف المعرّف يقرؤها بأو بلا هذه الراية. وما
+     تضيفه أنها تمنع الحجز صراحةً وتضع شريطاً يقول ما هذه الصفحة. */
+  const preview=useMemo(()=>new URLSearchParams(location.search).get("preview")==="1",[location.search]);
+  /* الرايةُ ترفع الشرط عن باقةِ المسار وحدها لا عن الكتالوج كلّه:
+     /?preview=1 كان سيملأ شاشة الاستكشاف بالمسودّات، وهي صفحةٌ يشارك
+     رابطها الناس. المعاينة قصدُها باقةٌ بعينها يُراجعها من يملك معرّفها. */
+  const activePkgs=useMemo(()=>{
+    /* الفندق المسودة أو المتوقّف يحجب باقته.
+
+       الفندق صار له ثلاث حالات (مسودة · نشط · متوقف)، والمسودة تعني
+       «مُدخَلٌ ولم يُعتمد» — لا سعر ولا صورة ولا غرفة. وباقةٌ نشطة مرتبطةٌ
+       به كانت تعرض سكنها للعميل رغم ذلك، فيرى غرفةً بلا ثمن. والباقة بلا
+       ليالٍ لا سكن فيها فلا يُشترط لها فندق. */
+    const hotelOk=(p:typeof cat.packages[number])=>{
+      if(!p.hotelId||(p.nights??0)<=0) return true;
+      const h=cat.hotels.find(x=>x.id===p.hotelId);
+      return !!h&&h.status==="active";
+    };
+    const published=cat.packages.filter(p=>p.status==="active" && (p.settings?.allowOnlineBooking!==false) && hotelOk(p));
+    if(!preview||!route.packageId) return published;
+    const one=cat.packages.find(p=>p.id===route.packageId);
+    return one&&!published.some(p=>p.id===one.id) ? [...published,one] : published;
+  },[cat.packages,preview,route.packageId]);
   /* الرحلة الفائتة لا تُعرض ولو بقيت "open" في القاعدة: تاريخ المغادرة
      هو الحدّ، لا الحالة. بدونه يظهر ٣٠ يوليو حجزاً متاحاً في ٢٣ أغسطس. */
   const today=todayYMD();
-  const pkgTrips=(p:Pkg)=>cat.trips.filter(x=>x.packageId===p.id && x.status==="open" && x.departureDate>=today && availSeats(x)>0).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
+  /* isSellable يجمع الشروط الثلاثة في واحد ويضيف ما كان ناقصاً: رحلةٌ
+     تنطلق اليوم ٢٢:٠٠ تبقى معروضةً حتى تنطلق، ورحلةٌ عادت أمس تختفي —
+     والمقارنة النصّية وحدها كانت تُبقيها يوماً كاملاً. */
+  const pkgTrips=(p:Pkg)=>cat.trips.filter(x=>x.packageId===p.id && isSellable(x) && availSeats(x)>0).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
   /* رحلات التقويم — القابل للحجز والمكتمل معاً، فالمكتمل يُرسم مشطوباً بدل أن
      يختفي: اختفاؤه يجعل يوماً فاتت مقاعده يبدو يوماً لا تسير فيه الباقة أصلاً.
      الملغاة والمؤرشفة تبقى مستبعدة — عرضها ضجيج لا معلومة. */
-  const pkgTripsShown=(p:Pkg)=>cat.trips.filter(x=>x.packageId===p.id && (x.status==="open"||x.status==="full") && x.departureDate>=today).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
+  const pkgTripsShown=(p:Pkg)=>cat.trips.filter(x=>{const st=tripState(x);return x.packageId===p.id && (st==="open"||st==="full") && x.departureDate>=today;}).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
   /* وسيلة النقل: الرحلة المختارة أولاً، وإلا افتراضي الباقة —
      وإلا اختفى قسم النقل كلياً حتى يختار المستفيد تاريخاً، وهو يحتاجه ليقرر. */
   const transport=cat.transports.find(x=>x.id===(trip?.transportId||pkg?.transportId));
@@ -315,7 +352,9 @@ export function CustomerApp(){
      مطابق للحساب القديم تماماً في التوزيعات المتساوية — أربعة في غرفتين
      سعة اثنين: (150×2 + 150×2) × ليلتين = 1200، وهو (150×2)×4 نفسه.
      ويختلف عمداً حين تفوق السعة العدد: الغرفة الأكبر بثمنها كاملاً. */
-  const total=split?splitTotal(split,nights):(trip?.price??0)*persons;
+  const total=bookingMode==="transport"
+    ? persons * (pkg?.transportOnlyPrice ?? 0)
+    : split?splitTotal(split,nights):(trip?.price??0)*persons;
   const takenSet=useMemo(()=>new Set(takenSeats),[takenSeats]);
 
   /* ── مزامنة الباقة مع المسار ──
@@ -345,7 +384,7 @@ export function CustomerApp(){
       /* الرحلة المستعادة لا تُصفَّر مقاعدها — أثر [trip?.id] أدناه يصفّرها
          عند كل تبديل رحلة، وهو صحيح للتبديل خطأٌ للاستعادة. */
       if(tr) restoredTrip.current=tr.id;
-      setTrip(tr); setPersons(d.persons); setSplit(d.split);
+      setTrip(tr); setPersons(d.persons); setSplit(d.split); setBookingMode(d.bookingMode ?? "full");
       setPax(d.pax); setAgreed(d.agreed); setActivePax(d.activePax);
     }
     setRouteReady(true);
@@ -357,8 +396,8 @@ export function CustomerApp(){
   useEffect(()=>{
     if(!routeReady||!pkg||bookingNo) return;
     if(!draftHasInput(pax,trip?.id??null,split)) return;
-    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,pax,agreed,activePax});
-  },[routeReady,pkg?.id,trip?.id,persons,split,pax,agreed,activePax,bookingNo]);
+    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,bookingMode,pax,agreed,activePax});
+  },[routeReady,pkg?.id,trip?.id,persons,split,bookingMode,pax,agreed,activePax,bookingNo]);
 
   /* ── حرّاس المسار ──
      مسار لا يمكن رسمه كان يُعيد لا شيء: صفحة بيضاء صامتة. الآن
@@ -387,7 +426,7 @@ export function CustomerApp(){
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
   },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
 
-  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
   // ── تحقق خطوة بيانات المعتمرين ──
   const paxErrs=useMemo(()=>pax.map((p,i)=>paxErrors(p,i===0,t,lang)),[pax,t,lang]);
@@ -407,6 +446,47 @@ export function CustomerApp(){
         المقعد مرتبط بالشخص لا بالحجز، فلا يلتبس على الموظف من يجلس أين. ── */
   const seats=useMemo(()=>pax.map(x=>x.seat).filter((n):n is number=>n!=null),[pax]);
   const seatsDone=pax.length>0&&pax.every(x=>x.seat!=null);
+
+  /* ── الحجز المؤقت للمقاعد (20260917) ──
+     كل تغييرٍ في المختار يُحجز عشر دقائق باسم الجلسة، ويُجدَّد ما دام
+     المستفيد في مسار الحجز، ويُحرَّر عند خروجه. المقعد الذي أخذه غيره
+     أثناء التردّد يُسقَط من بطاقته فوراً ويُقال له، بدل رفضٍ في آخر خطوة. */
+  const [heldUntil,setHeldUntil]=useState<string|null>(null);
+  const [holdMsg,setHoldMsg]=useState("");
+  const seatsKey=seats.slice().sort((a,b)=>a-b).join(",");
+  const inFlow=screen==="seats"||screen==="review"||screen==="passengers";
+  useEffect(()=>{
+    if(!trip||!session||!inFlow){ return; }
+    if(!seats.length){ setHeldUntil(null); return; }
+    let alive=true;
+    const run=async()=>{
+      const r=await holdSeats(trip.id,seats);
+      if(!alive) return;
+      if(r.fail==="unsupported"||r.fail==="other"){ setHeldUntil(null); return; }
+      if(r.fail){
+        const n=r.seat;
+        setTakenSeats(prev=>n!=null&&!prev.includes(n)?[...prev,n]:prev);
+        setPax(a=>a.map(x=>x.seat===n?{...x,seat:null}:x));
+        setHoldMsg(r.fail==="seat_held"?t("seatHeldByOther"):`${t("errSeats")} (${n})`);
+        return;
+      }
+      setHoldMsg(""); setHeldUntil(r.expiresAt);
+    };
+    const first=setTimeout(run,500);
+    const renew=setInterval(run,4*60_000);
+    return ()=>{ alive=false; clearTimeout(first); clearInterval(renew); };
+  },[trip?.id,seatsKey,session?.userId,inFlow]);
+  useEffect(()=>{
+    /* الخروج من المسار يحرّر المقاعد لغيرك — لا انتظار عشر دقائق. */
+    if(inFlow||!trip||!session) return;
+    setHeldUntil(null);
+    void releaseSeatHolds(trip.id);
+  },[inFlow,trip?.id,session?.userId]);
+  useEffect(()=>{
+    if(!heldUntil) return;
+    const id=setInterval(()=>{ if(Date.parse(heldUntil)<=Date.now()){ setHeldUntil(null); setHoldMsg(t("seatHoldExpired")); if(trip) fetchTakenSeats(trip.id).then(setTakenSeats).catch(()=>{}); } },15_000);
+    return ()=>clearInterval(id);
+  },[heldUntil,trip?.id]);
   function assignSeat(n:number){
     if(takenSet.has(n)) return;
     setPax(a=>{
@@ -485,8 +565,9 @@ export function CustomerApp(){
         /* النصّ يُبنى بالعربية دائماً لا بلغة الواجهة: لوحة الموظف والتذاكر
            وصفحة الدفع تعرضه كما هو، فحجز بالإنجليزية كان يكتب فيها سطراً
            إنجليزياً وسط جدول عربي. والغرف تُحفظ مفصّلة بجواره. */
-        roomType:split?splitSummary(split,makeT("ar")):"", persons, total, seats,
-        rooms:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight})),
+        roomType:bookingMode==="transport"?"مواصلات فقط":split?splitSummary(split,makeT("ar")):"", persons, total, seats,
+        bookingMode: bookingMode === "transport" ? "transport_only" : "full_package",
+        rooms:bookingMode==="transport"?undefined:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight})),
         pilgrims:pax.map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
           phone:p.phone.replace(/\s/g,""),seat:p.seat??undefined})),
@@ -592,6 +673,9 @@ export function CustomerApp(){
 
   /** بوابة الدخول بين صفحة التفاصيل وبيانات المعتمرين. */
   function goAfterListing(){
+    /* المعاينة تعرض ولا تحجز: باقةٌ مسودة قد تكون بلا أسعار ولا رحلات،
+       والمضيّ فيها يُنتج طلباً على منتجٍ لم يُنشر بعد. */
+    if(preview){ toast.info(t("previewNote")); return; }
     if(!session){ setIntent("flow"); setLoginPhone(cachedPhone.current??""); setOtpErr(""); setScreen("login"); return; }
     if(!session.profile?.complete){ setIntent("flow"); afterAuth(session); return; }
     setScreen("passengers");
@@ -631,6 +715,17 @@ export function CustomerApp(){
       {/* R1: خلفية خفيفة — تُخفى في الشاشات المعاد بناؤها لأن قاعدتها بيضاء */}
       {!whiteBase&&
         <div aria-hidden style={{position:"fixed",inset:0,backgroundImage:"url(/bg-haram.jpg)",backgroundSize:"cover",backgroundPosition:"center",opacity:0.06,pointerEvents:"none",zIndex:0}}/>}
+      {/* شريط المعاينة — ثابت فوق الصفحة كلها فلا تُلتقط لقطة شاشة منها
+          وتُرسَل للعميل على أنها الصفحة المنشورة. */}
+      {preview&&(
+        <div style={{position:"sticky",top:0,zIndex:60,background:"#8A6A08",color:"#fff",
+          padding:"8px 16px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",
+          fontFamily:"var(--font-app)",fontSize:12,fontWeight:700}}>
+          <Eye size={14}/>
+          <span>{t("previewTitle")}</span>
+          <span style={{fontWeight:400,opacity:0.9}}>— {t("previewNote")}</span>
+        </div>
+      )}
       <div className="relative flex flex-col flex-1" style={{zIndex:1}}>
 
       {/* ═══ EXPLORE (الاستكشاف) ═══ */}
@@ -638,10 +733,11 @@ export function CustomerApp(){
         <Explore
           packages={activePkgs}
           hotels={cat.hotels}
+          transports={cat.transports}
           tripsOf={pkgTrips}
           /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
              وتوزيع غرفها إلى نموذج باقة أخرى. */
-          onOpen={p=>{clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
+          onOpen={p=>{clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
           onCustom={()=>setScreen("custom")}
           t={t} lang={lang} setLang={setLang}
         />
@@ -659,6 +755,7 @@ export function CustomerApp(){
           trip={trip}
           setTrip={tr=>{ setTrip(tr); if(tr) setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); }}
           persons={persons} setPersons={setPersons}
+          bookingMode={bookingMode} setBookingMode={mode=>{setBookingMode(mode); if(mode==="transport") setSplit(null);}}
           split={split} setSplit={setSplit}
           total={total}
           onBack={()=>setScreen("packages")}
@@ -840,6 +937,13 @@ export function CustomerApp(){
           {seatsDone
             ? <div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#E3F3E8",border:"1px solid #C4E4CE",color:"#1E7A44"}}>✓ {t("allSeatsSet")}</div>
             : <div className="rounded-xl px-4 py-3 text-sm" style={{background:B.bg,color:B.muted}}>{t("pickSeatsHint").replace("{n}",String(pax.filter(x=>x.seat==null).length))}</div>}
+          {/* المهلة ظاهرة: «احجز المقعد مؤقتاً بمهلة واضحة». */}
+          {holdMsg&&<div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{holdMsg}</div>}
+          {heldUntil&&!holdMsg&&(
+            <div className="rounded-xl px-4 py-2.5 text-xs" style={{background:B.bg,color:B.text2}}>
+              {t("seatHeldUntil").replace("{t}",new Date(heldUntil).toLocaleTimeString(lang==="en"?"en-GB":"ar-SA-u-nu-latn",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Riyadh"}))}
+            </div>
+          )}
         </div>
         </FlowScreen>}
 
@@ -855,7 +959,7 @@ export function CustomerApp(){
           <div className="flex flex-col" style={{gap:10}}>
             {[[t("package"),pkg.name],
               [t("trip"),`${formatDate(trip.departureDate,lang)} · ${trip.departureTime}`],
-              [t("room"),split?splitSummary(split,t):"—"],
+              ...(bookingMode==="transport" ? [["نوع الحجز","🚌 مواصلات فقط"]] : [[t("room"),split?splitSummary(split,t):"—"]]),
               [t("people"),`${persons}`],
               [t("seat"),seats.join("، ")||"—"]].map(([l,v])=>(
               <div key={l} className="flex items-start justify-between" style={{gap:16,...T.body}}>
@@ -878,6 +982,42 @@ export function CustomerApp(){
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* تفصيل السعر قبل الإرسال — «اعرض تفصيل السعر قبل المتابعة: النقل،
+              السكن، عدد الليالي، عدد المعتمرين، الإضافات، الضريبة والإجمالي».
+              الضريبة متضمَّنة لا مضافة (قرار ٢٠٢٦-٠٩-٠٦) فيُقال ذلك سطراً. */}
+          <div className="flex flex-col" style={{gap:8,paddingTop:16,borderTop:`1px solid ${C.line}`}}>
+            <span style={{...T.small,fontWeight:600,color:C.ink2}}>{t("priceBreakdown")}</span>
+            {split&&(
+              <div className="flex items-center justify-between" style={{...T.body}}>
+                <span style={{color:C.ink2}}>{t("perNightGroup")} · {splitSummary(split,t)}</span>
+                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(split.perNight)}</span>
+              </div>
+            )}
+            {bookingMode==="transport"&&(
+              <div className="flex items-center justify-between" style={{...T.body}}>
+                <span style={{color:C.ink2}}>المواصلات للفرد</span>
+                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(pkg.transportOnlyPrice??0)} {t("currency")}</span>
+              </div>
+            )}
+            {split&&(
+              <div className="flex items-center justify-between" style={{...T.body}}>
+                <span style={{color:C.ink2}}>{t("nightsCount")}</span>
+                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>× {nights}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between" style={{...T.body}}>
+              <span style={{color:C.ink2}}>{t("people")}</span>
+              <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{persons}</span>
+            </div>
+            {transport&&(
+              <div className="flex items-center justify-between" style={{...T.body}}>
+                <span style={{color:C.ink2}}>{t("transportIncl")} · {transport.vehicleType}</span>
+                <span style={{color:C.ink2}}>{t("incl")}</span>
+              </div>
+            )}
+            <span style={{...T.small,color:C.ink3}}>{t("priceNote")} {t("inclTax")}.</span>
           </div>
 
           {/* الإجمالي — سطر بحدّ علوي، لا كتلة ملوّنة */}

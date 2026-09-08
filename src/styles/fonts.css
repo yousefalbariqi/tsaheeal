@@ -1,4 +1,9 @@
-/* خطّ التطبيق الوحيد — DG Shamael.
+/* خطّ التطبيق — يدعم ملف الهوية «القاهرة» للنص و«ريم كوفي» للعناوين.
+   يظل الخط المحلي DG Shamael احتياطياً فورياً إن تعذّر تحميل الخطين، حتى
+   لا تتعطّل قراءة رحلة العميل بسبب الشبكة. */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Reem+Kufi:wght@400;500;600;700&display=swap');
+
+/* خطّ التطبيق المحلي — DG Shamael.
    استُبدل به استيراد Google Fonts الذي كان يجلب ثلاث عائلات
    (IBM Plex Sans Arabic / Noto Kufi Arabic / IBM Plex Mono)، فسقطت معه
    ثلاثة طلبات شبكة من المسار الحَرِج. */
@@ -25,7 +30,8 @@
      وهو أيضاً سبب إزالة الأردية والتركية من التطبيق: الاحتياطي ينجّي حرفاً
      منفرداً، أما لغةٌ كل حروفها الخاصة ناقصة فيتقطّع وصلها الكتابي — انظر
      التعليق في src/features/customer/i18n.ts. */
-  --font-app: 'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-app: 'Cairo', 'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Reem Kufi', 'Cairo', 'DG Shamael', system-ui, sans-serif;
 }
 
 /* عناصر النماذج لا ترث الخطّ من body افتراضياً — ولهذا كان الكود مبثوثاً

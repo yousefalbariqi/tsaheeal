@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images, Globe } from "lucide-react";
+import { toast } from "sonner";
 import { C, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
 import { useDialogA11y } from "@/lib/useDialogA11y";
 
@@ -75,19 +76,24 @@ if (typeof document !== "undefined" && !document.getElementById(GLOBAL_STYLE_ID)
      وهالة السكون معلنة صفراً لا متروكة none: الانتقال من/إلى none غير
      معرَّف جيداً في كل المتصفّحات. */
   border: 1px solid ${C.border};
-  box-shadow: 0 0 0 0 rgba(31,111,107,0);
+  box-shadow: 0 0 0 0 rgba(183,137,63,0);
   transition: border-color ${MOTION.pulseFade}ms ease-in-out,
               box-shadow   ${MOTION.pulseFade}ms ease-in-out;
 }
 .ts-seq[data-pulse="on"]{
-  /* أخضر مخفَّف لا ${C.green} صريحاً، وهالة 2px بشفافية .09:
+  /* ذهبي مخفَّف لا ${C.green} صريحاً، وهالة 2px بشفافية .09:
      المطلوب إيحاء هادئ جداً — والحدّ الصريح يجعل البطاقة تبدو «مختارة». */
-  border-color: rgba(31,111,107,.45);
-  box-shadow: 0 0 0 2px rgba(31,111,107,.09);
+  border-color: rgba(183,137,63,.50);
+  box-shadow: 0 0 0 2px rgba(183,137,63,.10);
 }
 .ts-card:active{ transform: scale(.985); }
 
-/* شريط زاحف بلا نهاية — المسار فيه نسختان من القائمة، والانتقال إلى
+/* ⚠️ TrustTicker وقواعد .ts-ticker أدناه لم تعد مستعملة بعد الموجة ٠:
+   شاشة الاستكشاف تستعمل TrustRow الساكن (انظر تعليقه). أُبقيت لأن
+   القرار كان «أوقف القص» لا «احذف الفكرة» — فإن عاد الزحف يوماً عاد
+   بلا إعادة كتابة. ومن يحذفها يحذف كتلة CSS هذه معها.
+
+   شريط زاحف بلا نهاية — المسار فيه نسختان من القائمة، والانتقال إلى
    -50% ينتهي بالضبط على بداية النسخة الثانية فلا تُرى نقطة الالتفاف.
    transform وحده: يعمل على المُركِّب بلا إعادة تخطيط ولا مؤقّت JS. */
 @keyframes ts-marquee{ from{ transform: translateX(0) } to{ transform: translateX(-50%) } }
@@ -285,6 +291,40 @@ export function TrustTicker({ items, speed = 64, style }: {
   );
 }
 
+/* ── صفّ الثقة الساكن ──────────────────────────────────────────────
+   بديل TrustTicker في شاشة الاستكشاف، بطلب الفريق: «النص المتحرك أعلى
+   الصفحة مقصوص من الطرفين ويصعب قراءته».
+
+   والقصّ ليس عيب تنفيذ يُرقَّع بتوسيع التلاشي — هو لازمُ الفكرة: شريطٌ
+   أعرض من نافذته لا بدّ أن تُقطع أطرافه، وعبارةٌ تزحف لا يُدركها من
+   بدأ القراءة في منتصفها. تعريض التلاشي يزيد المقصوص، وتضييقه يجعل
+   القطع حادّاً — وكلاهما إصلاحٌ للعَرَض.
+
+   فالحلّ ترك الزحف: ستّ عبارات ساكنة تُلَفّ في سطرين، كلّها مقروءة في
+   اللحظة الأولى بلا انتظار دورة. وصار ممكناً بعد حذف الادعاءات الأربع
+   من i18n — عشر عبارات كانت تصير خمسة أسطر تدفع الباقات خارج الشاشة،
+   وهو ما دفع إلى الزحف أصلاً. حُذف السبب فسقط المسبَّب.
+
+   ولا شيء يُقصّ ولا يتحرّك ولا يحتاج ResizeObserver ولا مؤقّتاً. */
+export function TrustRow({ items, style }: { items: string[]; style?: CSSProperties }) {
+  return (
+    <ul className="flex flex-wrap items-center justify-center"
+      style={{ gap: "6px 8px", margin: 0, padding: 0, listStyle: "none", ...style }}>
+      {items.map(x => (
+        <li key={x} className="inline-flex items-center" style={{
+          gap: 6, height: 28, paddingInline: 10, borderRadius: R.pill,
+          background: C.fill, border: `1px solid ${C.line}`,
+        }}>
+          <span aria-hidden style={{
+            width: 5, height: 5, borderRadius: "50%", background: C.gold, flexShrink: 0,
+          }} />
+          <span style={{ ...T.meta, color: C.ink2, whiteSpace: "nowrap" }}>{x}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ── فواصل وأقسام ─────────────────────────────────────────────── */
 export function Divider({ inset = false }: { inset?: boolean }) {
   return <div style={{ height: 1, background: C.line, marginInline: inset ? SPACE.page : 0 }} />;
@@ -393,14 +433,21 @@ export function CTAButton({ children, onClick, disabled, variant = "green", full
   children: ReactNode; onClick?: () => void; disabled?: boolean;
   variant?: "green" | "dark"; full?: boolean; style?: CSSProperties;
 }) {
-  const bg = disabled ? C.ink3 : variant === "dark" ? C.ink : undefined;
+  /* الحالة المعطّلة كانت مساحةً رماديةً صمّاء (C.ink3) بنصٍّ أبيض عليها،
+     فتُقرأ «زرٌّ معطوب» لا «زرٌّ ينتظر خطوةً منك» — وهو ما وصفه الفريق
+     بـ«رمادية جدًا». الآن سطحٌ فاتح بحدٍّ وكتابةٍ خافتة: شكل الحقل غير
+     المفعَّل في بقيّة الواجهة، لا شكل العطل. واللون الأساسي محفوظ
+     للمفعَّل وحده فيكسب التباين معنى — «صار جاهزاً» يُرى من طرف العين. */
+  const off = !!disabled;
   return (
     <button onClick={onClick} disabled={disabled}
       style={{
-        background: bg ?? CTA_GRADIENT, color: C.white, border: "none",
+        background: off ? C.fill : variant === "dark" ? C.greenDeep : CTA_GRADIENT,
+        color: off ? C.ink3 : C.white,
+        border: off ? `1px solid ${C.line}` : "none",
         borderRadius: R.pill, paddingInline: 28, height: 50, width: full ? "100%" : undefined,
         fontFamily: FONT.sans, fontSize: 16, fontWeight: 600,
-        cursor: disabled ? "not-allowed" : "pointer", transition: "opacity .15s",
+        cursor: off ? "not-allowed" : "pointer", transition: "background .18s, color .18s",
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
         ...style,
       }}>
@@ -440,9 +487,17 @@ export function OutlineButton({ children, onClick, full }: { children: ReactNode
 }
 
 /** الأزرار الدائرية العائمة فوق المعرض (رجوع، قلب، مشاركة). */
-export function IconBubble({ children, onClick, label }: { children: ReactNode; onClick?: () => void; label?: string }) {
+/** فقاعة أيقونة. `label` يخدم ثلاثة: قارئ الشاشة (aria-label)، وتلميح
+    المرور (title) للمبصر الذي لا يعرف معنى الرمز، ووصفَ الحالة حين
+    يكون الزرّ قابلاً للضغط والرفع (`pressed`). */
+export function IconBubble({ children, onClick, label, pressed }: {
+  children: ReactNode; onClick?: () => void; label?: string;
+  /** لزرٍّ له حالتان — يُنشر aria-pressed فيُقرأ «مضغوط». */
+  pressed?: boolean;
+}) {
   return (
-    <button onClick={onClick} aria-label={label}
+    <button onClick={onClick} aria-label={label} title={label}
+      aria-pressed={pressed}
       style={{
         width: 34, height: 34, borderRadius: R.pill, border: "none",
         background: "rgba(255,255,255,.92)", color: C.ink, boxShadow: SHADOW.float,
@@ -697,12 +752,51 @@ export function ListingCard({
   );
 }
 
-/* ── معرض الصور العلوي ────────────────────────────────────────── */
-export function HeroGallery({ images, onBack, height = 300 }: { images: string[]; onBack?: () => void; height?: number }) {
+/* ── معرض الصور العلوي ──────────────────────────────────────────
+
+   ثلاثة تغييرات بطلب الفريق (٢٠٢٦-٠٩-٠٦):
+
+   (١) «زرّا الحفظ والمشاركة أيقونات بلا نص». كان لهما aria-label عربيّ
+       ثابت لا يتبع اللغة، ولا tooltip يراه المبصر، **وزرّ المشاركة بلا
+       onClick إطلاقاً** — أيقونةٌ تُضغط فلا يقع شيء. الآن: اسمٌ مترجم،
+       وتلميحٌ ظاهر، وفعلٌ حقيقي، وتوست يؤكّد النتيجة.
+
+   (٢) «عدّاد 1/11 وحده لا يكفي». العدّاد يقول أين أنت ولا يقول كم بقي
+       ولا ينقلك. أُضيفت نقاط تحتها: تُرى فيها الصور كلّها دفعةً،
+       ومضغوطةٌ تنقل إليها — فهي مؤشّر وأداة تنقّل معاً. وفوق سبع صور
+       تُختصر إلى نافذة منزلقة، لأن أحد عشرة نقطة تصير خيطاً لا يُعدّ.
+
+   (٣) المشاركة تسقط إلى النسخ حين لا يدعم المتصفّح `navigator.share`
+       (وهو الغالب على سطح المكتب): زرٌّ يعمل على الجوال ويصمت على
+       الحاسوب أسوأ من زرٍّ واحد يعمل في الحالتين. */
+
+/** أقصى عدد نقاط تُرسم كاملةً؛ فوقها نافذة منزلقة حول النشط. */
+const DOTS_CAP = 7;
+
+export function HeroGallery({ images, onBack, height = 300, t, shareTitle }: {
+  images: string[];
+  onBack?: () => void;
+  height?: number;
+  /** مترجم الشاشة. اختياري ليبقى المكوّن صالحاً بلا سياق لغة. */
+  t?: (k: string) => string;
+  /** عنوان ورقة المشاركة — اسم الباقة عادةً. */
+  shareTitle?: string;
+}) {
   const dir = useDir();
   const ref = useRef<HTMLDivElement>(null);
   const [i, setI] = useState(0);
   const [liked, setLiked] = useState(false);
+
+  /* fallback عربيّ حين لا يُمرَّر مترجم — لا مفاتيح عارية على الشاشة. */
+  const AR: Record<string, string> = {
+    savePkg: "حفظ الباقة", unsavePkg: "إزالة من المحفوظة", sharePkg: "مشاركة الباقة",
+    savedToast: "حُفظت الباقة في قائمتك", unsavedToast: "أُزيلت من قائمتك",
+    shareCopied: "نُسخ رابط الباقة", shareFailed: "تعذّرت المشاركة — انسخ الرابط من شريط العنوان",
+    photoOf: "الصورة {i} من {n}", goToPhoto: "اذهب إلى الصورة {i}", back: "رجوع",
+  };
+  const tr = (k: string) => t?.(k) ?? AR[k] ?? k;
+  const fill = (k: string, v: Record<string, string | number>) =>
+    Object.entries(v).reduce((s, [a, b]) => s.replace(`{${a}}`, String(b)), tr(k));
 
   useEffect(() => {
     const el = ref.current; if (!el) return;
@@ -714,6 +808,43 @@ export function HeroGallery({ images, onBack, height = 300 }: { images: string[]
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [images.length]);
+
+  /** ينقل إلى صورة بعينها. `scrollTo` بالعرض لا بـscrollIntoView:
+      الثاني يمرّر الصفحة كلّها إلى المعرض عند الضغط. */
+  const goTo = (n: number) => {
+    const el = ref.current; if (!el) return;
+    const x = el.clientWidth * n;
+    el.scrollTo({ left: dir === "rtl" ? -x : x, behavior: "smooth" });
+    setI(n);
+  };
+
+  const toggleSave = () => {
+    setLiked(v => {
+      toast.success(tr(v ? "unsavedToast" : "savedToast"));
+      return !v;
+    });
+  };
+
+  const share = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const title = shareTitle || tr("sharePkg");
+    try {
+      if (navigator.share) { await navigator.share({ title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      toast.success(tr("shareCopied"));
+    } catch (e) {
+      /* إلغاء المستخدم لورقة المشاركة ليس فشلاً — لا يُزعَج بتوست أحمر. */
+      if ((e as { name?: string })?.name === "AbortError") return;
+      console.error("[HeroGallery] تعذّرت المشاركة:", e);
+      toast.error(tr("shareFailed"));
+    }
+  };
+
+  /* نافذة النقاط: تتبع النشط وتبقى بطول DOTS_CAP، ولا تخرج عن الطرفين. */
+  const from = images.length <= DOTS_CAP
+    ? 0
+    : Math.min(Math.max(0, i - (DOTS_CAP >> 1)), images.length - DOTS_CAP);
+  const dots = Array.from({ length: Math.min(DOTS_CAP, images.length) }, (_, k) => from + k);
 
   return (
     <div style={{ position: "relative", background: C.fill }}>
@@ -728,14 +859,15 @@ export function HeroGallery({ images, onBack, height = 300 }: { images: string[]
       <div className="flex items-center justify-between"
         style={{ position: "absolute", top: 14, insetInline: 14, pointerEvents: "none" }}>
         <div className="flex items-center gap-2" style={{ pointerEvents: "auto" }}>
-          <IconBubble onClick={() => setLiked(v => !v)} label="حفظ">
+          <IconBubble onClick={toggleSave} label={tr(liked ? "unsavePkg" : "savePkg")}
+            pressed={liked}>
             <Heart size={17} fill={liked ? C.gold : "none"} color={liked ? C.gold : C.ink} />
           </IconBubble>
-          <IconBubble label="مشاركة"><Share size={16} /></IconBubble>
+          <IconBubble onClick={share} label={tr("sharePkg")}><Share size={16} /></IconBubble>
         </div>
         {onBack && (
           <div style={{ pointerEvents: "auto" }}>
-            <IconBubble onClick={onBack} label="رجوع">
+            <IconBubble onClick={onBack} label={tr("back")}>
               <ChevronRight size={19} style={backArrow(dir)} />
             </IconBubble>
           </div>
@@ -743,13 +875,39 @@ export function HeroGallery({ images, onBack, height = 300 }: { images: string[]
       </div>
 
       {images.length > 1 && (
-        <span style={{
-          position: "absolute", bottom: 46, insetInlineStart: 16,
-          background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
-          paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
-          /* بلا LTR يُقرأ «1 / 9» في سياق RTL كأنه «9 / 1» — أي الصورة التاسعة من واحدة */
-          ...LTR,
-        }}>{i + 1} / {images.length}</span>
+        <>
+          <span style={{
+            position: "absolute", bottom: 46, insetInlineStart: 16,
+            background: "rgba(0,0,0,.62)", color: "#fff", borderRadius: R.button,
+            paddingInline: 9, height: 24, display: "inline-flex", alignItems: "center", ...T.small,
+            /* بلا LTR يُقرأ «1 / 9» في سياق RTL كأنه «9 / 1» — أي الصورة التاسعة من واحدة */
+            ...LTR,
+          }}>{i + 1} / {images.length}</span>
+
+          {/* النقاط فوق حافّة البطاقة البيضاء التي تعلو المعرض بـ-24px،
+              فموضعها 34px لا 10px وإلا اختفت تحتها. */}
+          <div className="flex items-center justify-center"
+            role="tablist" aria-label={fill("photoOf", { i: i + 1, n: images.length })}
+            style={{ position: "absolute", bottom: 34, insetInline: 0, gap: 6, pointerEvents: "none" }}>
+            {dots.map(n => {
+              const on = n === i;
+              /* النقطة الطرفية تصغر حين وراءها المزيد — إشارةٌ إلى أن
+                 النافذة مقتطعة، بلا رقم إضافي. */
+              const edge = images.length > DOTS_CAP && (n === from || n === from + DOTS_CAP - 1);
+              return (
+                <button key={n} onClick={() => goTo(n)} role="tab" aria-selected={on}
+                  aria-label={fill("goToPhoto", { i: n + 1 })}
+                  style={{
+                    pointerEvents: "auto", border: "none", padding: 0, cursor: "pointer",
+                    width: on ? 18 : edge ? 4 : 6, height: edge && !on ? 4 : 6,
+                    borderRadius: R.pill, transition: "width .18s, height .18s, background .18s",
+                    background: on ? "#fff" : "rgba(255,255,255,.55)",
+                    boxShadow: "0 1px 3px rgba(0,0,0,.35)",
+                  }} />
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
@@ -807,7 +965,7 @@ export function MediaGallery({ items, height = 210, onOpen }: {
         {cur.kind === "video" && playing === i ? (
           // يُحمَّل فقط بعد الضغط — الفيديو ثقيل والمستخدم غالباً على بيانات الجوال
           <video src={cur.url} poster={cur.poster} controls autoPlay playsInline
-            style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000" }} />
+            style={{ width: "100%", height: "100%", objectFit: "cover", background: C.fill }} />
         ) : (
           <button
             onClick={() => { setTouched(true); cur.kind === "video" ? setPlaying(i) : onOpen?.(i); }}

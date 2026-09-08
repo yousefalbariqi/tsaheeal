@@ -29,7 +29,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center mb-6">
           <TasaheelMark size={76} />
           <div className="mt-3" style={{ fontFamily: "var(--font-app)", fontSize: 22, fontWeight: 800, color: "#fff" }}>تساهيل العمرة</div>
-          <div style={{ fontSize: 10, color: B.gold, letterSpacing: 3, marginTop: 2 }}>ADMIN PANEL · SECURE LOGIN</div>
+          <div style={{ fontSize: 10, color: B.gold, letterSpacing: 1, marginTop: 2 }}>لوحة الإدارة · دخول آمن</div>
         </div>
 
         <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: "#fff" }}>

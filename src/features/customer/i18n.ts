@@ -19,38 +19,57 @@ export const dirOf = (l: Lang): "rtl" | "ltr" => LANGS.find(x => x.code === l)?.
 
    الترتيب تناوب بين أربعة محاور — هوية، تشغيل، سعر، خدمة — فلا تمرّ
    عبارتان من محور واحد متلاصقتين: الشريط يُقرأ نافذةً بنافذة، ولو
-   تجمّعت العبارات المتشابهة لبدت النافذة تكراراً. */
+   تجمّعت العبارات المتشابهة لبدت النافذة تكراراً.
+
+   ── ما حُذف وسببه (٢٠٢٦-٠٩-٠٦، بطلب الفريق) ──
+   أربع عبارات كانت تَعِد بما لا يسنده شيء في النظام:
+
+   • «نقل مرخّص» و«خبرة أكثر من 25 سنة» — ادعاءان عن المنشأة لا يملك
+     الكود التحقّق منهما، ولا اعتمدتهما الإدارة كتابةً. عبارةٌ كهذه
+     تُقرأ التزاماً تعاقدياً لا تزييناً.
+   • «دعم على مدار الساعة» — تناقضه الإعدادات نفسها: `openHour`
+     و`closeHour` في app_settings نافذةٌ محدودة، ووعد الردّ يتوقّف
+     خارجها ويستأنف صباحاً. الشاشة تقول ٢٤ ساعة والعدّاد يقول غير ذلك.
+   • «إلغاء مجاني» — سياسة الإلغاء صارت تُقرأ من `pkg.policies` وحدها
+     (انظر firstPolicy في Listing.tsx)، فباقةٌ بلا سياسة لا تَعِد بشيء.
+
+   إعادة أيٍّ منها = سطرٌ واحد هنا، متى اعتمدتها الإدارة وربطتها بسياسة
+   مكتوبة. ما بقي أدناه إمّا واقعٌ تشغيلي أو صياغةٌ لا تَعِد بقياس. */
 export const TRUST: Record<Lang, string[]> = {
   ar: [
     "إدارة سعودية",
-    "نقل مرخّص",
     "أسعار واضحة بلا رسوم خفية",
-    "دعم على مدار الساعة",
-    "خبرة أكثر من 25 سنة",
     "فنادق قريبة من الحرم",
-    "إلغاء مجاني",
     "رد سريع على واتساب",
     "مرشد مرافق",
     "الدفع بعد تأكيد الحجز",
-    "خدمة موثوقة",
   ],
   en: [
     "Saudi-run",
-    "Licensed transport",
     "Clear prices, no hidden fees",
-    "Round-the-clock support",
-    "25+ years of experience",
     "Hotels close to the Haram",
-    "Free cancellation",
     "Fast WhatsApp replies",
     "Guide accompanies you",
     "Pay after booking is confirmed",
-    "Trusted service",
   ],
 };
 
 /** نفس سقوط makeT إلى العربية عند غياب اللغة. */
 export const trustOf = (l: Lang): string[] => TRUST[l] ?? TRUST.ar;
+
+/* ── أسماء المدن للعرض ─────────────────────────────────────────────
+   القاعدة تخزّن «المدينة» مختصرةً في `destination` و`hotels.city`، وهي
+   في شريحة فلترٍ بجانب «مكة» تُقرأ اسماً عامّاً — «أيّ مدينة؟» لا
+   «المدينة المنوّرة». الاسم الكامل يرفع اللبس بلا لمس البيانات:
+   المفتاح يبقى كما هو في القاعدة، والعرض وحده يتوسّع. */
+const CITY_LABEL: Record<Lang, Record<string, string>> = {
+  ar: { "مكة": "مكة المكرمة", "المدينة": "المدينة المنورة" },
+  en: { "مكة": "Makkah", "المدينة": "Madinah" },
+};
+
+/** اسم المدينة كما يُعرض. المدينة غير المعروفة تُعرض كما جاءت. */
+export const cityLabel = (city: string, l: Lang): string =>
+  (CITY_LABEL[l] ?? CITY_LABEL.ar)[city] ?? city;
 
 type Dict = Record<string, string>;
 const D: Record<Lang, Dict> = {
@@ -114,6 +133,15 @@ const D: Record<Lang, Dict> = {
     errUnknown:"حدث خطأ غير متوقع، حاول مرة أخرى", errLoginRequired:"سجّل الدخول أولاً لإرسال الطلب",
     stepLogin:"الدخول", stepData:"البيانات", stepSeats:"المقاعد", stepConfirm:"المراجعة",
     // ── واجهة Airbnb ──
+    // ── إجراءات البطاقة والمعرض (الموجة ٠) ──
+    noUpcoming:"بلا رحلات قادمة", noUpcomingShort:"لا رحلات",
+    nextTrip:"أقرب رحلة", seatsLeftCard:"{n} مقعداً متبقياً", seatsLeftCardOne:"مقعد واحد متبقٍ", byBus:"بالحافلة", byFlight:"بالطيران", incl:"يشمل", inclHousing:"السكن", inclTransport:"النقل", moreTrips:"+{n} رحلات أخرى",
+    priceBreakdown:"تفصيل السعر", perNightGroup:"سعر الليلة للمجموعة", nightsCount:"عدد الليالي", transportIncl:"النقل", inclTax:"شامل ضريبة القيمة المضافة", priceNote:"السعر نهائي — لا رسوم تُضاف عند الدفع.",
+    seatHeldUntil:"مقاعدك محجوزة لك حتى {t}", seatHoldExpired:"انتهت مهلة حجز المقاعد — اختر من جديد", seatHeldByOther:"هذا المقعد يختاره معتمرٌ آخر الآن",
+    savePkg:"حفظ الباقة", unsavePkg:"إزالة من المحفوظة", sharePkg:"مشاركة الباقة",
+    savedToast:"حُفظت الباقة في قائمتك", unsavedToast:"أُزيلت من قائمتك",
+    shareCopied:"نُسخ رابط الباقة", shareFailed:"تعذّرت المشاركة — انسخ الرابط من شريط العنوان",
+    photoOf:"الصورة {i} من {n}", goToPhoto:"اذهب إلى الصورة {i}",
     bookYourTrip:"احجز رحلتك", viewPhotos:"الصور", photosLabel:"صور", guests:"أفراد", selectThisRoom:"اختيار هذا السكن", playVideo:"تشغيل الفيديو", all:"الكل", search:"ابحث عن باقتك", explore:"استكشاف", packagesIn:"باقات {city}",
     whatOffers:"ما تقدمه هذه الباقة", showAllAmenities:"عرض الميزات الـ {n}",
     program:"برنامج الرحلة", stay:"السكن", transport:"وسيلة النقل",
@@ -140,6 +168,11 @@ const D: Record<Lang, Dict> = {
     score9:"استثنائي", score85:"رائع", score8:"جيد جداً", score7:"جيد", score6:"مقبول", score0:"متوسط",
     thingsToKnow:"أشياء يجب معرفتها", cancelPolicy:"سياسة الإلغاء", termsTitle:"الشروط والأحكام",
     freeCancel:"إلغاء مجاني", clearDate:"محو التاريخ", change:"تغيير",
+    /* لا سياسة مسجّلة ⇒ يُقال ذلك. عرض «إلغاء مجاني» افتراضياً كان وعداً
+       تعاقدياً لم يكتبه أحد، ويُقرأ التزاماً عند أول طلب إلغاء. */
+    noPolicy:"لم تُسجَّل سياسة إلغاء لهذه الباقة — تواصل معنا قبل الحجز لمعرفة شروط الإلغاء.",
+    manualReview:"أُضيف يدوياً", manualReviewBy:"أضافه {name} من فريق تساهيل",
+    previewTitle:"معاينة داخلية", previewNote:"هذه الباقة غير منشورة — العرض للمراجعة فقط ولا يمكن الحجز منها.",
     confirmDate:"تأكيد التاريخ", dayAvailable:"متاح", dayFull:"مكتمل", seatsLeftShort:"متبقٍ {n} مقعداً",
     // فوق العتبة يُعرض سقف لا العدد الحقيقي: الرقم الكبير لا يفيد المستفيد
     seatsPlenty:"+{n} متاح",
@@ -215,6 +248,14 @@ const D: Record<Lang, Dict> = {
     errUnknown:"Something went wrong, please try again", errLoginRequired:"Log in first to send the request",
     stepLogin:"Log in", stepData:"Details", stepSeats:"Seats", stepConfirm:"Review",
     // ── Airbnb-style UI ──
+    noUpcoming:"No upcoming trips", noUpcomingShort:"No trips",
+    nextTrip:"Next trip", seatsLeftCard:"{n} seats left", seatsLeftCardOne:"1 seat left", byBus:"By bus", byFlight:"By flight", incl:"Includes", inclHousing:"housing", inclTransport:"transport", moreTrips:"+{n} more trips",
+    priceBreakdown:"Price breakdown", perNightGroup:"Per night for the group", nightsCount:"Nights", transportIncl:"Transport", inclTax:"VAT included", priceNote:"Final price — nothing added at payment.",
+    seatHeldUntil:"Your seats are held until {t}", seatHoldExpired:"Seat hold expired — pick again", seatHeldByOther:"Another pilgrim is choosing this seat right now",
+    savePkg:"Save package", unsavePkg:"Remove from saved", sharePkg:"Share package",
+    savedToast:"Package saved to your list", unsavedToast:"Removed from your list",
+    shareCopied:"Package link copied", shareFailed:"Couldn't share — copy the link from the address bar",
+    photoOf:"Photo {i} of {n}", goToPhoto:"Go to photo {i}",
     bookYourTrip:"Book your trip", viewPhotos:"Photos", photosLabel:"photos", guests:"guests", selectThisRoom:"Select this room", playVideo:"Play video", all:"All", search:"Find your package", explore:"Explore", packagesIn:"Packages in {city}",
     whatOffers:"What this package offers", showAllAmenities:"Show all {n} features",
     program:"Trip programme", stay:"Stay", transport:"Transport",
@@ -237,6 +278,9 @@ const D: Record<Lang, Dict> = {
     score9:"Exceptional", score85:"Fabulous", score8:"Very good", score7:"Good", score6:"Pleasant", score0:"Average",
     thingsToKnow:"Things to know", cancelPolicy:"Cancellation policy", termsTitle:"Terms & conditions",
     freeCancel:"Free cancellation", clearDate:"Clear date", change:"Change",
+    noPolicy:"No cancellation policy is recorded for this package — contact us before booking.",
+    manualReview:"Added by staff", manualReviewBy:"Added by {name}, Tasaheel team",
+    previewTitle:"Internal preview", previewNote:"This package is not published — preview only, booking is disabled.",
     confirmDate:"Confirm date", dayAvailable:"Available", dayFull:"Full", seatsLeftShort:"{n} seats left",
     seatsPlenty:"{n}+ available",
     // ── Room distribution ──

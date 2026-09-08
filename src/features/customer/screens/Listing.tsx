@@ -9,6 +9,7 @@ import {
   CalendarX, KeyRound, ShieldCheck, Star, BedDouble, ChevronLeft,
 } from "lucide-react";
 import type { Pkg, Trip, Hotel, Transport, PkgFeature } from "@/types";
+import { hotelDisplayName } from "@/lib/hotelName";
 import {
   roomSplits, splitTotal, splitSummary, splitHeadline, splitDetail, bedsCount,
   type RoomSplit,
@@ -23,6 +24,7 @@ import {
   pkgGallery, hotelMedia, roomMedia, transportMedia, type Media,
 } from "../gallery";
 import { availSeats } from "../data";
+import { durationLabel } from "../plural";
 import { ReviewsSection } from "../ui/ReviewsSection";
 
 /* المستفيد يحتاج إشارة وفرة لا جرداً: «متبقٍ 99 مقعداً» رقم لا يقرّر به
@@ -33,6 +35,9 @@ const seatsLabel = (n: number, t: (k: string) => string) =>
   n > SEATS_CAP
     ? t("seatsPlenty").replace("{n}", String(SEATS_CAP))
     : t("seatsLeftShort").replace("{n}", String(n));
+const reviewRating = (rating?:number) => typeof rating === "number"
+  ? Math.min(5, Math.max(1, rating > 5 ? rating / 2 : rating))
+  : null;
 
 export interface ListingProps {
   pkg: Pkg;
@@ -44,6 +49,7 @@ export interface ListingProps {
   transport?: Transport;
   trip: Trip | null;      setTrip: (t: Trip | null) => void;
   persons: number;        setPersons: (n: number) => void;
+  bookingMode: "full" | "transport"; setBookingMode: (mode: "full" | "transport") => void;
   /** توزيع السكن المختار. الضابط يقبل null: مسح الاختيار حالة مطلوبة. */
   split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
   total: number;
@@ -189,7 +195,8 @@ function SplitRow({ split, nights, t, picked, onPick }: {
 }
 
 export function Listing(p: ListingProps) {
-  const { pkg, trips, calendarTrips, hotel, transport, trip, split, persons, total, t } = p;
+  const { pkg, trips, calendarTrips, hotel, transport, trip, split, persons, total, bookingMode, t } = p;
+  const transportOnly = !!pkg.transportOnlyEnabled && (pkg.transportOnlyPrice ?? 0) > 0;
 
   const [amenitiesOpen, setAmenitiesOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
@@ -226,7 +233,7 @@ export function Listing(p: ListingProps) {
   /* المقاعد انتقلت لشاشة مستقلة بعد بيانات المعتمرين — لكل معتمر مقعده بالاسم. */
   /* السعة تُفحص هنا أيضاً لا في الحارس وحده: الحارس أثر جانبي يعمل بعد
      الرسم، وبين تغيّر العدد وتنفيذه إطارٌ كان الشريط الثابت فيه مفعَّلاً. */
-  const ready = !!trip && !!split && split.capacity >= persons;
+  const ready = !!trip && (bookingMode === "transport" || (!!split && split.capacity >= persons));
 
   /** الخطوة المفتوحة حالياً — واحدة فقط، ولا تنتقل إلا بزرّ صريح. */
   const [openStep, setOpenStep] = useState<string>("date");
@@ -241,10 +248,13 @@ export function Listing(p: ListingProps) {
 
   const AMENITY_PREVIEW = 6;
   const features: PkgFeature[] = pkg.features ?? [];
-  const reviews = pkg.reviews?.filter(r => r.consent) ?? [];
+  /** أول سياسة مسجّلة — تُستعمل شريحةً بارزة. لا شيء ⇒ لا شريحة. */
+  const firstPolicy = pkg.policies?.find(x => x.trim())?.trim();
+  const reviews = pkg.reviews?.filter(r => r.name.trim() && r.text.trim()) ?? [];
 
   /** ما ينقص الحجز — يُعرض في الشريط الثابت بدل تعطيل صامت. */
   const missing = !trip ? t("chooseTrip")
+    : bookingMode === "transport" ? null
     : options.length === 0 ? t("noRoomFit")
     : !split ? t("chooseRoom")
     : null;
@@ -292,6 +302,14 @@ export function Listing(p: ListingProps) {
               <CTAButton full disabled={!trip} onClick={() => setOpenStep("people")}>
                 {t("confirmDate")}
               </CTAButton>
+              {/* الزرّ المعطَّل يقول سببه. بدونه يقف المستفيد أمام زرٍّ
+                  رماديّ لا يعرف أهو معطوب أم ينتظر منه شيئاً — وهو ما
+                  رصده الفريق. والنصّ يختفي فور الاختيار فلا يزاحم. */}
+              {!trip && (
+                <div style={{ ...T.small, fontWeight: 400, color: C.ink3, marginTop: 8, textAlign: "center" }}>
+                  {t("pickDateFirst")}
+                </div>
+              )}
             </div>
           </>
         ),
@@ -307,7 +325,7 @@ export function Listing(p: ListingProps) {
               value={persons} min={1} max={availSeats(trip)} onChange={p.setPersons}
             />
             <div style={{ marginTop: 14 }}>
-              <CTAButton full onClick={() => setOpenStep(options.length ? "room" : "people")}>
+              <CTAButton full onClick={() => setOpenStep(bookingMode === "full" && options.length ? "room" : "people")}>
                 {t("next")}
               </CTAButton>
             </div>
@@ -315,7 +333,7 @@ export function Listing(p: ListingProps) {
         )
         : locked,
     },
-    ...(pkg.roomPrices?.length ? [{
+    ...(bookingMode === "full" && pkg.roomPrices?.length ? [{
       key: "room", title: t("roomSplitTitle"), done: !!split, locked: !trip,
       value: split ? splitSummary(split, t) : undefined,
       body: options.length === 0
@@ -392,14 +410,14 @@ export function Listing(p: ListingProps) {
     ),
   });
 
-  if (hotel) info.push({
+  if (hotel && bookingMode === "full") info.push({
     key: "stay", title: t("stay"),
     body: (
       <div>
         <MediaGallery items={hotelPics} height={230} onOpen={i => setFull({ items: hotelPics, i })} />
         <div style={{ paddingTop: 16 }}>
           <div className="flex items-center gap-2">
-            <span style={{ ...T.h3, color: C.ink }}>{hotel.name}</span>
+            <span style={{ ...T.h3, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
             <Stars n={hotel.stars} size={13} />
           </div>
           <div style={{ ...T.meta, color: C.ink2, marginTop: 4 }}>
@@ -484,8 +502,13 @@ export function Listing(p: ListingProps) {
     key: "know", title: t("thingsToKnow"),
     body: (
       <>
+        {/* لا سياسة مسجّلة ⇒ يُقال ذلك صراحةً. الاحتياطية القديمة كانت
+            «إلغاء مجاني» — وعدٌ لم يكتبه أحد يظهر على باقةٍ بلا سياسات،
+            ويُقرأ التزاماً عند أول طلب إلغاء. */}
         <AccordionRow icon={<CalendarX size={20} />} title={t("cancelPolicy")}>
-          {pkg.policies?.length ? pkg.policies.join("\n") : t("freeCancel")}
+          {pkg.policies?.filter(x => x.trim()).length
+            ? pkg.policies.filter(x => x.trim()).join("\n")
+            : t("noPolicy")}
         </AccordionRow>
         {pkg.notes && (
           <AccordionRow icon={<KeyRound size={20} />} title={t("package")}>
@@ -504,7 +527,7 @@ export function Listing(p: ListingProps) {
       <div className="flex-1" style={{ paddingBottom: STICKY_H }}>
 
         {/* ═══ المعرض ═══ */}
-        <HeroGallery images={images} onBack={p.onBack} />
+        <HeroGallery images={images} onBack={p.onBack} t={t} shareTitle={pkg.name} />
 
         {/* ═══ بطاقة الرأس — تتداخل مع الصورة كما عندهم ═══ */}
         <div style={{
@@ -517,14 +540,16 @@ export function Listing(p: ListingProps) {
             {pkg.destination} · {pkg.audience}
           </div>
           <div style={{ ...T.body, color: C.ink, marginTop: 4 }}>
-            <span style={LTR}>{pkg.days}</span> {t("days")} · <span style={LTR}>{pkg.nights}</span> {t("nights")}
+            {/* التصريف من دالّة لا من قالب: «{n} {t("nights")}» كانت تُخرج
+                «1 ليالٍ». العدد داخلٌ في الصيغة للواحد والاثنين. */}
+            {durationLabel(pkg.days, pkg.nights, p.lang)}
             {trip && <> · {seatsLabel(availSeats(trip), t)}</>}
           </div>
 
-          {hotel && (
+          {hotel && bookingMode === "full" && (
             <div className="flex items-center gap-2" style={{ marginTop: 10 }}>
               <Stars n={hotel.stars} size={14} />
-              <span style={{ ...T.meta, color: C.ink }}>{hotel.name}</span>
+              <span style={{ ...T.meta, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
               <span style={{ color: C.ink3 }}>·</span>
               <span style={{ ...T.meta, color: C.ink2 }}>
                 <span style={LTR}>{hotel.distanceM}</span> {t("meters")} {t("fromHaram")}
@@ -532,9 +557,13 @@ export function Listing(p: ListingProps) {
             </div>
           )}
 
-          <div style={{ marginTop: 14 }}>
-            <Chip tone="fill">✓ {t("freeCancel")}</Chip>
-          </div>
+          {/* الشريحة تعرض أول سياسة فعلية للباقة لا شعاراً ثابتاً: باقة
+              بلا سياسات لا تعرض شيئاً بدل أن تَعِد بما لم يُسجَّل. */}
+          {firstPolicy && (
+            <div style={{ marginTop: 14 }}>
+              <Chip tone="fill">✓ {firstPolicy}</Chip>
+            </div>
+          )}
         </div>
 
         {/* ═══ كتلة الحجز — الخطوات الأربع تحت عنوان واحد ═══ */}
@@ -543,6 +572,23 @@ export function Listing(p: ListingProps) {
             <TitleAccent />
             <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("bookYourTrip")}</h2>
           </div>
+          {transportOnly && (
+            <div className="grid grid-cols-2" style={{ gap: 10, marginBottom: 18 }}>
+              {(["full", "transport"] as const).map(mode => {
+                const on = bookingMode === mode;
+                const transport = mode === "transport";
+                return <button key={mode} onClick={() => p.setBookingMode(mode)}
+                  style={{ padding: 12, borderRadius: R.card, cursor: "pointer", textAlign: "start",
+                    border: `${on ? 2 : 1}px solid ${on ? C.green : C.border}`,
+                    background: on ? C.greenTint : C.white, color: C.ink, fontFamily: "inherit" }}>
+                  <span style={{ ...T.body, fontWeight: 600, display: "block" }}>{transport ? "🚌 مواصلات فقط" : "الباقة الكاملة"}</span>
+                  <span style={{ ...T.small, color: C.ink2, display: "block", marginTop: 3 }}>
+                    {transport ? `${money(pkg.transportOnlyPrice ?? 0)} ${t("currency")} للفرد` : "يشمل السكن"}
+                  </span>
+                </button>;
+              })}
+            </div>
+          )}
           {steps.map((s, i) => (
             <StepRow
               key={s.key} n={i + 1} title={s.title} done={s.done}
@@ -565,28 +611,31 @@ export function Listing(p: ListingProps) {
 
       {/* ═══ الشريط الثابت ═══ */}
       <StickyBar
-        price={split ? `${money(total)} ${t("currency")}` : undefined}
+        price={(bookingMode === "transport" || split) ? `${money(total)} ${t("currency")}` : undefined}
         note={
-          split
+          bookingMode === "transport"
+            ? `مواصلات فقط · ${persons} ${t("person")} · ${money(pkg.transportOnlyPrice ?? 0)} ${t("currency")} للفرد`
+            : split
             ? `${splitHeadline(split, t)} · ${t("forNights").replace("{n}", String(nights))}${trip ? ` · ${formatDate(trip.departureDate, p.lang)}` : ""}`
             : missing ?? undefined
         }
-        chip={ready ? <Chip tone="fill">✓ {t("freeCancel")}</Chip> : undefined}
+        chip={ready && firstPolicy ? <Chip tone="fill">✓ {firstPolicy}</Chip> : undefined}
         cta={t("next")}
         ctaDisabled={!ready}
         onCta={p.onNext}
       />
 
       {/* ورقة كل المميزات */}
+      {/* «ما تشمله الباقة» من مميزات الباقة وحدها.
+
+          قبله كانت الورقة تضمّ مميزات الفندق والمواصلة أيضاً، فباقةٌ بلا
+          مميزات مسجّلة تعرض قائمةً كاملة يظنّها المستفيد وعداً منها —
+          وهي في الحقيقة مرافق فندقٍ قد تتغيّر، أو تجهيزات حافلةٍ قد
+          تُستبدل قبل الرحلة. مميزات الفندق والمواصلة تبقى معروضة في
+          قسميهما موصولةً بمصدرها، لا مذابةً في وعد الباقة. */}
       <Sheet open={amenitiesOpen} onClose={() => setAmenitiesOpen(false)} title={t("whatOffers")}>
         {features.map(f => (
           <AmenityRow key={f.id} icon={featureIcon(f.text, f.icon)} text={f.text} />
-        ))}
-        {hotel?.features?.map(f => (
-          <AmenityRow key={`h-${f.id}`} icon={featureIcon(f.text, f.icon)} text={f.text} />
-        ))}
-        {transport?.features?.map(f => (
-          <AmenityRow key={`tr-${f.id}`} icon={featureIcon(f.text, f.icon)} text={f.text} />
         ))}
       </Sheet>
 
@@ -614,7 +663,7 @@ export function Listing(p: ListingProps) {
               {hotel && (
                 <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
                   <Stars n={hotel.stars} size={13} />
-                  <span style={{ ...T.meta, color: C.ink }}>{hotel.name}</span>
+                  <span style={{ ...T.meta, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
                   <span style={{ color: C.ink3 }}>·</span>
                   <span style={{ ...T.meta, color: C.ink2 }}>
                     <span style={LTR}>{hotel.distanceM}</span> {t("meters")} {t("fromHaram")}
@@ -675,7 +724,7 @@ export function Listing(p: ListingProps) {
           <div className="flex flex-col gap-3">
             {full.items.map((m, n) => m.kind === "video" ? (
               <video key={n} src={m.url} poster={m.poster} controls preload="none" playsInline
-                style={{ width: "100%", borderRadius: R.card, background: "#000" }} />
+                style={{ width: "100%", borderRadius: R.card, background: C.fill }} />
             ) : (
               <img key={n} src={m.url} alt="" loading="lazy"
                 style={{ width: "100%", borderRadius: R.card, display: "block", background: C.fill }} />
@@ -694,15 +743,15 @@ export function Listing(p: ListingProps) {
                   {rv.name.trim().charAt(0)}
                 </span>
                 <span className="truncate" style={{ ...T.body, fontWeight: 500, color: C.ink }}>{rv.name}</span>
-                {/* الدرجة هنا أيضاً — «اقرأ المزيد» يأتي من بطاقة تعرضها، فغيابها يبدو نقصاً */}
-                {typeof rv.rating === "number" && (
+                {reviewRating(rv.rating)!==null && (
                   <span style={{ marginInlineStart: "auto", ...T.small, fontWeight: 600, color: C.green,
                     background: C.greenTint, borderRadius: R.button, padding: "3px 7px", direction: "ltr", flexShrink: 0 }}>
-                    {rv.rating.toFixed(1)}
+                    ⭐ {reviewRating(rv.rating)!.toFixed(1).replace(/\.0$/,"")}/5
                   </span>
                 )}
               </div>
               <div style={{ ...T.body, color: C.ink, marginTop: 10 }}>{rv.text}</div>
+              {rv.image && <img src={rv.image} alt={`صورة مرفقة مع رأي ${rv.name}`} style={{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:R.button,marginTop:10}}/>}
             </div>
           ))}
         </div>

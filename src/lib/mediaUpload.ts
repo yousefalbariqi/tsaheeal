@@ -116,25 +116,35 @@ export function onPickMedia(
   apply: (url: string) => void,
 ): (e: { target: HTMLInputElement }) => void {
   return (e) => {
-    const input = e.target;
-    const file = input.files?.[0];
-    /* تصفير القيمة فوراً: اختيار نفس الملف مرّتين لا يُطلق change بدونه. */
-    input.value = "";
-    if (!file) return;
-    void (async () => {
-      const id = toast.loading("جارٍ رفع الملف…");
-      try {
-        const url = await uploadMedia(file, folder);
-        apply(url);
-        toast.success("تم رفع الملف", { id });
-      } catch (err) {
-        console.error("[media] فشل الرفع:", err);
-        toast.error("تعذّر رفع الملف", {
-          id,
-          description: err instanceof MediaError ? err.message : String((err as Error)?.message ?? err),
-          duration: 9000,
-        });
-      }
-    })();
+    const file = takeFile(e.target);
+    if (file) void uploadPicked(file, folder, apply);
   };
+}
+
+/** يسحب الملف المختار ويصفّر الحقل — اختيار نفس الملف مرّتين لا يُطلق
+    change بدون التصفير. مفصولة عن الرفع لأن مسار القصّ يأخذ الملف
+    ويؤجّل الرفع إلى ما بعد إغلاق نافذة القصّ. */
+export function takeFile(input: HTMLInputElement): File | null {
+  const file = input.files?.[0] ?? null;
+  input.value = "";
+  return file;
+}
+
+/** يرفع ملفاً جاهزاً مع تقدّم مرئي ورسالة فشل عربية. */
+export async function uploadPicked(
+  file: File, folder: MediaFolder, apply: (url: string) => void,
+): Promise<void> {
+  const id = toast.loading("جارٍ رفع الملف…");
+  try {
+    const url = await uploadMedia(file, folder);
+    apply(url);
+    toast.success("تم رفع الملف", { id });
+  } catch (err) {
+    console.error("[media] فشل الرفع:", err);
+    toast.error("تعذّر رفع الملف", {
+      id,
+      description: err instanceof MediaError ? err.message : String((err as Error)?.message ?? err),
+      duration: 9000,
+    });
+  }
 }

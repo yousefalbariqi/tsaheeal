@@ -20,7 +20,7 @@ import { SEED_USERS } from "@/data/users";
 import { SEED_SUPPORT } from "@/data/support";
 import { SEED_BRANCHES } from "@/data/branches";
 import { repo, type Repo } from "@/data/repository";
-import { supabase, isSupabaseEnabled } from "@/supabase/client";
+import { supabase, isSupabaseEnabled, isSeedDataEnabled } from "@/supabase/client";
 import { notifySyncError, notifyLoadError, notifyPartialLoad, notifyAccountSuspended, syncErrorMessage } from "@/lib/notify";
 
 type Updater<T> = T[] | ((prev: T[]) => T[]);
@@ -125,14 +125,28 @@ interface StoreState {
   /* رسالة فشل الجلب. كان hydrate بلا try، وفشل استعلام واحد يترك loaded
      على false فتبقى اللوحة شاشة بيضاء صامتة إلى الأبد. */
   loadError: string | null;
+  /* الكيانات التي تعذّر جلبها بأسمائها البرمجية. loadError وحده كان
+     يصف الفشل الكامل فقط؛ وفشل «الفواتير» بمفردها كان يمرّ في إشعارٍ
+     عابر ثم تعرض شاشة الفواتير فراغاً يُقرأ «لا فواتير». الشاشة تسأل
+     عن كيانها وتعرض خطأها وزرّ إعادتها. */
+  failedEntities: string[];
+  /** جلبٌ جارٍ لكيانٍ بعينه — لهيكل التحميل داخل شاشته. */
+  loadingEntities: string[];
   /** عدد عمليات الحفظ الجارية — لمؤشّر «جارٍ الحفظ». */
   syncing: number;
   hydrate: () => Promise<void>;
+  /** إعادة جلب كيانٍ واحد — زر «إعادة المحاولة» في شاشته. */
+  retryEntity: (key: string) => Promise<void>;
   /* إعادة جلب الرحلات وحدها. booked_seats صار مشتقّاً في القاعدة
      (حارس trg_booking_seats_sync)، فبعد أي تغيّر على حجز تصير النسخة
      المحلية قديمة. يكتب بـset المباشر: القيمة قادمة من القاعدة فلا
      تُزامَن إليها من جديد. */
   refreshTrips: () => Promise<void>;
+  /* إعادة جلب الحجوزات (ومعها الرحلات والمستندات) بعد إجراءٍ نُفِّذ في
+     القاعدة مباشرةً — accept_booking وأخواتها من ترحيل 20260910 تكتب
+     الحالة والمقاعد والسجلّ هناك، فالنسخة المحلية لا تعرف بها. يكتب
+     بـset المباشر: القيمة قادمة من القاعدة فلا تُزامَن إليها من جديد. */
+  refreshBookings: () => Promise<void>;
   /* اشتراك لحظي على الحجوزات والطلبات المخصّصة. كان hydrate() يعمل مرّة
      واحدة عند الدخول ولا شيء بعده، فالموظف الجالس على شاشة الحجوزات لا
      يرى حجزاً جديداً حتى يعيد تحميل الصفحة كاملة. يعيد دالة إلغاء. */
@@ -149,6 +163,10 @@ interface StoreState {
      بين لحظة ظهور الجلسة ولحظة وصول الدور. */
   profileReady: boolean;
   authReady: boolean;
+  /* جلسةٌ فُتحت من رابط دعوةٍ أو استعادة: تُعرض صفحة «اختر كلمة مرورك»
+     قبل اللوحة، ولا تُغلق حتى تُحفظ كلمة. */
+  passwordRecovery: boolean;
+  setPassword: (password: string) => Promise<{ error?: string }>;
   initAuth: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -156,26 +174,37 @@ interface StoreState {
 }
 
 export const useStore = create<StoreState>((set, get) => ({
-  hotels: SEED_HOTELS,               setHotels: (u) => set((s) => { const n = apply(s.hotels, u); syncDiff(repo.hotels, "id", s.hotels, n, "الفندق", (r) => set({ hotels: r })); return { hotels: n }; }),
-  transports: SEED_TRANSPORTS,       setTransports: (u) => set((s) => { const n = apply(s.transports, u); syncDiff(repo.transports, "id", s.transports, n, "وسيلة النقل", (r) => set({ transports: r })); return { transports: n }; }),
-  packages: SEED_PACKAGES,           setPackages: (u) => set((s) => { const n = apply(s.packages, u); syncDiff(repo.packages, "id", s.packages, n, "الباقة", (r) => set({ packages: r })); return { packages: n }; }),
-  trips: SEED_TRIPS,                 setTrips: (u) => set((s) => { const n = apply(s.trips, u); syncDiff(repo.trips, "id", s.trips, n, "الرحلة", (r) => set({ trips: r })); return { trips: n }; }),
-  bookings: SEED_BOOKINGS,           setBookings: (u) => set((s) => { const n = apply(s.bookings, u); syncDiff(repo.bookings, "id", s.bookings, n, "الحجز", (r) => set({ bookings: r })); return { bookings: n }; }),
-  payments: SEED_PAYMENTS,           setPayments: (u) => set((s) => { const n = apply(s.payments, u); syncDiff(repo.payments, "id", s.payments, n, "الفاتورة", (r) => set({ payments: r })); return { payments: n }; }),
-  tickets: SEED_TICKETS,             setTickets: (u) => set((s) => { const n = apply(s.tickets, u); syncDiff(repo.tickets, "ticketNo", s.tickets, n, "التذكرة", (r) => set({ tickets: r })); return { tickets: n }; }),
-  beneficiaries: SEED_BENEFICIARIES, setBeneficiaries: (u) => set((s) => { const n = apply(s.beneficiaries, u); syncDiff(repo.beneficiaries, "id", s.beneficiaries, n, "المستفيد", (r) => set({ beneficiaries: r })); return { beneficiaries: n }; }),
-  users: SEED_USERS,                 setUsers: (u) => set((s) => { const n = apply(s.users, u); syncDiff(repo.users, "id", s.users, n, "المستخدم", (r) => set({ users: r })); return { users: n }; }),
-  support: SEED_SUPPORT,             setSupport: (u) => set((s) => { const n = apply(s.support, u); syncDiff(repo.support, "id", s.support, n, "طلب الدعم", (r) => set({ support: r })); return { support: n }; }),
-  branches: SEED_BRANCHES,           setBranches: (u) => set((s) => { const n = apply(s.branches, u); syncDiff(repo.branches, "id", s.branches, n, "الفرع", (r) => set({ branches: r })); return { branches: n }; }),
+  hotels: isSeedDataEnabled ? SEED_HOTELS : [],               setHotels: (u) => set((s) => { const n = apply(s.hotels, u); syncDiff(repo.hotels, "id", s.hotels, n, "الفندق", (r) => set({ hotels: r })); return { hotels: n }; }),
+  transports: isSeedDataEnabled ? SEED_TRANSPORTS : [],       setTransports: (u) => set((s) => { const n = apply(s.transports, u); syncDiff(repo.transports, "id", s.transports, n, "وسيلة النقل", (r) => set({ transports: r })); return { transports: n }; }),
+  packages: isSeedDataEnabled ? SEED_PACKAGES : [],           setPackages: (u) => set((s) => { const n = apply(s.packages, u); syncDiff(repo.packages, "id", s.packages, n, "الباقة", (r) => set({ packages: r })); return { packages: n }; }),
+  trips: isSeedDataEnabled ? SEED_TRIPS : [],                 setTrips: (u) => set((s) => { const n = apply(s.trips, u); syncDiff(repo.trips, "id", s.trips, n, "الرحلة", (r) => set({ trips: r })); return { trips: n }; }),
+  bookings: isSeedDataEnabled ? SEED_BOOKINGS : [],           setBookings: (u) => set((s) => { const n = apply(s.bookings, u); syncDiff(repo.bookings, "id", s.bookings, n, "الحجز", (r) => set({ bookings: r })); return { bookings: n }; }),
+  payments: isSeedDataEnabled ? SEED_PAYMENTS : [],           setPayments: (u) => set((s) => { const n = apply(s.payments, u); syncDiff(repo.payments, "id", s.payments, n, "الفاتورة", (r) => set({ payments: r })); return { payments: n }; }),
+  tickets: isSeedDataEnabled ? SEED_TICKETS : [],             setTickets: (u) => set((s) => { const n = apply(s.tickets, u); syncDiff(repo.tickets, "ticketNo", s.tickets, n, "التذكرة", (r) => set({ tickets: r })); return { tickets: n }; }),
+  beneficiaries: isSeedDataEnabled ? SEED_BENEFICIARIES : [], setBeneficiaries: (u) => set((s) => { const n = apply(s.beneficiaries, u); syncDiff(repo.beneficiaries, "id", s.beneficiaries, n, "المستفيد", (r) => set({ beneficiaries: r })); return { beneficiaries: n }; }),
+  users: isSeedDataEnabled ? SEED_USERS : [],                 setUsers: (u) => set((s) => { const n = apply(s.users, u); syncDiff(repo.users, "id", s.users, n, "المستخدم", (r) => set({ users: r })); return { users: n }; }),
+  support: isSeedDataEnabled ? SEED_SUPPORT : [],             setSupport: (u) => set((s) => { const n = apply(s.support, u); syncDiff(repo.support, "id", s.support, n, "طلب الدعم", (r) => set({ support: r })); return { support: n }; }),
+  branches: isSeedDataEnabled ? SEED_BRANCHES : [],           setBranches: (u) => set((s) => { const n = apply(s.branches, u); syncDiff(repo.branches, "id", s.branches, n, "الفرع", (r) => set({ branches: r })); return { branches: n }; }),
   customRequests: [],                setCustomRequests: (u) => set((s) => { const n = apply(s.customRequests, u); syncDiff(repo.customRequests, "id", s.customRequests, n, "الطلب المخصّص", (r) => set({ customRequests: r })); return { customRequests: n }; }),
 
   loaded: false,
   loadError: null,
+  failedEntities: [],
+  loadingEntities: [],
   syncing: 0,
   refreshTrips: async () => {
     if (!isSupabaseEnabled) return;
     try { set({ trips: await repo.trips.list() }); }
     catch (e) { console.error("[trips] فشل تحديث الرحلات:", e); }
+  },
+  refreshBookings: async () => {
+    if (!isSupabaseEnabled) return;
+    try {
+      const [bookings, trips, payments, tickets] = await Promise.all([
+        repo.bookings.list(), repo.trips.list(), repo.payments.list(), repo.tickets.list(),
+      ]);
+      set({ bookings, trips, payments, tickets });
+    } catch (e) { console.error("[bookings] فشل تحديث الحجوزات:", e); }
   },
   startLiveSync: () => {
     if (!isSupabaseEnabled || !supabase) return () => {};
@@ -236,23 +265,46 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const arrived: Record<string, unknown[]> = {};
     const missing: string[] = [];
+    const failedKeys: string[] = [];
     let lastError: unknown = null;
     results.forEach((r, i) => {
       const [key, label] = ENTITIES[i];
       if (r.status === "fulfilled") arrived[key] = r.value;
-      else { missing.push(label); lastError = r.reason; console.error(`[hydrate] ${key}:`, r.reason); }
+      else { missing.push(label); failedKeys.push(key); lastError = r.reason; console.error(`[hydrate] ${key}:`, r.reason); }
     });
 
     /* سقط الكل — لا بيانات تُعرض، فشاشة الخطأ مع زر الإعادة هي الصحيح.
        بلا هذا الفرع يبقى loaded=false وتعيد AdminApp عنصراً فارغاً أبداً. */
     if (missing.length === ENTITIES.length) {
       notifyLoadError(lastError);
-      set({ loadError: syncErrorMessage(lastError) });
+      set({ loadError: syncErrorMessage(lastError), failedEntities: failedKeys });
       return;
     }
 
-    set({ ...arrived, loaded: true, loadError: null } as any);
+    set({ ...arrived, loaded: true, loadError: null, failedEntities: failedKeys } as any);
     if (missing.length) notifyPartialLoad(missing, lastError);
+  },
+
+  /* إعادة كيانٍ واحد لا اللوحة كلها: من تعذّرت عليه «الفواتير» لا سبب
+     لإعادة جلب اثني عشر جدولاً ليصلح واحداً. */
+  retryEntity: async (key) => {
+    const r = (repo as any)[key];
+    if (!r || !isSupabaseEnabled) return;
+    set(st => ({ loadingEntities: [...st.loadingEntities, key] }));
+    try {
+      const rows = await (r.list() as Promise<unknown[]>);
+      set(st => ({
+        [key]: rows,
+        failedEntities: st.failedEntities.filter(k => k !== key),
+        loaded: true,
+      }) as any);
+    } catch (e) {
+      console.error(`[retryEntity] ${key}:`, e);
+      set(st => ({ failedEntities: st.failedEntities.includes(key) ? st.failedEntities : [...st.failedEntities, key] }));
+      notifySyncError("إعادة الجلب", e);
+    } finally {
+      set(st => ({ loadingEntities: st.loadingEntities.filter(k => k !== key) }));
+    }
   },
 
   session: null,
@@ -266,11 +318,20 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ session: data.session ?? null });
     if (data.session) await get()._loadProfile();
     set({ authReady: true, profileReady: true });
-    supabase.auth.onAuthStateChange((_e, sess) => {
+    supabase.auth.onAuthStateChange((event, sess) => {
       set({ session: sess });
+      if (event === "PASSWORD_RECOVERY") set({ passwordRecovery: true });
       if (sess) { set({ profileReady: false }); get()._loadProfile(); }
-      else set({ currentUser: null, isStaff: false, profileReady: true });
+      else set({ currentUser: null, isStaff: false, profileReady: true, passwordRecovery: false });
     });
+  },
+  passwordRecovery: false,
+  setPassword: async (password) => {
+    if (!supabase) return { error: "Supabase غير مفعّل" };
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: /same password|different from the old/i.test(error.message) ? "اختر كلمةً مختلفة عن السابقة" : error.message };
+    set({ passwordRecovery: false });
+    return {};
   },
   signIn: async (email, password) => {
     if (!supabase) return { error: "Supabase غير مفعّل" };
@@ -300,6 +361,9 @@ export const useStore = create<StoreState>((set, get) => ({
     set(data
       ? { currentUser: { id: data.id, name: data.name, role: data.role, branch: data.branch_id ?? undefined }, isStaff: true, profileReady: true }
       : { currentUser: null, isStaff: false, profileReady: true });
+    /* آخر دخول حقيقي — كان العمود شرطةً لأن لا شيء يملؤه. الفشل لا يُبلَّغ:
+       قاعدةٌ بلا ترحيل 20260915 تجهل الدالّة، والدخول لا يتوقّف على ختمٍ. */
+    if (data) void supabase.rpc("touch_last_login").then(({ error }) => { if (error && !/Could not find/i.test(error.message)) console.warn("[auth] touch_last_login:", error.message); });
   },
 }));
 

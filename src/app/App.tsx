@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useParams, useSearchParams } from "react-route
 import { motion } from "motion/react";
 import { X, Check, ShieldCheck, AlertTriangle } from "lucide-react";
 import { B } from "@/lib/theme";
+import { sar } from "@/lib/money";
 import { Spinner } from "@/components/Spinner";
 import { hideBootSplash } from "@/lib/bootSplash";
 import { fetchBookingForPay, confirmPayment, verifyDoc, VerifyUnavailableError,
@@ -43,7 +44,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
   const [payErr,setPayErr]=useState("");
   const [card,setCard]=useState({num:"",exp:"",cvv:""});
   const sel = PAY_METHODS.find(m=>m.id===method);
-  const amount = pay ? pay.total.toLocaleString("en-US")+" ر.س" : "";
+  const amount = pay ? sar(pay.total) : "";
   const canPay = !!method && (!sel?.card || (card.num.replace(/\s/g,"").length>=12 && card.exp.length>=4 && card.cvv.length>=3));
 
   useEffect(()=>{ let alive=true;
@@ -73,16 +74,40 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
 
   return (
     <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
-      style={{fontFamily:"var(--font-app)",background:`linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 55%,${B.black} 100%)`}}>
+      style={{fontFamily:"var(--font-app)",background:"linear-gradient(160deg, #8C6423 0%, #B7893F 56%, #E8D4A8 100%)"}}>
       <div className="w-full my-6" style={{maxWidth:440}}>
         <div className="text-center mb-5">
           <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
           <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TASAHEEL AL-UMRAH · SECURE PAYMENT</div>
         </div>
-        {!pay ? (
+        {pay && pay.payOpen === false ? (
+          /* ── رابط مغلق ──
+             كان يُعرض نموذج الدفع لأي رابطٍ صحيح مهما تقادم: رحلةٌ راحت،
+             أو طلبٌ أُلغي، أو مهلةٌ انقضت — والعميل يدفع ثمن مقعدٍ في
+             حافلةٍ وصلت. والسبب يُقال صريحاً: «رابط غير صالح» يجعله
+             يتّصل ليسأل. */
+          <div className="rounded-2xl p-8 text-center" style={{background:"#fff"}}>
+            <AlertTriangle size={40} style={{color:"#8A6A08",margin:"0 auto 12px"}}/>
+            <div className="font-extrabold text-lg" style={{color:B.black}}>
+              {pay.paymentStatus==="verified" ? "سُدّد هذا الطلب" : "رابط الدفع مغلق"}
+            </div>
+            <div className="text-sm mt-1" style={{color:B.muted}}>{pay.closedReason ?? "انتهت صلاحية هذا الرابط."}</div>
+            <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+              {[["رقم الطلب",pay.id],["الباقة",pay.packageName]].map(([l,v])=>(
+                <div key={l} className="flex items-center justify-between gap-2">
+                  <span style={{color:B.muted}}>{l}</span>
+                  <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>
+              للاستفسار تواصل معنا وسنساعدك.
+            </div>
+          </div>
+        ) : !pay ? (
           <div className="rounded-2xl p-8 text-center" style={{background:"#fff"}}>
             <X size={40} style={{color:"#BE2626",margin:"0 auto 12px"}}/>
-            <div className="font-extrabold text-lg" style={{color:"#000"}}>رابط غير صالح</div>
+            <div className="font-extrabold text-lg" style={{color:B.black}}>رابط غير صالح</div>
             <div className="text-sm mt-1" style={{color:B.muted}}>لم يُعثر على طلب بهذا الرقم ({bookingId})، أو أن الرابط منتهي.</div>
           </div>
         ) : stage==="success" ? (
@@ -91,13 +116,13 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",damping:14}} className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background:"#E3F3E8"}}>
                 <Check size={34} style={{color:"#1E7A44"}}/>
               </motion.div>
-              <div className="font-extrabold text-xl" style={{color:"#000"}}>تم الدفع بنجاح</div>
+              <div className="font-extrabold text-xl" style={{color:B.black}}>تم الدفع بنجاح</div>
               <div className="text-sm mt-1.5" style={{color:B.text2}}>شكراً لك، {pay.clientName}. تم استلام دفعتك.</div>
               <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.bg,border:`1px solid ${B.border}`}}>
                 {[["رقم الطلب",pay.id],["الباقة",pay.packageName],["طريقة الدفع",sel?.label??"—"],["المبلغ المدفوع",amount]].map(([l,v])=>(
                   <div key={l} className="flex items-center justify-between gap-2">
                     <span style={{color:B.muted}}>{l}</span>
-                    <span className="font-bold" style={{color:"#000",fontFamily:"var(--font-app)"}}>{v}</span>
+                    <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -111,7 +136,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <div className="text-xs font-bold" style={{color:B.muted}}>طلب رقم <span style={{fontFamily:"var(--font-app)",color:B.text2}}>{pay.id}</span></div>
-                  <div className="font-extrabold text-base mt-0.5" style={{color:"#000"}}>{pay.packageName}</div>
+                  <div className="font-extrabold text-base mt-0.5" style={{color:B.black}}>{pay.packageName}</div>
                 </div>
                 <div className="text-left">
                   <div className="text-xs" style={{color:B.muted}}>المبلغ المطلوب</div>
@@ -120,7 +145,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               </div>
             </div>
             <div className="px-6 py-5">
-              <div className="text-sm font-extrabold mb-3" style={{color:"#000"}}>اختر طريقة الدفع</div>
+              <div className="text-sm font-extrabold mb-3" style={{color:B.black}}>اختر طريقة الدفع</div>
               <div className="grid grid-cols-2 gap-2.5">
                 {PAY_METHODS.map(m=>{
                   const on=method===m.id;
@@ -139,15 +164,15 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
                     <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم البطاقة</label>
                     <input inputMode="numeric" value={card.num} onChange={e=>setCard(c=>({...c,num:e.target.value.replace(/[^0-9 ]/g,"").slice(0,19)}))}
                       placeholder="0000 0000 0000 0000" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-                      style={{borderColor:B.border,color:"#000",direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/>
+                      style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
                     <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ الانتهاء</label>
                       <input inputMode="numeric" value={card.exp} onChange={e=>setCard(c=>({...c,exp:e.target.value.replace(/[^0-9/]/g,"").slice(0,5)}))}
-                        placeholder="MM/YY" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:"#000",direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
+                        placeholder="MM/YY" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
                     <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>CVV</label>
                       <input inputMode="numeric" value={card.cvv} onChange={e=>setCard(c=>({...c,cvv:e.target.value.replace(/[^0-9]/g,"").slice(0,4)}))}
-                        placeholder="123" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:"#000",direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
+                        placeholder="123" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
                   </div>
                 </div>
               )}
@@ -208,12 +233,27 @@ function VerifyPage({docId}:{docId:string}) {
 
   if(state==="loading") return null;
 
-  const valid = !!res && VALID_STATUSES.includes(res.status);
+  /* ── الحكم على المستند لا على حجزه ──
+     كان `VALID_STATUSES.includes(res.status)` — حالة **الحجز**. فتذكرةٌ
+     أُلغيت وحدها (لتغيير موعد مثلاً) وحجزها ما زال مؤكداً تُقرأ على
+     الباب «صالحة»، وتذكرةُ رحلةٍ راحت كذلك. الآن الحكم من `doc_phase`
+     الذي تحسبه القاعدة للمستند نفسه، ويسقط إلى الحالة القديمة على
+     قاعدةٍ لم تُرحَّل بعد. */
+  const phase = res?.docPhase;
+  const valid = phase
+    ? (phase === "valid" || phase === "paid")
+    : (!!res && VALID_STATUSES.includes(res.status));
+  const PHASE_AR: Record<string,string> = {
+    valid:"صالحة", used:"مستخدمة", cancelled:"ملغاة", expired:"منتهية",
+    paid:"مدفوعة", overdue:"انتهى الاستحقاق", refunded:"مُستردّة",
+    none:"لم تُدفع", sent:"رابط أُرسل", failed:"فشل الدفع",
+  };
+  const phaseLabel = phase ? (PHASE_AR[phase] ?? phase) : (res ? (STATUS_AR[res.status] ?? res.status) : "");
   const tone = valid ? {bg:"#E3F3E8",fg:"#1E7A44",bd:"#C4E4CE"} : {bg:"#FBE6E6",fg:"#BE2626",bd:"#F3C9C9"};
 
   return (
     <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
-      style={{fontFamily:"var(--font-app)",background:`linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 55%,${B.black} 100%)`}}>
+      style={{fontFamily:"var(--font-app)",background:"linear-gradient(160deg, #8C6423 0%, #B7893F 56%, #E8D4A8 100%)"}}>
       <div className="w-full my-6" style={{maxWidth:420}}>
         <div className="text-center mb-5">
           <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
@@ -227,7 +267,7 @@ function VerifyPage({docId}:{docId:string}) {
                 {valid?<Check size={30} style={{color:tone.fg}}/>:<AlertTriangle size={28} style={{color:tone.fg}}/>}
               </div>
               <div className="font-extrabold text-lg" style={{color:tone.fg}}>
-                {valid?"تذكرة صالحة":`غير صالحة — ${STATUS_AR[res.status]??res.status}`}
+                {valid?"تذكرة صالحة":`غير صالحة — ${phaseLabel}`}
               </div>
               {res.ticketNo&&<div className="text-sm mt-1" style={{color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>{res.ticketNo}</div>}
             </div>
@@ -257,7 +297,7 @@ function VerifyPage({docId}:{docId:string}) {
               <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{background:"#FBE6E6"}}>
                 <X size={28} style={{color:"#BE2626"}}/>
               </div>
-              <div className="font-extrabold text-lg" style={{color:"#000"}}>
+              <div className="font-extrabold text-lg" style={{color:B.black}}>
                 {state==="none"?"لا يوجد مستند بهذا الرقم":"تعذّر التحقّق الآن"}
               </div>
               <div className="text-sm mt-2 leading-relaxed" style={{color:B.muted}}>

@@ -40,9 +40,9 @@ export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSig
         <TasaheelMark size={48}/>
         <div>
           <div style={{fontFamily:"var(--font-app)",fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.3}}>تساهيل العمرة</div>
-          <div style={{fontSize:9,color:B.gold,letterSpacing:3,marginTop:2}}>ADMIN PANEL</div>
+          <div style={{fontSize:10,color:B.gold,letterSpacing:1,marginTop:2}}>لوحة الإدارة</div>
         </div>
-        {onMobileClose&&<button onClick={onMobileClose} className="mr-auto p-1.5 cursor-pointer rounded-lg" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>}
+        {onMobileClose&&<button onClick={onMobileClose} aria-label="إغلاق القائمة" title="إغلاق القائمة" className="mr-auto p-1.5 cursor-pointer rounded-lg" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>}
       </div>
       <div className="px-5 pb-2">
         <div style={{fontSize:10,color:"#6E938F",fontWeight:700,letterSpacing:2}}>القائمة الرئيسية</div>
@@ -69,7 +69,7 @@ export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSig
           <div className="text-sm font-bold truncate" style={{color:"#e8e0d4"}}>{uName}</div>
           <div className="text-xs" style={{color:"#86A8A4"}}>{uRole}</div>
         </div>
-        <button onClick={onSignOut} title="تسجيل الخروج" className="p-1.5 rounded-lg cursor-pointer" style={{background:"transparent",border:"none",color:onSignOut?"#B4CFCB":"#6E938F"}}>
+        <button onClick={onSignOut} aria-label="تسجيل الخروج" title="تسجيل الخروج" className="p-1.5 rounded-lg cursor-pointer" style={{background:"transparent",border:"none",color:onSignOut?"#B4CFCB":"#6E938F"}}>
           <LogOut size={14}/>
         </button>
       </div>

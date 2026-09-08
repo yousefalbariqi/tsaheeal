@@ -1,0 +1,66 @@
+/* أنماط اللوحة المشتركة — ما لا يُكتب سطراً في كل شاشة.
+
+   ثلاثة أشياء تتكرّر في أربع عشرة شاشة: هيكل التحميل، وجدولٌ يفيض على
+   الجوال، وعمود إجراءٍ يهرب مع الفيضان. كتابتها هنا مرّة تُغني عن
+   تكرارها، وتُبقيها متطابقة حين تتغيّر. */
+
+/* حماية للحالات القديمة أو أي حقلٍ جديدٍ يُنشأ خطأً بـ type=number.
+   حقول الأرقام القياسية تستخدم NumericInput، الذي يوفّر لوحة الأرقام
+   للجوال من دون أسهُم الزيادة والنقصان. */
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
+
+/* ── هيكل التحميل ── نبضة هادئة لا وميض. */
+.sk-bar {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #EFEAE0 0%, #F7F3EA 50%, #EFEAE0 100%);
+  background-size: 200% 100%;
+  animation: sk-slide 1.4s ease-in-out infinite;
+}
+@keyframes sk-slide {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-bar { animation: none; background: #EFEAE0; }
+}
+
+/* ── الجدول على الشاشات الضيقة ──
+   الجدول لا يُصغَّر إلى ما لا يُقرأ ولا يُقصّ صامتاً: يمرّر أفقياً،
+   ويظهر شريط التمرير دائماً على الجوال حتى يُعرف أن وراء الحافة بقية.
+   وعمود الإجراء يُثبَّت في أقصى اليسار (اتجاه RTL) فلا يضيع الزرّ خلف
+   الحافة بينما يقرأ الموظف بقية الصفّ. */
+.tbl-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: #D8CFBF transparent;
+}
+.tbl-scroll::-webkit-scrollbar { height: 8px; }
+.tbl-scroll::-webkit-scrollbar-track { background: transparent; }
+.tbl-scroll::-webkit-scrollbar-thumb { background: #D8CFBF; border-radius: 999px; }
+
+/* العرض الأدنى لجداول القوائم وحدها: بلا حدٍّ أدنى تنضغط ثمانية أعمدة
+   في ٧٦٨ بكسل حتى يصير كل عمودٍ حرفين. جداول النوافذ أضيق فلا تأخذه. */
+.tbl-wide table { min-width: 780px; }
+
+/* العمود المثبّت — رأساً وخلية. الظلّ على حافته يقول «هنا انقطع الصفّ». */
+.tbl-scroll th.col-action,
+.tbl-scroll td.col-action {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  box-shadow: 6px 0 10px -8px rgba(27, 23, 18, 0.28);
+}
+/* inherit لا لونٌ ثابت: الصفوف مخطّطة بالتناوب (#fff / #FDFCFA)، ولونٌ
+   واحد على الخلية المثبّتة يقطع الخطّ ويجعلها تبدو عمودًا غريبًا عن صفّه.
+   كل صفٍّ فيه خلية مثبّتة يحمل خلفيةً صريحة، فالوراثة مضمونة. */
+.tbl-scroll td.col-action { background: inherit; }
+.tbl-scroll th.col-action { background: #FBF7EC; z-index: 3; }
+
+/* ── تلميح «مرّر لرؤية البقية» ── يظهر على الجوال وحده. */
+.tbl-hint { display: none; }
+@media (max-width: 767px) {
+  .tbl-hint { display: flex; }
+}
