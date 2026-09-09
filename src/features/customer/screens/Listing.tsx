@@ -40,6 +40,30 @@ const reviewRating = (rating?:number) => typeof rating === "number"
   ? Math.min(5, Math.max(1, rating > 5 ? rating / 2 : rating))
   : null;
 
+/** يُحسب موعد العودة من مدة الباقة لا من اختيارٍ ثانٍ؛ يوم الانطلاق هو
+    القرار الوحيد للمستفيد. UTC يحفظ التاريخ كما هو مهما اختلفت منطقة
+    المتصفح الزمنية. */
+function addCalendarDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+const fullTripDate = (iso: string, lang: string) => formatDate(iso, lang, true).replace("،", "");
+
+/** «17 – 19 سبتمبر»؛ وإن عبرت الرحلة شهراً أو سنة نُظهر الجزأين بوضوح. */
+function shortTripRange(from: string, to: string, lang: string): string {
+  const locale = `${lang}-u-nu-latn`;
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  const day = new Intl.DateTimeFormat(locale, { day: "numeric" });
+  const month = new Intl.DateTimeFormat(locale, { month: "long" });
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+    return `${day.format(start)} – ${day.format(end)} ${month.format(end)}`;
+  }
+  return `${day.format(start)} ${month.format(start)} – ${day.format(end)} ${month.format(end)}`;
+}
+
 export interface ListingProps {
   pkg: Pkg;
   /** الرحلات القابلة للحجز — تحكم «لا رحلات» وبقيّة الخطوات. */
@@ -284,8 +308,6 @@ export function Listing(p: ListingProps) {
 
   const AMENITY_PREVIEW = 6;
   const features: PkgFeature[] = pkg.features ?? [];
-  /** أول سياسة مسجّلة — تُستعمل شريحةً بارزة. لا شيء ⇒ لا شريحة. */
-  const firstPolicy = pkg.policies?.find(x => x.trim())?.trim();
   const reviews = pkg.reviews?.filter(r => r.name.trim() && r.text.trim()) ?? [];
 
   /** ما ينقص الحجز — يُعرض في الملخّص بدل تعطيل صامت. */
@@ -305,18 +327,29 @@ export function Listing(p: ListingProps) {
   const dateDone   = !!trip  && !editDate;
   const peopleDone = !!trip  && !editPeople;
   const roomDone   = !!split && !editRoom;
+  /* ٣ أيام = الانطلاق واليومان التاليان، لذلك نطرح يوماً واحداً من عدد
+     أيام الباقة. تُستخدم القيمة نفسها في التقويم والنص وزر التأكيد حتى
+     لا تختلف نهايةٌ مرئية عن نهايةٍ محسوبة. */
+  const packageDays = Math.max(1, pkg.days || (pkg.nights ?? 0) + 1);
+  const returnDate = trip ? addCalendarDays(trip.departureDate, packageDays - 1) : undefined;
+  const tripDates = trip && returnDate ? {
+    departure: fullTripDate(trip.departureDate, p.lang),
+    return: fullTripDate(returnDate, p.lang),
+    range: shortTripRange(trip.departureDate, returnDate, p.lang),
+  } : null;
 
   /* ── خليّة التاريخ ── */
   const dateBody = trips.length === 0
     ? <div style={{ ...T.body, color: C.ink2 }}>{t("noTrips")}</div>
-    : dateDone && trip
+    : dateDone && trip && tripDates
     ? <DoneRow icon={<CalendarDays size={15} />} label={t("chooseTrip")}
-        value={`${formatDate(trip.departureDate, p.lang, true)} · ${seatsLabel(availSeats(trip), t)}`}
+        value={`${t("departure")}: ${tripDates.departure} · ${t("return")}: ${tripDates.return}`}
         editLabel={t("editWord")} onEdit={() => setEditDate(true)} />
     : (
       <>
         <TripCalendar
           trips={calendarTrips} valueId={trip?.id}
+          rangeEndDate={returnDate}
           isFull={tripFull}
           month={calMonth} onMonthChange={setCalMonth}
           legend={{ available: t("dayAvailable"), full: t("dayFull") }}
@@ -324,10 +357,16 @@ export function Listing(p: ListingProps) {
           onClear={() => p.setTrip(null)}
           clearLabel={t("clearDate")}
         />
+        {trip && tripDates && (
+          <div aria-live="polite" className="flex flex-col" style={{ gap: 4, marginTop: 16, padding: 12, borderRadius: R.button, background: C.greenTint, color: C.ink }}>
+            <div style={{ ...T.meta, fontWeight: 600 }}>{t("departure")}: {tripDates.departure}</div>
+            <div style={{ ...T.meta, fontWeight: 600 }}>{t("return")}: {tripDates.return}</div>
+          </div>
+        )}
         <div style={{ marginTop: 12 }}>
           <CTAButton full disabled={!trip}
             onClick={() => setEditDate(false)}>
-            {t("confirmDate")}
+            {tripDates ? t("confirmTrip").replace("{range}", tripDates.range) : t("confirmDate")}
           </CTAButton>
           {/* الزرّ المعطَّل يقول سببه، والنصّ يختفي فور الاختيار فلا يزاحم. */}
           {!trip && (
@@ -447,7 +486,7 @@ export function Listing(p: ListingProps) {
             <Stars n={hotel.stars} size={13} />
           </div>
           <div style={{ ...T.meta, color: C.ink2, marginTop: 4 }}>
-            {hotel.district}، {hotel.city} · <span style={LTR}>{hotel.distanceM}</span> {t("meters")} {t("fromHaram")}
+            {hotel.district}، {hotel.city}
           </div>
           {hotel.features?.length > 0 && (
             <div className="flex flex-wrap gap-2" style={{ marginTop: 12 }}>
@@ -597,9 +636,7 @@ export function Listing(p: ListingProps) {
         {/* ═══ رأس الباقة — معلومات الرحلة بجانب الصور ═══ */}
         <div className="ts-panel ts-p-head" style={{ background: C.white, padding: `16px ${SPACE.page}px ${SPACE.section}px` }}>
           <h1 style={{ ...T.h1, color: C.ink, margin: 0 }}>{pkg.name}</h1>
-          <div style={{ ...T.body, color: C.ink2, marginTop: 6 }}>
-            {pkg.destination} · {pkg.audience}
-          </div>
+          <div style={{ ...T.body, color: C.ink2, marginTop: 6 }}>{pkg.destination}</div>
           <div style={{ ...T.body, color: C.ink, marginTop: 4 }}>
             {/* التصريف من دالّة لا من قالب: «{n} {t("nights")}» كانت تُخرج
                 «1 ليالٍ». العدد داخلٌ في الصيغة للواحد والاثنين. */}
@@ -607,33 +644,15 @@ export function Listing(p: ListingProps) {
             {trip && <> · {seatsLabel(availSeats(trip), t)}</>}
           </div>
 
-          {hotel && bookingMode === "full" && (
-            <div className="flex items-center gap-2" style={{ marginTop: 10 }}>
-              <Stars n={hotel.stars} size={14} />
-              <span style={{ ...T.meta, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
-              <span style={{ color: C.ink3 }}>·</span>
-              <span style={{ ...T.meta, color: C.ink2 }}>
-                <span style={LTR}>{hotel.distanceM}</span> {t("meters")} {t("fromHaram")}
-              </span>
-            </div>
-          )}
-
-          {/* الشريحة تعرض أول سياسة فعلية للباقة لا شعاراً ثابتاً: باقة
-              بلا سياسات لا تعرض شيئاً بدل أن تَعِد بما لم يُسجَّل. */}
-          {firstPolicy && (
-            <div style={{ marginTop: 14 }}>
-              <Chip tone="fill">✓ {firstPolicy}</Chip>
-            </div>
-          )}
-
           {/* ── حقائق سريعة ──
               تشغل المساحة التي كانت فراغاً بجانب الصور على الديسكتوب.
-              مخفيّة على الجوال: هناك الصفحة سرديّة وهذه المعلومات تتكرّر
-              في أقسامها، فتزيد طولاً بلا فائدة. */}
+              ملخص الباقة مقتصر على موعدها ونقلها وسكنها؛ أمّا عدد
+              المعتمرين فقرار حجز ويظهر في خطوته فقط. مخفيّة على الجوال:
+              هناك الصفحة سرديّة وهذه المعلومات تتكرّر في أقسامها، فتزيد
+              طولاً بلا فائدة. */}
           <div className="ts-facts ts-only-desktop">
             {[
               { Icon: CalendarDays, k: t("nextTrip"), v: trips[0] ? formatDate(trips[0].departureDate, p.lang) : "—" },
-              { Icon: Users,        k: t("people"),   v: `${persons} ${t("person")}` },
               { Icon: BusFront,     k: t("transport"), v: transport?.vehicleType ?? "—" },
               { Icon: Building2,    k: t("stay"),      v: hotel && bookingMode === "full" ? hotelDisplayName(hotel.name) : "—" },
             ].map(({ Icon, k, v }) => (
@@ -712,9 +731,6 @@ export function Listing(p: ListingProps) {
             <CTAButton full disabled={!ready} onClick={p.onNext}>{t("next")}</CTAButton>
             {/* ما ينقص يُقال بنصّه: زرٌّ رماديّ بلا سبب يُقرأ عطلاً. */}
             {missing && <div className="ts-aside-missing">{missing}</div>}
-            {ready && firstPolicy && (
-              <div style={{ marginTop: 10, textAlign: "center" }}><Chip tone="fill">✓ {firstPolicy}</Chip></div>
-            )}
           </div>
         </aside>
 
@@ -746,7 +762,6 @@ export function Listing(p: ListingProps) {
             ? `${splitHeadline(split, t)} · ${t("forNights").replace("{n}", String(nights))}${trip ? ` · ${formatDate(trip.departureDate, p.lang)}` : ""}`
             : missing ?? undefined
         }
-        chip={ready && firstPolicy ? <Chip tone="fill">✓ {firstPolicy}</Chip> : undefined}
         cta={t("next")}
         ctaDisabled={!ready}
         onCta={p.onNext}
@@ -792,10 +807,6 @@ export function Listing(p: ListingProps) {
                 <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
                   <Stars n={hotel.stars} size={13} />
                   <span style={{ ...T.meta, color: C.ink }}>{hotelDisplayName(hotel.name)}</span>
-                  <span style={{ color: C.ink3 }}>·</span>
-                  <span style={{ ...T.meta, color: C.ink2 }}>
-                    <span style={LTR}>{hotel.distanceM}</span> {t("meters")} {t("fromHaram")}
-                  </span>
                 </div>
               )}
             </div>

@@ -1256,7 +1256,10 @@ export function SelectRow({ image, title, note, price, priceNote, selected, onCl
 
 /* ── تقويم الرحلات ────────────────────────────────────────────── */
 const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-const AR_WEEK = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
+/* تُكتب كاملة: الحرف الواحد («خ» مثلاً) يفرض على المستفيد تخمين اليوم.
+   يبدأ الأسبوع بالأحد، وهو نفس ترتيب `Date#getDay()` فلا يحتاج حسابُ موضع
+   أول الشهر إلى تحويلٍ إضافي. */
+const AR_WEEK = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 /** تقويم شهري: المتاح أخضر محاط، المختار دائرة خضراء ممتلئة، المكتمل مشطوب،
     واليوم بلا رحلة باهت بلا حدّ.
@@ -1268,9 +1271,11 @@ const AR_WEEK = ["س", "ح", "ن", "ث", "ر", "خ", "ج"];
     `isFull` يأتي من المستدعي لا يُحسب هنا: قواعد الإتاحة (حالة الرحلة والمقاعد
     المتبقية ووضع التجربة) شأن طبقة البيانات، والتقويم يرسم ما يُقال له. */
 export function TripCalendar<Tr extends { id: string; departureDate: string }>({
-  trips, valueId, onPick, onClear, clearLabel, isFull, month, onMonthChange, legend,
+  trips, valueId, rangeEndDate, onPick, onClear, clearLabel, isFull, month, onMonthChange, legend,
 }: {
   trips: Tr[]; valueId?: string; onPick: (t: Tr) => void; onClear?: () => void; clearLabel?: string;
+  /** نهاية الإقامة المحسوبة من مدة الباقة. لا تُختار؛ تُرسم فقط لتوضيح المدى. */
+  rangeEndDate?: string;
   /** اليوم موجود لكن لا يُحجز — يُرسم مشطوباً. */
   isFull?: (t: Tr) => boolean;
   /** الشهر المعروض — يُرفع للمستدعي كي لا يُفقد عند طيّ الخطوة وإعادة فتحها. */
@@ -1286,6 +1291,7 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
     const cur = byDate.get(t.departureDate);
     if (!cur || (isFull?.(cur) && !isFull?.(t))) byDate.set(t.departureDate, t);
   });
+  const selectedDepartureDate = valueId ? trips.find(t => t.id === valueId)?.departureDate : undefined;
 
   const first = trips.map(t => t.departureDate).sort()[0];
   const initial = first ? new Date(first + "T00:00:00") : new Date();
@@ -1293,7 +1299,7 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
   const ym = month ?? ownYm;
 
   const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate();
-  const firstCol = (new Date(ym.y, ym.m, 1).getDay() + 1) % 7;
+  const firstCol = new Date(ym.y, ym.m, 1).getDay();
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstCol; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
@@ -1325,7 +1331,10 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
 
       <div className="grid grid-cols-7" style={{ gap: 2 }}>
         {AR_WEEK.map((w, i) => (
-          <div key={"w" + i} style={{ textAlign: "center", ...T.small, color: C.ink2, paddingBottom: 6 }}>{w}</div>
+          <div key={"w" + i} title={w}
+            style={{ textAlign: "center", ...T.small, fontSize: "clamp(7px, 1vw, 12px)", lineHeight: 1.2, color: C.ink2, paddingBottom: 6 }}>
+            {w}
+          </div>
         ))}
         {cells.map((d, i) => {
           if (d === null) return <div key={"e" + i} style={{ height: 46 }} />;
@@ -1334,19 +1343,25 @@ export function TripCalendar<Tr extends { id: string; departureDate: string }>({
           const full = !!trip && !!isFull?.(trip);
           const open = !!trip && !full;
           const on = open && valueId === trip.id;
+          const isRangeStart = !!on;
+          const isRangeEnd = !!rangeEndDate && ds === rangeEndDate && ds !== selectedDepartureDate;
+          const isBetween = !!rangeEndDate && !!selectedDepartureDate
+            && ds > selectedDepartureDate && ds < rangeEndDate;
+          const isRangeEdge = isRangeStart || isRangeEnd;
+          const rangeLabel = isRangeStart ? "بداية الرحلة" : isRangeEnd ? "نهاية الرحلة" : isBetween ? "ضمن مدة الرحلة" : "";
           return (
-            // الأخضر محاطاً لا خلفيةً فاتحة: التقويم يعيش داخل الكتلة الخضراء
-            // C.bandAction، وأي تظليل فاتح يذوب فيها بينما الحدّ يبقى.
+            // البداية والنهاية ذهبيتان، وما بينهما تظليل هادئ: يختار
+            // المستفيد يوم الانطلاق فقط لكنه يرى كامل مدة الإقامة فوراً.
             <button key={"d" + i} disabled={!open} onClick={() => open && onPick(trip)}
-              aria-label={full && legend ? `${d} — ${legend.full}` : undefined}
+              aria-label={[String(d), full && legend ? legend.full : "", rangeLabel].filter(Boolean).join(" — ")}
               style={{
-                height: 46, borderRadius: R.pill,
-                background: on ? C.green : open ? C.white : "none",
-                border: on ? "none" : open ? `1px solid ${C.green}` : "none",
-                color: on ? C.white : open ? C.green : C.ink3,
+                height: 46, borderRadius: isBetween ? R.button : R.pill,
+                background: isRangeEdge ? C.green : isBetween ? C.greenTint : open ? C.white : "none",
+                border: isRangeEdge ? "none" : open ? `1px solid ${C.green}` : "none",
+                color: isRangeEdge ? C.white : isBetween ? C.greenDeep : open ? C.green : C.ink3,
                 textDecoration: full ? "line-through" : "none",
                 cursor: open ? "pointer" : "default",
-                fontFamily: FONT.sans, fontSize: 15, fontWeight: open ? 600 : 400,
+                fontFamily: FONT.sans, fontSize: 15, fontWeight: isRangeEdge || open ? 600 : 400,
                 ...LTR,
               }}>
               {d}

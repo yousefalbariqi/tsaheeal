@@ -76,7 +76,7 @@ const D: Record<Lang, Dict> = {
   ar: {
     brand:"تساهيل العمرة", tagline:"احجز رحلة عمرتك بسهولة واطمئنان",
     choosePackage:"اختر باقتك", from:"يبدأ من", currency:"ر.س", days:"أيام", nights:"ليالٍ",
-    chooseTrip:"اختر موعد السفر", remaining:"متبقٍ", seat:"مقعد", full:"مكتملة", soldOut:"لا مقاعد متاحة",
+    chooseTrip:"اختر تاريخ الانطلاق", departure:"الانطلاق", return:"العودة", confirmTrip:"تأكيد رحلة {range}", remaining:"متبقٍ", seat:"مقعد", full:"مكتملة", soldOut:"لا مقاعد متاحة",
     people:"عدد المعتمرين", person:"معتمر", chooseRoom:"اختر نوع السكن",
     roomPrivate:"غرفة خاصة", roomShared:"غرفة مشتركة", perPerson:"للفرد", mostWanted:"الأكثر طلباً",
     total:"الإجمالي", passengers:"بيانات المعتمرين", addPassenger:"إضافة معتمر",
@@ -196,7 +196,7 @@ const D: Record<Lang, Dict> = {
   en: {
     brand:"Tasaheel Al-Umrah", tagline:"Book your Umrah with ease and peace of mind",
     choosePackage:"Choose your package", from:"From", currency:"SAR", days:"days", nights:"nights",
-    chooseTrip:"Choose travel date", remaining:"left", seat:"seat", full:"Full", soldOut:"No seats available",
+    chooseTrip:"Choose departure date", departure:"Departure", return:"Return", confirmTrip:"Confirm trip {range}", remaining:"left", seat:"seat", full:"Full", soldOut:"No seats available",
     people:"Number of pilgrims", person:"pilgrim", chooseRoom:"Choose room type",
     roomPrivate:"Private room", roomShared:"Shared room", perPerson:"per person", mostWanted:"Most popular",
     total:"Total", passengers:"Pilgrim details", addPassenger:"Add pilgrim",
