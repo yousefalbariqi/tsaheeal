@@ -3,7 +3,7 @@
    الترتيب: الحجز أولاً ثم المعلومات. الأقسام كانت من نوعين مختلطين
    (قرار ومعلومة) فبدت كلها متساوية الأهمية؛ الآن أقسام الحجز الأربعة
    كتلة واحدة مرقّمة، والمعلوماتية أشرطة متناوبة اللون تحتها. */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Wifi, Tv, BatteryCharging, Utensils, UserCheck, BusFront, MapPin, Building2,
   CalendarX, KeyRound, ShieldCheck, Star, BedDouble, ChevronLeft, CalendarDays, Users,
@@ -294,6 +294,10 @@ export function Listing(p: ListingProps) {
   const [editDate, setEditDate] = useState(true);
   const [editPeople, setEditPeople] = useState(true);
   const [editRoom, setEditRoom] = useState(true);
+  /* طيّ التقويم يقصّر الصفحة. من دون مرساة صريحة يحاول المتصفح حفظ موضع
+     البكسل القديم فيبدو كقفزة تتجاوز خطوة العدد. */
+  const peopleStepRef = useRef<HTMLDivElement>(null);
+  const focusPeopleAfterDate = useRef(false);
   /* التفريع الحقيقي على العرض في موضعين لا يكفي فيهما CSS: شبكة التقييمات
      (مُدوِّرها مؤقّتٌ يجب ألّا يوجد أصلاً على الجوال) وارتفاع المعرض. */
   const isDesktop = useIsDesktop();
@@ -338,6 +342,15 @@ export function Listing(p: ListingProps) {
     range: shortTripRange(trip.departureDate, returnDate, p.lang),
   } : null;
 
+  useEffect(() => {
+    if (!dateDone || !focusPeopleAfterDate.current) return;
+    const frame = requestAnimationFrame(() => {
+      peopleStepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      focusPeopleAfterDate.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [dateDone]);
+
   /* ── خليّة التاريخ ── */
   const dateBody = trips.length === 0
     ? <div style={{ ...T.body, color: C.ink2 }}>{t("noTrips")}</div>
@@ -365,7 +378,7 @@ export function Listing(p: ListingProps) {
         )}
         <div style={{ marginTop: 12 }}>
           <CTAButton full disabled={!trip}
-            onClick={() => setEditDate(false)}>
+            onClick={() => { focusPeopleAfterDate.current = true; setEditDate(false); }}>
             {tripDates ? t("confirmTrip").replace("{range}", tripDates.range) : t("confirmDate")}
           </CTAButton>
           {/* الزرّ المعطَّل يقول سببه، والنصّ يختفي فور الاختيار فلا يزاحم. */}
@@ -689,11 +702,12 @@ export function Listing(p: ListingProps) {
           )}
 
           <div className="ts-book-grid">
-            <div className={`ts-book-cell${!dateDone ? " ts-book-active" : ""}`}>
+            <div className={`ts-book-cell${!dateDone ? " ts-book-active" : ""}`} style={{ overflowAnchor: "none" }}>
               {!dateDone && <div className="ts-book-cell-title">{t("chooseTrip")}</div>}
               {dateBody}
             </div>
-            <div className={`ts-book-cell${dateDone && !peopleDone ? " ts-book-active" : ""}`}>
+            <div ref={peopleStepRef} className={`ts-book-cell${dateDone && !peopleDone ? " ts-book-active" : ""}`}
+              style={{ scrollMarginTop: 84 }}>
               {!peopleDone && <div className="ts-book-cell-title">{t("people")}</div>}
               {peopleBody}
             </div>

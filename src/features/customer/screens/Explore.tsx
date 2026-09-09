@@ -75,9 +75,12 @@ const readView = (): View => {
   try { return localStorage.getItem("ts.view") === "list" ? "list" : "grid"; } catch { return "grid"; }
 };
 
-/** مقعدٌ واحد أو أكثر — بنصّه لا برقمٍ عارٍ. */
+/** مقعدٌ واحد أو أكثر — بنصّه لا برقمٍ عارٍ. الأعداد الكبيرة تُختصر إلى
+    «6+ مقاعد متاحة» لأن الوفرة إشارة، لا رقماً يحتاج المستفيد حفظه. */
 const seatsText = (n: number, t: (k: string) => string) =>
-  n === 1 ? t("seatsLeftCardOne") : t("seatsLeftCard").replace("{n}", String(n));
+  n > 6 ? t("seatsAvailableCard").replace("{n}", "6")
+  : n === 1 ? t("seatsLeftCardOne")
+  : t("seatsLeftCard").replace("{n}", String(n));
 
 /* ═══════════ بنر الحديث ═══════════
 
@@ -235,7 +238,7 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
             </span>
           </span>
         </span>
-        <span className="ts-card-cta" style={{ height: 42, borderRadius: R.pill, background: C.greenDeep, color: C.white, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600 }}>
+        <span className="ts-card-cta ts-trip-cta" style={{ width: "100%", minHeight: 46, paddingInline: 24, border: "1px solid rgba(255,255,255,.42)", borderRadius: R.pill, background: C.greenDeep, color: C.white, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>
           {t("viewTrip")}
         </span>
       </button>
@@ -290,7 +293,7 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
             <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{money(minTotal(p))}</span>
             <span style={{ ...T.small, color: C.ink2 }}>{t("currency")}</span>
           </span>
-          <span className="ts-card-cta" style={{ height: 42, paddingInline: 22, borderRadius: R.pill, background: C.greenDeep, color: C.white, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600 }}>
+          <span className="ts-card-cta ts-trip-cta" style={{ minHeight: 46, minWidth: 154, paddingInline: 26, border: "1px solid rgba(255,255,255,.42)", borderRadius: R.pill, background: C.greenDeep, color: C.white, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>
             {t("viewTrip")}
           </span>
         </span>

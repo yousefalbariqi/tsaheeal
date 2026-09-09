@@ -543,18 +543,36 @@ export function CustomerApp(){
     return ()=>{ alive=false; };
   },[screen,session?.userId]);
 
-  /** تعبئة بطاقة معتمر من الدفتر. جوال المعتمر الأول هو الموثّق فلا يُستبدل. */
-  const applyTraveller=(i:number,tr:Traveller)=>{
-    setPax(a=>a.map((x,j)=>j===i?{...x,
-      name:tr.name, docType:tr.docType??"", idNumber:tr.idNumber,
+  /** يحوّل سجل الدفتر إلى الحالة نفسها التي تقرؤها حقول النموذج. لا نكتفي
+      بعرض اسم السجل: إن كانت قيمة غير صالحة فلن تبدو الحقول مكتملة ثم
+      يرفضها التحقق عند الضغط على «التالي». */
+  const travellerPax=(current:Pax,i:number,tr:Traveller):Pax=>{
+    const docType=tr.docType&&docTypeDef(tr.docType)?tr.docType:"";
+    return {...current,
+      name:tr.name.trim(), docType, idNumber:tr.idNumber.trim(),
       nationality:tr.nationality, gender:tr.gender, ageGroup:tr.ageGroup,
-      birthDate:tr.birthDate, phone:i===0?x.phone:tr.phone,
+      birthDate:tr.birthDate, phone:i===0?(session?.phoneLocal??current.phone):tr.phone.replace(/\s/g, ""),
       /* المقعد ملكُ البطاقة لا ملكُ الشخص في الدفتر — لا يُنقل. */
-    }:x));
-    /* الحقول تُعدّ ملموسة: بياناتٌ جاءت جاهزة يجب أن يُرى خطؤها فوراً
-       (وثيقة منتهية الشكل مثلاً) لا عند محاولة المتابعة. */
+    };
+  };
+  const canApplyTraveller=(i:number,tr:Traveller)=>{
+    const current=pax[i]??emptyPax();
+    return Object.keys(paxErrors(travellerPax(current,i,tr),i===0,t,lang)).length===0;
+  };
+
+  /** تعبئة بطاقة معتمر من الدفتر بعد اجتياز التحقق على الحالة الفعلية. */
+  const applyTraveller=(i:number,tr:Traveller)=>{
+    const next=travellerPax(pax[i]??emptyPax(),i,tr);
+    if(Object.keys(paxErrors(next,i===0,t,lang)).length){
+      /* دفاعٌ ثانٍ إن تغيّر السجل بين الرسم والضغط؛ لا نعرض تعبئة مزيفة. */
+      toast.error(t("fillFirst"));
+      return;
+    }
+    setPax(a=>a.map((x,j)=>j===i?{...next,seat:x.seat}:x));
+    /* الحقول تُعدّ ملموسة لأن قيمها أصبحت في Form State فعلاً. */
     setPaxTouched(s=>({...s,[`${i}.name`]:true,[`${i}.docType`]:true,[`${i}.idNumber`]:true,
-      [`${i}.nationality`]:true,[`${i}.birthDate`]:true}));
+      [`${i}.nationality`]:true,[`${i}.birthDate`]:true,[`${i}.phone`]:true,
+      [`${i}.gender`]:true,[`${i}.ageGroup`]:true}));
   };
 
   /** يغذّي الدفتر من الحجز. المطابقة برقم الوثيقة — الاسم يُكتب بصيغ
@@ -562,14 +580,19 @@ export function CustomerApp(){
   const rememberTravellers=useCallback(async(list:Pax[])=>{
     if(!session) return;
     try{
-      const known=new Set((await fetchTravellers()).map(x=>x.idNumber.trim()).filter(Boolean));
+      const known=new Map((await fetchTravellers())
+        .filter(x=>x.idNumber.trim())
+        .map(x=>[x.idNumber.trim(),x]));
       for(const p of list){
         const idn=p.idNumber.trim();
-        if(!idn||known.has(idn)) continue;
-        known.add(idn);
-        await saveTraveller({id:"",name:p.name.trim(),docType:p.docType||undefined,idNumber:idn,
+        if(!idn) continue;
+        const previous=known.get(idn);
+        /* نفس رقم الوثيقة يعني الشخص نفسه، لكن بياناته قد عُدّلت؛ نحفظ
+           النسخة الأحدث بدل إبقاء أول نسخة في الدفتر إلى الأبد. */
+        const saved=await saveTraveller({id:previous?.id??"",name:p.name.trim(),docType:p.docType||undefined,idNumber:idn,
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,
           birthDate:p.birthDate,phone:p.phone.replace(/\s/g,"")});
+        known.set(idn,saved);
       }
     }catch(e){
       /* فشل الدفتر لا يُبلَّغ للمستفيد: الحجز نجح، وهذا تحسينٌ لحجزه القادم. */
@@ -633,9 +656,15 @@ export function CustomerApp(){
         name: p.name.trim()?p.name:full,
         birthDate: p.birthDate||session.profile?.birthDate||"",
         phone: session.phoneLocal };
+      /* قد تصل مسوّدة بعد الجلسة فتكتب جوالاً فارغاً فوق الحالة، بينما
+         الواجهة تعرض جوال الجلسة المقفَل. لا نترك العرض والتحقق يقرآن
+         مصدرين مختلفين: نعيد الجوال إلى Form State ونُبقي المرجع نفسه
+         إن لم يتغير شيء لتفادي دورة تحديث زائفة. */
+      if(next.name===p.name&&next.birthDate===p.birthDate&&next.phone===p.phone) return a;
       return [next,...a.slice(1)];
     });
-  },[session?.userId,session?.profile?.firstName,session?.profile?.lastName,session?.profile?.birthDate,session?.phoneLocal]);
+  },[session?.userId,session?.profile?.firstName,session?.profile?.lastName,session?.profile?.birthDate,session?.phoneLocal,
+    pax[0]?.name,pax[0]?.birthDate,pax[0]?.phone]);
 
   // OTP helpers
   function startResendCountdown(sec:number){ setResendIn(sec); if(resendTimer.current) clearInterval(resendTimer.current);
@@ -866,7 +895,9 @@ export function CustomerApp(){
             /* الدفتر يستثني من عُبّئ في بطاقة أخرى: رقم وثيقة واحد لا
                يسافر في مقعدين، وعرضه يدعو إلى خطأ ترفضه القاعدة. */
             const usedIds=new Set(pax.filter((_,j)=>j!==i).map(o=>o.idNumber.trim()).filter(Boolean));
-            const bookAvail=book.filter(tr=>tr.idNumber.trim()&&!usedIds.has(tr.idNumber.trim()));
+            /* السجل الناقص لا يظهر كخيار استعادة: عرضه ثم رفضه عند
+               «التالي» أسوأ من إخفائه إلى أن يكتمل من صفحة الحساب. */
+            const bookAvail=book.filter(tr=>tr.idNumber.trim()&&!usedIds.has(tr.idNumber.trim())&&canApplyTraveller(i,tr));
             return (
               <div key={i} className="p-4 flex flex-col gap-4" style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:R.card}}>
                 <div className="flex items-center justify-between" style={{...T.h3,color:C.ink}}>

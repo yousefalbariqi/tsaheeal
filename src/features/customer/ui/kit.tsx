@@ -1,7 +1,7 @@
 /* عناصر واجهة المستفيد — نظام Airbnb مطبّقاً على تساهيل.
    كلها RTL-aware: تعتمد الخصائص المنطقية (insetInlineStart / textAlign:start)
    ولا تعكس إلا الأيقونات الاتجاهية عبر flipRTL. */
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images, Globe } from "lucide-react";
 import { toast } from "sonner";
@@ -825,6 +825,7 @@ export function HeroGallery({ images, onBack, height = 300, t, shareTitle }: {
   const ref = useRef<HTMLDivElement>(null);
   const [i, setI] = useState(0);
   const [liked, setLiked] = useState(false);
+  const reduced = useReducedMotion();
 
   /* fallback عربيّ حين لا يُمرَّر مترجم — لا مفاتيح عارية على الشاشة. */
   const AR: Record<string, string> = {
@@ -837,6 +838,15 @@ export function HeroGallery({ images, onBack, height = 300, t, shareTitle }: {
   const fill = (k: string, v: Record<string, string | number>) =>
     Object.entries(v).reduce((s, [a, b]) => s.replace(`{${a}}`, String(b)), tr(k));
 
+  /** ينقل إلى صورة بعينها. `scrollTo` بالعرض لا بـscrollIntoView:
+      الثاني يمرّر الصفحة كلّها إلى المعرض عند الضغط. */
+  const goTo = useCallback((n: number) => {
+    const el = ref.current; if (!el) return;
+    const x = el.clientWidth * n;
+    el.scrollTo({ left: dir === "rtl" ? -x : x, behavior: "smooth" });
+    setI(n);
+  }, [dir]);
+
   useEffect(() => {
     const el = ref.current; if (!el) return;
     const onScroll = () => {
@@ -848,14 +858,20 @@ export function HeroGallery({ images, onBack, height = 300, t, shareTitle }: {
     return () => el.removeEventListener("scroll", onScroll);
   }, [images.length]);
 
-  /** ينقل إلى صورة بعينها. `scrollTo` بالعرض لا بـscrollIntoView:
-      الثاني يمرّر الصفحة كلّها إلى المعرض عند الضغط. */
-  const goTo = (n: number) => {
-    const el = ref.current; if (!el) return;
-    const x = el.clientWidth * n;
-    el.scrollTo({ left: dir === "rtl" ? -x : x, behavior: "smooth" });
-    setI(n);
-  };
+  /* المعرض لا يبقى لقطةً ثابتة: ينقل صورة كل عدة ثوانٍ بتمريرٍ ناعم.
+     المستخدم يظل حراً بالسحب أو بالنقاط، وتفضيل تقليل الحركة يوقف الدوران. */
+  useEffect(() => {
+    if (reduced || images.length < 2) return;
+    const id = window.setInterval(() => {
+      setI(current => {
+        const next = (current + 1) % images.length;
+        const el = ref.current;
+        if (el) el.scrollTo({ left: (dir === "rtl" ? -1 : 1) * el.clientWidth * next, behavior: "smooth" });
+        return next;
+      });
+    }, 4800);
+    return () => window.clearInterval(id);
+  }, [dir, images.length, reduced]);
 
   const toggleSave = () => {
     setLiked(v => {
@@ -886,7 +902,7 @@ export function HeroGallery({ images, onBack, height = 300, t, shareTitle }: {
   const dots = Array.from({ length: Math.min(DOTS_CAP, images.length) }, (_, k) => from + k);
 
   return (
-    <div style={{ position: "relative", background: C.fill }}>
+    <div style={{ position: "relative", background: C.fill, borderRadius: R.card, overflow: "hidden" }}>
       <div ref={ref} className="ts-hgallery flex overflow-x-auto"
         style={{ height, scrollSnapType: "x mandatory", scrollbarWidth: "none" }}>
         {images.map((src, n) => (

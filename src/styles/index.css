@@ -83,6 +83,19 @@
 .ts-list-incl { font-size:11px; font-weight:400; color:#A69D8E; }
 .ts-list-side { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 
+/* زر «عرض الرحلة» لا يتحرّك ولا يتغير نصه؛ النبض محصور في لون حدّه
+   كي يلفت العين بهدوء من دون أن يهزّ شبكة البطاقات أو يزعج القراءة. */
+@keyframes ts-trip-cta-border {
+  0%, 100% { border-color:rgba(255,255,255,.32); }
+  50%      { border-color:rgba(255,245,214,.96); }
+}
+@media (max-width: 1023px) {
+  .ts-trip-cta { animation:ts-trip-cta-border 2.6s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-trip-cta { animation:none; }
+}
+
 /* شريط الأدوات وبطاقة VIP للديسكتوب وحده؛ وعلى الجوال بطاقة الطلب
    الكبيرة أسفل الصفحة هي التي تظهر. */
 .ts-explore-toolbar { display:none; }
@@ -561,30 +574,11 @@
     padding:28px 40px 52px !important;
   }
 
-  /* الصور تعريفٌ بالباقة، لذا تبقى في الأعلى دائماً وليست من التفاصيل. */
+  /* الصور تعريفٌ بالباقة، لذا تبقى في الأعلى دائماً وليست من التفاصيل.
+     المعرض نفسه يبقى Slider على سطح المكتب كذلك؛ تحويله إلى شبكة صور
+     ثابتة كان يلغي السحب والانتقال الناعم اللذين يراهما مستخدم الجوال. */
   .ts-p-head { order:0; width:100%; grid-column:1 / -1; }
   .ts-p-gallery { order:-1; width:100%; grid-column:1 / -1; padding:12px !important; }
-  /* معرض عرض لا سلايدر عملاق: أربع لقطات متساوية تُعرّف بالباقة من أول
-     نظرة، بدل تمديد صورة واحدة حتى تفقد جودتها البصرية. */
-  .ts-p-gallery .ts-hgallery {
-    display:grid !important;
-    grid-template-columns:repeat(3, minmax(0, 1fr));
-    gap:8px;
-    height:250px !important;
-    overflow:hidden !important;
-    scroll-snap-type:none !important;
-    border-radius:12px;
-  }
-  .ts-p-gallery .ts-hgallery img {
-    width:100% !important;
-    height:250px !important;
-    min-width:0;
-    border-radius:9px;
-    scroll-snap-align:none !important;
-  }
-  .ts-p-gallery .ts-hgallery img:nth-child(n + 4) { display:none !important; }
-  .ts-p-gallery .ts-hgallery ~ span,
-  .ts-p-gallery .ts-hgallery ~ [role="tablist"] { display:none !important; }
   /* الفندق والسكن يستخدمان النسق نفسه: ثلاث صور متساوية، وآخرها يوضح
      أن في المعرض صوراً إضافية من دون أن يمدّد الأولى. */
   .ts-media-triplet { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; height:190px; }
