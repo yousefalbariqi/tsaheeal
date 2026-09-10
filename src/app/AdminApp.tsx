@@ -130,17 +130,22 @@ export default function AdminApp() {
   const navigate=useNavigate();
   const viewInPath=location.pathname.replace(/^\/admin\/?/,"").split("/")[0];
   const activeView=viewInPath||DEFAULT_VIEW;
-  const [navNonce,setNavNonce]=useState(0);
-  /* العدّاد يبقى: نقر الشاشة النشطة نفسها لا يغيّر المسار، وكان يعيد
-     تركيب الصفحة فيصفّر نماذجها ومرشّحاتها — سلوك يعتمده الموظف. */
-  /* التنقّل يسأل قبل أن يهدم مسوّدةً قائمة: beforeunload لا يرى تنقّل
-     React Router (الصفحة لا تُغادَر، إنما يُستبدل ما فيها)، فكان الضغط
-     على بندٍ آخر في القائمة يمحو إعداداتٍ نصفَ مكتوبة بلا سؤال. */
+  /* صفحات التحرير تُبقى مركّبة بعد أول زيارة: حقول النموذج، تبويبه،
+     والنافذة المفتوحة كلها حالة React محلية؛ إلغاء تركيبها عند تبديل
+     القائمة كان يمحو العمل قبل أن يختار الموظف حفظاً أو إلغاءً. */
+  const EDITOR_VIEWS=["hotels","transport","packages"] as const;
+  const [keptEditorViews,setKeptEditorViews]=useState<string[]>(()=>EDITOR_VIEWS.includes(activeView as typeof EDITOR_VIEWS[number])?[activeView]:[]);
+  useEffect(()=>{
+    if(EDITOR_VIEWS.includes(activeView as typeof EDITOR_VIEWS[number])){
+      setKeptEditorViews(current=>current.includes(activeView)?current:[...current,activeView]);
+    }
+  },[activeView]);
+  /* التنقّل لا يهدم المسودات المركّبة. يبقى التأكيد لحالات أخرى تستخدم
+     الحارس، مثل مغادرة الصفحة أو العمليات التي لا تحفظ مسودتها محلياً. */
   const nav=(v:string)=>{
-    if(v===activeView){ setNavNonce(n=>n+1); return; }
+    if(v===activeView) return;
     if(!confirmLeave(hasUnsaved())) return;
     navigate(`/admin/${v}`);
-    setNavNonce(n=>n+1);
   };
   /* /admin وحده يُحوَّل إلى مساره الكامل — استبدالاً حتى لا يعيده زر الرجوع. */
   useEffect(()=>{ if(!viewInPath) navigate(`/admin/${DEFAULT_VIEW}`,{replace:true}); },[viewInPath,navigate]);
@@ -207,13 +212,13 @@ export default function AdminApp() {
       style={{fontFamily:"var(--font-app)",background:B.bg}}>
       <Sidebar active={activeView} onNav={nav} mobileOpen={mobileSidebar} onMobileClose={()=>setMobileSidebar(false)}
         currentUser={currentUser} onSignOut={signOut} items={navItems}/>
-      <div className="flex-1 min-w-0" key={navNonce}>
+      <div className="flex-1 min-w-0">
         {!viewAllowed && <NoAccessPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {viewAllowed && <>
         {activeView==="dashboard"&& <DashboardPage onMenuOpen={()=>setMobileSidebar(true)} onNav={nav}/>}
-        {activeView==="hotels"   && <HotelsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="transport"&& <TransportPage onMenuOpen={()=>setMobileSidebar(true)}/>}
-        {activeView==="packages" && <PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
+        {(activeView==="hotels"||keptEditorViews.includes("hotels")) && <div hidden={activeView!=="hotels"}><HotelsPage onMenuOpen={()=>setMobileSidebar(true)}/></div>}
+        {(activeView==="transport"||keptEditorViews.includes("transport")) && <div hidden={activeView!=="transport"}><TransportPage onMenuOpen={()=>setMobileSidebar(true)}/></div>}
+        {(activeView==="packages"||keptEditorViews.includes("packages")) && <div hidden={activeView!=="packages"}><PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/></div>}
         {activeView==="trips"    && <TripsPage packages={packages} transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="branches"       && <BranchesPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="bookings"       && <BookingsPage packages={packages} trips={trips} onMenuOpen={()=>setMobileSidebar(true)}/>}

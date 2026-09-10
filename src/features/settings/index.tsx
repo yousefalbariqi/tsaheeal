@@ -8,7 +8,7 @@
    كل الفواتير والتذاكر ورقم الدعم — «١٠١٠٥٣٧٣٩» نصف مكتوبٍ لا يُحفظ. */
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, Check, RotateCcw, Save, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, RotateCcw, Save, ShieldCheck, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { B } from "@/lib/theme";
 import { PageHeader } from "@/components/PageHeader";
@@ -19,7 +19,8 @@ import { useRole } from "@/lib/useRole";
 import { isSupabaseEnabled } from "@/supabase/client";
 import {
   DEFAULT_SETTINGS, fetchSettings, saveSettings, invalidatePublicSettings,
-  type AppSettings,
+  HOTEL_FEATURE_ICON_KEYS, HOTEL_FEATURE_ICON_LABELS,
+  type AppSettings, type HotelFeatureIconKey, type HotelFeatureOption,
 } from "@/data/settings";
 import { configureSla } from "@/features/customer/sla";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
@@ -95,6 +96,15 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
     setForm(f => ({ ...f, internal: { ...f.internal, [k]: v } }));
   const addr = <K extends keyof AppSettings["pub"]["address"]>(k: K) => (v: string) =>
     setForm(f => ({ ...f, pub: { ...f.pub, address: { ...f.pub.address, [k]: v } } }));
+  const setHotelFeatureOptions = (options: HotelFeatureOption[]) => inte("hotelFeatureOptions")(options);
+  const updateHotelFeatureOption = (index:number, patch:Partial<HotelFeatureOption>) =>
+    setHotelFeatureOptions(form.internal.hotelFeatureOptions.map((option,i)=>i===index?{...option,...patch}:option));
+  const removeHotelFeatureOption = (id:HotelFeatureIconKey) =>
+    setHotelFeatureOptions(form.internal.hotelFeatureOptions.filter(option=>option.id!==id));
+  const addHotelFeatureOption = () => {
+    const key=HOTEL_FEATURE_ICON_KEYS.find(id=>!form.internal.hotelFeatureOptions.some(option=>option.id===id));
+    if(key) setHotelFeatureOptions([...form.internal.hotelFeatureOptions,{id:key,label:HOTEL_FEATURE_ICON_LABELS[key]}]);
+  };
 
   /* الإجازات تُحرَّر نصّاً وتُحفظ مصفوفة: حقلٌ واحد أسهل من قائمةٍ
      بأزرار إضافة وحذف لبضعة تواريخ في السنة. النصّ يُشتقّ من المحفوظ
@@ -424,6 +434,33 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
               <Field label="تنبيه قبل الانطلاق (ساعة)">
                 <NumField value={form.internal.departureAlertHours} onChange={inte("departureAlertHours")} min={1} max={168} />
               </Field>
+            </div>
+          </Card>
+
+          <Card title="مكتبة مرافق الفندق"
+            note="هذه القائمة هي المصدر الوحيد لرموز المرافق في نموذج الفندق. اختر اسماً واضحاً مثل «مطعم»؛ لا يحتاج الموظف إلى لصق رموز Emoji قد تختلف بين الأجهزة.">
+            <div className="flex flex-col gap-2.5">
+              {form.internal.hotelFeatureOptions.map((option,index)=>(
+                <div key={option.id} className="flex items-center gap-2">
+                  <select value={option.id} onChange={e=>{
+                    const next=e.target.value as HotelFeatureIconKey;
+                    /* منع تكرار الرمز: كل اسم مرتبط برمز عرض واحد واضح. */
+                    if(form.internal.hotelFeatureOptions.some((row,i)=>i!==index&&row.id===next)) return;
+                    updateHotelFeatureOption(index,{id:next,label:option.label||HOTEL_FEATURE_ICON_LABELS[next]});
+                  }} className={inp} style={{...ist,width:170,cursor:"pointer"}}>
+                    {HOTEL_FEATURE_ICON_KEYS.map(key=><option key={key} value={key}>{HOTEL_FEATURE_ICON_LABELS[key]}</option>)}
+                  </select>
+                  <input value={option.label} onChange={e=>updateHotelFeatureOption(index,{label:e.target.value})}
+                    placeholder="الاسم الظاهر" className={inp} style={ist}/>
+                  <button type="button" aria-label={`حذف ${option.label}`} title="حذف من مكتبة المرافق"
+                    disabled={form.internal.hotelFeatureOptions.length===1} onClick={()=>removeHotelFeatureOption(option.id)}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626",opacity:form.internal.hotelFeatureOptions.length===1?.45:1,cursor:form.internal.hotelFeatureOptions.length===1?"not-allowed":"pointer"}}><X size={15}/></button>
+                </div>
+              ))}
+              <button type="button" onClick={addHotelFeatureOption} disabled={form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length}
+                className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold"
+                style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08",cursor:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?"not-allowed":"pointer",opacity:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?.55:1}}><Plus size={13}/>إضافة مرفق معتمد</button>
             </div>
           </Card>
         </fieldset>

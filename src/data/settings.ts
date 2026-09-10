@@ -58,7 +58,19 @@ export interface InternalSettings {
   maxPilgrimsPerBooking: number;
   /** تنبيه الموظف قبل انطلاق الرحلة بكم ساعة. */
   departureAlertHours: number;
+  /** مكتبة مرافق الفندق المعتمدة. يختار الموظف منها اسماً ورمزاً معروفين
+      بدل لصق Emoji يختلف بين Windows وmacOS أو لا يظهر عند العميل. */
+  hotelFeatureOptions: HotelFeatureOption[];
 }
+
+export const HOTEL_FEATURE_ICON_KEYS = ["wifi","breakfast","restaurant","pool","parking","gym","ac","spa","room_service"] as const;
+export type HotelFeatureIconKey = (typeof HOTEL_FEATURE_ICON_KEYS)[number];
+export interface HotelFeatureOption { id: HotelFeatureIconKey; label: string; }
+export const HOTEL_FEATURE_ICON_LABELS: Record<HotelFeatureIconKey,string> = {
+  wifi:"واي فاي", breakfast:"إفطار", restaurant:"مطعم", pool:"مسبح", parking:"مواقف",
+  gym:"صالة رياضية", ac:"تكييف", spa:"سبا", room_service:"خدمة الغرف",
+};
+export const DEFAULT_HOTEL_FEATURE_OPTIONS: HotelFeatureOption[] = HOTEL_FEATURE_ICON_KEYS.map(id=>({id,label:HOTEL_FEATURE_ICON_LABELS[id]}));
 
 export interface AppSettings { pub: PublicSettings; internal: InternalSettings }
 
@@ -85,6 +97,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     paymentDeadlineHours: 24,
     maxPilgrimsPerBooking: 10,
     departureAlertHours: 24,
+    hotelFeatureOptions: DEFAULT_HOTEL_FEATURE_OPTIONS,
   },
 };
 
@@ -108,9 +121,14 @@ const mergePub = (raw: unknown): PublicSettings => {
 /** يدمج المقروء فوق الافتراضات — حقلٌ أُضيف بعد آخر حفظ يأتي بقيمته. */
 const merge = (raw: unknown): AppSettings => {
   const o = (raw ?? {}) as Partial<AppSettings>;
+  const internal = { ...DEFAULT_SETTINGS.internal, ...(o.internal ?? {}) };
+  const options = Array.isArray(internal.hotelFeatureOptions)
+    ? internal.hotelFeatureOptions.filter((x): x is HotelFeatureOption =>
+        !!x && HOTEL_FEATURE_ICON_KEYS.includes(x.id as HotelFeatureIconKey) && typeof x.label === "string" && !!x.label.trim())
+    : DEFAULT_HOTEL_FEATURE_OPTIONS;
   return {
     pub: mergePub(o.pub),
-    internal: { ...DEFAULT_SETTINGS.internal, ...(o.internal ?? {}) },
+    internal: { ...internal, hotelFeatureOptions: options.length ? options : DEFAULT_HOTEL_FEATURE_OPTIONS },
   };
 };
 

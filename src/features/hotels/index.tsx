@@ -10,7 +10,7 @@ import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate } from "@/components/States";
 import { TabStrip } from "@/components/Tabs";
 import type { MediaKind, HotelFeature, HotelReview, HotelMedia, RoomType, Hotel } from "@/types";
-import { uid, formatKmValue, parseKmToMeters, distanceLabel, newId} from "@/lib/utils";
+import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -30,6 +30,7 @@ import { EntityActions } from "@/components/EntityActions";
 import { permanentlyDelete } from "@/data/repository";
 import { writeLocalOnly } from "@/store/useStore";
 import { hotelReadiness, hotelCover, isPublished } from "./readiness";
+import { useInternalSettings } from "@/data/useSettings";
 
 const HOTEL_FEATURE_ICONS: Record<string, React.FC<{size?:number;style?:React.CSSProperties}>> = {
   wifi:Wifi, breakfast:Coffee, restaurant:UtensilsCrossed,
@@ -87,8 +88,6 @@ function HotelCard({hotel,onEdit,actions}:{hotel:Hotel;onEdit:()=>void;actions?:
             <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
               <MapPin size={11} style={{color:B.gold}}/>
               <span>{hotel.district}</span>
-              <span style={{color:B.border}}>·</span>
-              <span>{distanceLabel(hotel.distanceM)}</span>
             </div>
           </div>
           <span className="text-xs font-mono flex-shrink-0 px-2 py-0.5 rounded-lg mt-0.5"
@@ -145,28 +144,21 @@ type HotelTab="info"|"features"|"rooms"|"media"|"reviews";
 function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave:(h:Hotel)=>void;onClose:()=>void;onDelete?:()=>void}) {
   const isEdit=initial!==null;
   const [tab,setTab]=useState<HotelTab>("info");
-  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:500,district:"",phone:"",mapUrl:"",status:"draft",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
-  const [distanceKmInput,setDistanceKmInput]=useState(()=>formatKmValue(initial?.distanceM??500));
+  const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:0,district:"",phone:"",mapUrl:"",status:"draft",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
+  const settings=useInternalSettings();
+  const featureOptions=settings.hotelFeatureOptions;
   const set=<K extends keyof Hotel>(k:K,v:Hotel[K])=>setForm(f=>({...f,[k]:v}));
-  const handleDistanceChange = (value:string) => {
-    if (!/^[0-9]*[.,]?[0-9]*$/.test(value)) return;
-    setDistanceKmInput(value);
-    const meters = parseKmToMeters(value);
-    if (meters!==null) set("distanceM",meters);
-  };
-  const handleDistanceBlur = () => {
-    const meters = parseKmToMeters(distanceKmInput);
-    if (meters===null) {
-      set("distanceM",0);
-      setDistanceKmInput("0");
-      return;
-    }
-    set("distanceM",meters);
-    setDistanceKmInput(formatKmValue(meters));
-  };
-  const addFeat=()=>set("features",[...form.features,{id:uid(),icon:"wifi",text:""}]);
+  const addFeat=()=>{ const option=featureOptions[0]; set("features",[...form.features,{id:uid(),icon:option?.id??"wifi",text:option?.label??"واي فاي"}]); };
   const delFeat=(id:string)=>set("features",form.features.filter(f=>f.id!==id));
   const updFeat=(id:string,field:keyof HotelFeature,val:string)=>set("features",form.features.map(f=>f.id===id?{...f,[field]:val}:f));
+  const chooseFeatIcon=(id:string,icon:string)=>{
+    const next=featureOptions.find(option=>option.id===icon);
+    set("features",form.features.map(feature=>{
+      if(feature.id!==id) return feature;
+      const current=featureOptions.find(option=>option.id===feature.icon);
+      return {...feature,icon,text:!feature.text.trim()||feature.text===current?.label?(next?.label??feature.text):feature.text};
+    }));
+  };
   const addRoom=()=>set("roomTypes",[...form.roomTypes,{id:uid(),kind:"private",beds:1,pricePerNight:0}]);
   const delRoom=(id:string)=>set("roomTypes",form.roomTypes.filter(r=>r.id!==id));
   const updRoom=(id:string,field:keyof RoomType,val:any)=>set("roomTypes",form.roomTypes.map(r=>r.id===id?{...r,[field]:val}:r));
@@ -253,20 +245,13 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                      ? <div className="text-xs font-bold mt-1.5" style={{color:"#B4530C"}}>{nameError}</div>
                      : form.name.trim()&&<div className="text-xs mt-1.5" style={{color:B.muted}}>يظهر للعميل: <b style={{color:B.text3}}>{hotelDisplayName(form.name)}</b></div>}
                    </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div><Field label="المدينة">
                        <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/>
                      </Field></div>
                 <div><Field label="التصنيف">
                        <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/>
                      </Field></div>
-                <div><Field label="المسافة من الحرم (كم)">
-                       <NumericInput decimal className={inp}
-                         style={{...ist,borderColor:(form.distanceM??0)>0?B.border:"#F3C9C9"}}
-                         value={distanceKmInput} placeholder="0.5" onValueChange={handleDistanceChange} onBlur={handleDistanceBlur}/>
-                     </Field>
-                     {(form.distanceM??0)<=0&&<div className="text-xs font-bold mt-1.5" style={{color:"#BE2626"}}>المسافة بالكيلومتر ورقمها أكبر من صفر</div>}
-                     </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Field label="الحي">
@@ -285,25 +270,6 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
                   <input className={inp} style={{...ist,direction:"ltr",textAlign:"left",paddingInlineStart:36}} value={form.mapUrl} placeholder="https://maps.google.com/..." onChange={e=>set("mapUrl",e.target.value)}/>
                 </div>
                 {form.mapUrl&&<a href={form.mapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold mt-1.5" style={{color:B.gold}}>فتح الموقع في خرائط Google<ArrowRight size={11}/></a>}
-              </div>
-              {/* ── بيانات العقد — إدارية، لا تظهر للعميل ──
-                  «أضف بيانات جهة الاتصال، رقم العقد، فترة العقد، وسياسة
-                  الإلغاء الداخلية كمعلومات إدارية». اختيارية: غيابها لا يمنع
-                  النشر، وتُقرأ عند التفاوض والإلغاء لا عند البيع. */}
-              <div className="rounded-xl p-4 flex flex-col gap-3" style={{background:B.bg,border:`1px solid ${B.border}`}}>
-                <div className="text-xs font-bold" style={{color:B.text3}}>بيانات العقد <span className="font-normal" style={{color:B.muted}}>— إدارية، لا يراها العميل</span></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Field label="جهة الاتصال"><input className={inp} style={ist} value={form.contactPerson??""} placeholder="اسم المسؤول في الفندق" onChange={e=>set("contactPerson",e.target.value)}/></Field></div>
-                  <div><Field label="جوال جهة الاتصال"><input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.contactPhone??""} placeholder="+966 5x xxx xxxx" onChange={e=>set("contactPhone",e.target.value)}/></Field></div>
-                  <div><Field label="رقم العقد"><input className={inp} style={{...ist,direction:"ltr",textAlign:"left"}} value={form.contractNo??""} placeholder="مثال: C-2026-014" onChange={e=>set("contractNo",e.target.value)}/></Field></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Field label="بداية العقد"><input type="date" className={inp} style={{...ist,direction:"ltr"}} value={form.contractFrom??""} onChange={e=>set("contractFrom",e.target.value)}/></Field></div>
-                    <div><Field label="نهايته"><input type="date" className={inp} style={{...ist,direction:"ltr"}} value={form.contractTo??""} onChange={e=>set("contractTo",e.target.value)}/></Field></div>
-                  </div>
-                </div>
-                {form.contractFrom&&form.contractTo&&form.contractTo<form.contractFrom&&<div className="text-xs font-bold" style={{color:"#BE2626"}}>نهاية العقد تسبق بدايته</div>}
-                {form.contractTo&&form.contractTo<new Date().toISOString().slice(0,10)&&<div className="text-xs font-bold" style={{color:"#B4530C"}}>العقد منتهٍ — جدّده قبل ربط باقاتٍ جديدة بهذا الفندق</div>}
-                <div><Field label="سياسة الإلغاء الداخلية"><textarea rows={2} className={inp} style={{...ist,resize:"vertical"}} value={form.cancelPolicyInternal??""} placeholder="مثال: إلغاء مجاني قبل ٧ أيام من الوصول، بعدها تُحتسب ليلة واحدة" onChange={e=>set("cancelPolicyInternal",e.target.value)}/></Field></div>
               </div>
               <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>الحالة</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -375,15 +341,13 @@ function HotelModal({initial,onSave,onClose,onDelete}:{initial:Hotel|null;onSave
               </div>
               <AnimatePresence>{form.features.map(f=>(
                 <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-center">
-                  <select className="border rounded-xl px-2.5 py-2.5 text-sm cursor-pointer flex-shrink-0"
+                  <select aria-label="رمز المرفق" className="border rounded-xl px-2.5 py-2.5 text-sm cursor-pointer flex-shrink-0"
                     style={{borderColor:B.border,background:"#fff",color:B.black,width:150,fontFamily:"inherit"}}
-                    value={f.icon} onChange={e=>updFeat(f.id,"icon",e.target.value)}>
-                    <option value="wifi">📶 واي فاي</option><option value="breakfast">☕ إفطار</option>
-                    <option value="restaurant">🍽️ مطعم</option><option value="pool">🏊 مسبح</option>
-                    <option value="parking">🅿️ موقف</option><option value="gym">🏋️ صالة</option>
-                    <option value="spa">✨ سبا</option><option value="room_service">🛎️ خدمة غرف</option>
+                    value={f.icon} onChange={e=>chooseFeatIcon(f.id,e.target.value)}>
+                    {!featureOptions.some(option=>option.id===f.icon)&&<option value={f.icon}>خيار محفوظ</option>}
+                    {featureOptions.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
                   </select>
-                  <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="اسم المرفق" onChange={e=>updFeat(f.id,"text",e.target.value)}/>
+                  <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="وصف إضافي للمرفق (اختياري)" onChange={e=>updFeat(f.id,"text",e.target.value)}/>
                   <button aria-label="حذف الميزة" title="حذف الميزة" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
                     style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
                 </motion.div>
