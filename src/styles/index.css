@@ -67,6 +67,15 @@
 }
 .ts-desktop-nav { display:none; }
 
+/* واجهات المستفيد لا تستخدم خطاً استعراضياً أو زخارف كتابية؛ DG Shamael
+   هو خط الهوية الموحد للنص والعنوان والعناصر التفاعلية. النطاق محصور
+   بتطبيق العميل فلا تتبدل واجهة الإدارة. */
+.ts-customer-app {
+  --font-app:'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display:'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-quote:'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
 /* ═══ مرحلة اختيار الوجهة ═══ */
 .ts-destination-choice {
   position:relative; min-height:100dvh; overflow:hidden;

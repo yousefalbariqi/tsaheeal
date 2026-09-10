@@ -796,6 +796,14 @@ export function CustomerApp(){
   /* الحساب والحجوزات جزءٌ من الواجهة الجديدة كذلك؛ لا تعود لهما خلفية
      الحرم القديمة أو لون قاعدة مختلف حين ينتقل العميل بين التبويبات. */
   const whiteBase=isFlow||screen==="packages"||screen==="focus"||screen==="focusListing"||screen==="focusConfigure"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
+  /* Safari قد يكشف لون body عند شريط الحالة أو أسفل الـviewport المتغيّر.
+     لا نتركه أبيض في Focus: لون السطح يجب أن يمتد بلا نهاية حول الصفحة. */
+  const pageBase=screen==="focus" ? "#fffaf2" : (screen==="focusListing"||screen==="focusConfigure" ? "#fffaf4" : (whiteBase ? "#fff" : G.bg));
+  useEffect(()=>{
+    document.documentElement.style.backgroundColor=pageBase;
+    document.body.style.backgroundColor=pageBase;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content",pageBase);
+  },[pageBase]);
 
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
@@ -803,7 +811,7 @@ export function CustomerApp(){
 
   /* الكتالوج لم يصل: شاشة صريحة بزرّ إعادة بدل صفحة فارغة تبدو «لا باقات». */
   if(catErr&&!cat.packages.length) return (
-    <div dir={dir} lang={lang} style={{minHeight:"100vh",display:"grid",placeItems:"center",padding:24,background:"#fff",fontFamily:"var(--font-app)"}}>
+    <div dir={dir} lang={lang} className="ts-customer-app" style={{minHeight:"100vh",display:"grid",placeItems:"center",padding:24,background:"#fff",fontFamily:"var(--font-app)"}}>
       <div style={{maxWidth:380,width:"100%",textAlign:"center"}}>
         <div style={{width:52,height:52,borderRadius:"50%",background:C.dangerTint,color:C.danger,display:"grid",placeItems:"center",margin:"0 auto 18px",fontSize:26}}>!</div>
         <h1 style={{...T.h2,color:C.ink,margin:"0 0 8px"}}>{t("loadFailed")}</h1>
@@ -815,7 +823,7 @@ export function CustomerApp(){
 
   return (
     <DirProvider value={dir}>
-    <div dir={dir} lang={lang} className="min-h-screen flex flex-col relative" style={{background:whiteBase?"#fff":G.bg,fontFamily:"var(--font-app)"}}>
+    <div dir={dir} lang={lang} className="ts-customer-app min-h-screen flex flex-col relative" style={{background:pageBase,fontFamily:"var(--font-app)"}}>
       {/* R1: خلفية خفيفة — تُخفى في الشاشات المعاد بناؤها لأن قاعدتها بيضاء */}
       {!whiteBase&&
         <div aria-hidden style={{position:"fixed",inset:0,backgroundImage:"url(/bg-haram.jpg)",backgroundSize:"cover",backgroundPosition:"center",opacity:0.06,pointerEvents:"none",zIndex:0}}/>}
