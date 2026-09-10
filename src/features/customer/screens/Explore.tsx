@@ -18,7 +18,7 @@
    النصّ المتناوب كان يشغّل مؤقّتاً لكل بطاقة — مع عشرين باقة يصير عشرين
    مؤقّتاً تعمل معاً. */
 import { useMemo, useState } from "react";
-import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ArrowLeft, CalendarDays, LayoutGrid, List as ListIcon, Crown, Bus, UserRound } from "lucide-react";
+import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ArrowLeft, CalendarDays, LayoutGrid, List as ListIcon, Crown, Bus, UserRound, Check, Headphones, ShieldCheck, UsersRound, ChevronLeft, RotateCcw, Tag } from "lucide-react";
 import type { Pkg, Trip, Hotel, Transport } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { C, T, R, SPACE, STICKY_H, FONT, flipRTL, money } from "../ui/tokens";
@@ -26,6 +26,7 @@ import { LangSwitch, useDir } from "../ui/kit";
 import { pkgCover, CUSTOM_TRIP_COVER } from "../gallery";
 import { LANGS, cityLabel, type Lang } from "../i18n";
 import { startingPrice } from "@/features/packages/readiness";
+import { todayYMD } from "@/lib/utils";
 
 import { durationLabel } from "../plural";
 
@@ -39,13 +40,15 @@ export interface ExploreProps {
   cities: string[];
   city: string;
   setCity: (c: string) => void;
-  onOpen: (p: Pkg) => void;
+  onOpen: (p: Pkg, trip?: Trip) => void;
   onCustom: () => void;
   signedIn: boolean;
   onAccount: () => void;
   t: (k: string) => string;
   lang: Lang;
   setLang: (l: Lang) => void;
+  /** تجربة مستقلة تبدأ باختيار الوجهة قبل قائمة الباقات. */
+  destinationFirst?: boolean;
 }
 
 /* سعر «يبدأ من» اليدوي من الباقة؛ لا يُشتق من الغرف أو المواصلات. */
@@ -56,6 +59,20 @@ const minTotal = startingPrice;
     فيها واو أصلية مثل «الوجه» → «ال» + «جه». */
 export const citiesOf = (p: Pkg): string[] =>
   p.destination.split(" و").map(s => s.trim()).filter(Boolean);
+
+/**
+ * تسميات الوجهة في أول خطوة مقصودة للعرض، أما بيانات الباقات فتبقى
+ * مختصرةً («مكة» و«المدينة»). لا نطابق نصَّ البطاقة بالنص المعروض،
+ * حتى لا يؤدي اختيار «مكة والمدينة المنورة» إلى نتيجة فارغة.
+ */
+export const matchesDestination = (p: Pkg, destination: string): boolean => {
+  if (!destination) return true;
+  if (destination === "مكة والمدينة") {
+    const cities = citiesOf(p);
+    return cities.includes("مكة") && cities.includes("المدينة");
+  }
+  return citiesOf(p).includes(destination);
+};
 
 /** ترتيب المدن: مكة أولاً ثم المدينة ثم ما بقي على ترتيب البيانات.
     لا يُترك لترتيب ورود الباقات من قاعدة البيانات: ذاك يتبع تاريخ الإضافة،
@@ -131,7 +148,194 @@ function SacredBanner({ lang }: { lang: Lang }) {
   );
 }
 
-export function Explore({ packages, hotels, transports = [], tripsOf, cities, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang }: ExploreProps) {
+/* ═══════════ المرحلة الأولى: اختيار الوجهة ═══════════
+   هذه ليست فلترًا صغيرًا قبل قائمة الباقات؛ إنها أول قرار في الحجز.
+   لذلك لا نعرض باقةً أو رحلة قبل أن يختار العميل وجهته. الصور من public
+   وبـ fallback محليّ ثابت حتى لا تتحوّل البطاقة إلى مساحة فارغة إن فشلت
+   صورةٌ مرفوعة من قاعدة البيانات في شاشة أخرى. */
+function DestinationChoice({ onChoose, signedIn, onAccount, t, lang, setLang }: {
+  onChoose: (destination: "مكة" | "مكة والمدينة") => void;
+  signedIn: boolean;
+  onAccount: () => void;
+  t: (k: string) => string;
+  lang: Lang;
+  setLang: (l: Lang) => void;
+}) {
+  const destinations = [
+    {
+      key: "مكة" as const,
+      title: lang === "ar" ? "مكة المكرمة" : "Makkah",
+      note: lang === "ar" ? "إلى بيت الله الحرام" : "To the Holy Kaaba",
+      image: "/gallery/haram-clocktower.jpg",
+      fallback: "/gallery/haram-drone.jpg",
+    },
+    {
+      key: "مكة والمدينة" as const,
+      title: lang === "ar" ? "مكة والمدينة المنورة" : "Makkah & Madinah",
+      note: lang === "ar" ? "إلى المسجد الحرام والمسجد النبوي" : "The Two Holy Mosques",
+      image: "/gallery/destination-madinah.jpg",
+      fallback: "/gallery/quba.jpg",
+    },
+  ];
+
+  return (
+    <section className="ts-destination-choice" aria-labelledby="destination-title">
+      <header className="ts-destination-header">
+        <button type="button" className="ts-destination-brand" aria-label={t("brand")}>
+          <TasaheelMark size={52} plain />
+        </button>
+        <div className="ts-destination-actions">
+          <button type="button" className="ts-mobile-auth" onClick={onAccount}>
+            <UserRound size={16}/>{signedIn ? t("profile") : t("login")}
+          </button>
+          <LangSwitch compact lang={lang} setLang={setLang} langs={LANGS} label={t("language")} />
+        </div>
+      </header>
+
+      <div className="ts-destination-content">
+        <p className="ts-destination-overline">{lang === "ar" ? "تساهيل العمرة" : "Tasaheel Umrah"}</p>
+        <h1 id="destination-title">{lang === "ar" ? "رحلة إلى أطهر البقاع" : "A journey to the holiest places"}</h1>
+
+        <div className="ts-destination-cards" role="group" aria-label={lang === "ar" ? "اختر وجهة رحلتك" : "Choose your destination"}>
+          {destinations.map((item, index) => (
+            <button key={item.key} type="button" className="ts-destination-card" onClick={() => onChoose(item.key)}>
+              <img src={item.image} alt="" loading={index === 0 ? "eager" : "lazy"}
+                onError={e=>{ e.currentTarget.src=item.fallback; }}/>
+              {index === 0 && <span className="ts-destination-selected" aria-label={lang === "ar" ? "الخيار الموصى به" : "Recommended option"}><Check size={14}/></span>}
+              <span className="ts-destination-card-copy">
+                <strong>{item.title}</strong>
+                <small>{item.note}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className="ts-destination-prompt">{lang === "ar" ? "اختر وجهتك · لنبدأ رحلتك" : "Choose your destination to begin"}</p>
+        <div className="ts-destination-trust" aria-label={lang === "ar" ? "مزايا الخدمة" : "Service benefits"}>
+          <span><UsersRound size={20}/>{lang === "ar" ? "آلاف المعتمرين يسافرون معنا" : "Thousands travel with us"}</span>
+          <span><ShieldCheck size={20}/>{lang === "ar" ? "موثوق ومعتمد" : "Trusted and verified"}</span>
+          <span><Headphones size={20}/>{lang === "ar" ? "دعم في كل خطوة" : "Support at every step"}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* التاريخ هنا ميلاديٌّ محلي، لا نتيجة Date.parse التي قد تعبر المنطقة
+   الزمنية وتضع الرحلة في اليوم السابق. لا نعرض من الماضي أبداً. */
+const addDateDays = (iso: string, days: number): string => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+};
+type CalendarSystem = "gregory" | "islamic";
+const dateParts = (iso: string, lang: Lang, calendar: CalendarSystem = "gregory") => {
+  const date = new Date(`${iso}T00:00:00`);
+  const calendarTag = calendar === "islamic" ? "islamic" : "gregory";
+  const locale = lang === "ar" ? `ar-SA-u-ca-${calendarTag}-nu-latn` : `en-US-u-ca-${calendarTag}-nu-latn`;
+  return {
+    weekday: new Intl.DateTimeFormat(locale, { weekday: "long" }).format(date),
+    day: new Intl.DateTimeFormat(locale, { day: "numeric" }).format(date),
+    month: new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(date),
+  };
+};
+const returnDateFor = (trip: Trip, pkg: Pkg) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(trip.returnDate ?? "") ? trip.returnDate : addDateDays(trip.departureDate, Math.max(0, pkg.days - 1));
+
+/* المرحلة الثانية للتجربة: خطٌ زمني للمغادرات. الأيام الفارغة تمرّ
+   بهدوء، والرحلة فقط هي التي تقطع الخط ببطاقة قابلة للحجز. */
+function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
+  packages: Pkg[];
+  tripsOf: (p: Pkg) => Trip[];
+  destination: string;
+  onBack: () => void;
+  onOpen: (p: Pkg, trip?: Trip) => void;
+  lang: Lang;
+}) {
+  const today = todayYMD();
+  /* أسبوعان فقط عند أول ظهور. لا تمرير لا نهائي: الأسبوع التالي يُضاف
+     بطلبٍ صريح، فلا تُرسم أسابيع لا يحتاجها العميل من البداية. */
+  const [visibleDays, setVisibleDays] = useState(14);
+  const [calendar, setCalendar] = useState<CalendarSystem>("gregory");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const dates = useMemo(() => Array.from({ length: visibleDays }, (_, i) => addDateDays(today, i)), [today, visibleDays]);
+  const timelineDates = useMemo(() => dates.map(iso => ({ iso, part: dateParts(iso, lang, calendar) })), [dates, lang, calendar]);
+  const visible = useMemo(() => packages.filter(p => matchesDestination(p, destination)), [packages, destination]);
+  const tripsByDay = useMemo(() => {
+    const out = new Map<string, { pkg: Pkg; next: Trip }[]>();
+    visible.forEach(pkg => tripsOf(pkg).filter(t => t.departureDate >= today).forEach(next => {
+      const list = out.get(next.departureDate) ?? [];
+      list.push({ pkg, next }); out.set(next.departureDate, list);
+    }));
+    out.forEach(list => list.sort((a, b) => a.next.departureTime.localeCompare(b.next.departureTime)));
+    return out;
+  }, [visible, tripsOf, today]);
+  const destinationLabel = cityLabel(destination, lang);
+  /* لا حدّ زمني مصطنع: قد يضيف المشغّل رحلة بعد أعوام. التحميل يدويٌّ
+     بدفعات أسبوعية فقط، فلا يتحول الخط إلى تمرير لا نهائي مكلف. */
+  const loadMore = () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const delay = Math.min(900, 300 + Math.floor(visibleDays / 7) * 70);
+    window.setTimeout(() => {
+      setVisibleDays(days => days + 7);
+      setLoadingMore(false);
+    }, delay);
+  };
+
+  return (
+    <section className="ts-focus-trips" aria-labelledby="focus-title">
+      <div className="ts-focus-hero">
+        <img src="/bg-haram.jpg" alt="" onError={e => { e.currentTarget.style.display = "none"; }}/>
+        <div className="ts-focus-hero-shade"/>
+        <button type="button" className="ts-focus-back" onClick={onBack} aria-label={lang === "ar" ? "تغيير الوجهة" : "Change destination"}>
+          <ChevronLeft size={24} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
+        </button>
+        <div className="ts-focus-brand"><TasaheelMark size={48} plain /></div>
+        <div className="ts-focus-title">
+          <h1 id="focus-title">{destinationLabel}</h1>
+          <p>{lang === "ar" ? "رحلات مختارة بعناية" : "Carefully selected journeys"}</p>
+        </div>
+      </div>
+
+      <div className="ts-focus-body">
+        <div className="ts-focus-timeline-head">
+          <div><span>{lang === "ar" ? "مواعيد الانطلاق" : "Departure dates"}</span><small>{lang === "ar" ? "عرض أسبوعين في كل دفعة" : "Two weeks per batch"}</small></div>
+          <div className="ts-focus-calendar-switch" role="group" aria-label={lang === "ar" ? "نظام التاريخ" : "Calendar system"}>
+            <button type="button" className={calendar === "gregory" ? "active" : ""} onClick={() => setCalendar("gregory")}>{lang === "ar" ? "ميلادي" : "Gregorian"}</button>
+            <button type="button" className={calendar === "islamic" ? "active" : ""} onClick={() => setCalendar("islamic")}>{lang === "ar" ? "هجري" : "Hijri"}</button>
+          </div>
+        </div>
+        <div className="ts-focus-timeline" role="list" aria-label={lang === "ar" ? "التسلسل الزمني للرحلات القادمة" : "Upcoming trip timeline"}>
+          {timelineDates.map(({ iso, part }, index) => {
+            const isToday = iso === today;
+            const dayTrips = tripsByDay.get(iso) ?? [];
+            const showMonth = index === 0 || part.month !== timelineDates[index - 1].part.month;
+            return <div key={iso} className="ts-focus-timeline-group">
+              {showMonth && <p className="ts-focus-month">{part.month}</p>}
+              <article role="listitem" className={`ts-focus-timeline-day${dayTrips.length ? " has-trip" : ""}`}>
+              <div className="ts-focus-timeline-marker"><span aria-hidden/><div>{isToday && <em>{lang === "ar" ? "اليوم" : "Today"}</em>}<b>{part.weekday}</b><time>{part.day}</time></div></div>
+              {dayTrips.length > 0 && <div className="ts-focus-timeline-trips">
+                {dayTrips.map(({ pkg, next }) => {
+                  const depart = dateParts(next.departureDate, lang, calendar);
+                  const returnDate = dateParts(returnDateFor(next, pkg), lang, calendar);
+                  return <button key={next.id} type="button" className="ts-focus-trip-card" onClick={() => onOpen(pkg, next)}>
+                    <img src={pkgCover(pkg)} alt="" loading="lazy" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/>
+                    <span className="ts-focus-trip-info"><strong>{lang === "ar" ? `رحلة ${destination === "مكة" ? "مكة" : "مكة والمدينة"} — ${pkg.days} أيام` : `${destinationLabel} · ${pkg.days} days`}</strong><small><CalendarDays size={14}/>{lang === "ar" ? `${depart.weekday} ${depart.day}` : `${depart.weekday} ${depart.day}`}</small><small><RotateCcw size={14}/>{lang === "ar" ? `العودة: ${returnDate.weekday} ${returnDate.day}` : `Return: ${returnDate.weekday} ${returnDate.day}`}</small><em><Tag size={14}/>{lang === "ar" ? `تبدأ من ${money(minTotal(pkg))} ر.س` : `From ${money(minTotal(pkg))} SAR`}</em><span className="ts-focus-trip-arrow"><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></span></span>
+                  </button>;
+                })}
+              </div>}
+              </article>
+            </div>;
+          })}
+        </div>
+        <button type="button" className="ts-focus-load-more" onClick={loadMore} disabled={loadingMore} aria-live="polite">{loadingMore ? (lang === "ar" ? "جارٍ تحميل المواعيد…" : "Loading dates…") : (lang === "ar" ? "تحميل مزيد من المواعيد" : "Load more dates")}<ChevronLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button>
+      </div>
+    </section>
+  );
+}
+
+export function Explore({ packages, hotels, transports = [], tripsOf, cities, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang, destinationFirst = false }: ExploreProps) {
   const dir = useDir();
   const [view, setView] = useState<View>(readView);
   const pickView = (v: View) => {
@@ -148,7 +352,7 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
      على العين ما يمكن حجزه فعلاً، ومساحةُ شاشةٍ تُنفَق على ما لا
      يُضغط. الآن: المتاحة شبكةً، وغير المتاحة صفوفاً مضغوطة تحتها. */
   const { open, closed } = useMemo(() => {
-    const list = city ? packages.filter(p => citiesOf(p).includes(city)) : packages;
+    const list = city ? packages.filter(p => matchesDestination(p, city)) : packages;
     const byRank = (a: Pkg, b: Pkg) => pkgRank(a) - pkgRank(b);
     return {
       open:   list.filter(p => tripsOf(p).length > 0).sort(byRank),
@@ -177,13 +381,18 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
     if (c.includes("مكة")) return "مكة";
     return cityLabel(c, lang);
   };
-  const tabs = [{ key: "", label: t("all") }, ...cities.map(c => ({ key: c, label: compactCity(c) }))];
-  const spread = tabs.length === 3;
-  const scroll = tabs.length > 3;
   /* «0 رحلة متاحة» عربيةٌ ركيكة، والصفر حالةٌ لها نصّها. */
   const found = open.length === 0 ? t("noUpcoming")
     : open.length === 1 ? t("tripFound")
     : t("tripsFound").replace("{n}", String(open.length));
+
+  /* الصفحة الأولى للمسار: لا قائمة باقات قبل اختيار وجهة. */
+  if (destinationFirst && !city) {
+    return <DestinationChoice onChoose={setCity} signedIn={signedIn} onAccount={onAccount} t={t} lang={lang} setLang={setLang} />;
+  }
+  if (destinationFirst) {
+    return <FocusTrips packages={packages} tripsOf={tripsOf} destination={city} onBack={() => setCity("")} onOpen={onOpen} lang={lang} />;
+  }
 
   /* ── بطاقة الباقة في الشبكة ── */
   const GridCard = ({ p }: { p: Pkg }) => {
@@ -356,24 +565,9 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
       {/* ═══ المدن وطريقة العرض في صف واحد، فلا تهدر الواجهة صفاً للعناوين. */}
       <div id="packages" className="ts-mobile-head" style={{ paddingInline: SPACE.page, marginTop: 18 }}>
         <div className="ts-mobile-filter-row">
-          <div className="flex ts-mobile-city-tabs" style={{ gap: 6, overflowX: scroll ? "auto" : "visible", scrollbarWidth: "none" }}>
-            {tabs.map(tab => {
-              const on = city === tab.key;
-              return (
-                <button key={tab.key || "all"} onClick={() => setCity(tab.key)} aria-pressed={on}
-                  style={{
-                    flex: spread ? "1 1 0" : "0 0 auto", minWidth: 0, height: 40,
-                    paddingInline: spread ? 8 : 14, borderRadius: R.chip, cursor: "pointer",
-                    background: on ? C.greenDeep : C.white,
-                    border: `1px solid ${on ? C.greenDeep : C.green}`,
-                    color: on ? C.white : C.green,
-                    fontFamily: FONT.sans, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
-                  }}>
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+          <button type="button" onClick={() => setCity("")} className="ts-change-destination">
+            <MapPin size={16}/><span>{compactCity(city)}</span><small>{lang === "ar" ? "تغيير الوجهة" : "Change"}</small>
+          </button>
           <div className="ts-mobile-view-switch" role="group" aria-label={lang === "ar" ? "طريقة العرض" : "View mode"}>
             <button className={view === "grid" ? "on" : ""} aria-label={t("viewGrid")} aria-pressed={view === "grid"} onClick={() => pickView("grid")}><LayoutGrid size={17}/></button>
             <button className={view === "list" ? "on" : ""} aria-label={t("viewList")} aria-pressed={view === "list"} onClick={() => pickView("list")}><ListIcon size={17}/></button>

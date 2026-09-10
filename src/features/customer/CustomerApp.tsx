@@ -32,9 +32,10 @@ import { FlowScreen, InputStack, StackField, PhoneField, TextLink, Labeled } fro
 import { C, T, R, G, LTR, SPACE, formatDate } from "./ui/tokens";
 import { AppBar, BottomBar, DesktopNav } from "./ui/chrome";
 import { Timeline } from "./ui/Timeline";
-import { Explore, citiesOf, cityRank } from "./screens/Explore";
+import { Explore } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
+import { FocusConfigure, FocusDetails } from "./screens/FocusBooking";
 import { Account } from "./screens/Account";
 import { parseRoute, pathOf, NEEDS_PACKAGE, type Screen } from "./routing";
 import { publicSettings } from "@/data/settings";
@@ -202,6 +203,9 @@ export function CustomerApp(){
   const [persons,setPersons]=useState(1);
   const [split,setSplit]=useState<RoomSplit|null>(null);
   const [bookingMode,setBookingMode]=useState<"full"|"transport">("full");
+  /* مسار Focus يبقى داخل تجربته عند الرجوع من بيانات المعتمرين؛ لا يعيده
+     إلى صفحة التفاصيل القديمة في الحجز الرئيسي. */
+  const [bookingOrigin,setBookingOrigin]=useState<"standard"|"focus">("standard");
   const [takenSeats,setTakenSeats]=useState<number[]>([]);
   const [pax,setPax]=useState<Pax[]>([emptyPax()]);
   const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
@@ -350,11 +354,11 @@ export function CustomerApp(){
     const one=cat.packages.find(p=>p.id===route.packageId);
     return one&&!published.some(p=>p.id===one.id) ? [...published,one] : published;
   },[cat.packages,preview,route.packageId]);
-  /* الوجهات المعروضة في الرأس: مشتقّة من الباقات المنشورة لا ثابتة —
-     وجهةٌ بلا باقةٍ منشورة لا تُعرض شريحةً تفتح صفحةً فارغة. */
-  const cities=useMemo(
-    ()=>[...new Set(activePkgs.flatMap(citiesOf))].sort((a,b)=>cityRank(a)-cityRank(b)),
-    [activePkgs]);
+  /* أول خطوة في الحجز لها وجهتان واضحتان فقط. المفاتيح مختصرة لتطابق
+     بيانات الباقات («مكة» و«المدينة»)؛ العرض يوسّعها في cityLabel.
+     لا نشتقها من الباقات حتى يظل خيار مكة والمدينة ظاهراً عند غياب
+     باقته مؤقتاً، ولا تتحول الشاشة الأولى إلى نتيجة فارغة. */
+  const cities=useMemo(()=>["مكة", "مكة والمدينة"],[/* خيارات رحلة ثابتة */]);
 
   /* الرحلة الفائتة لا تُعرض ولو بقيت "open" في القاعدة: تاريخ المغادرة
      هو الحدّ، لا الحالة. بدونه يظهر ٣٠ يوليو حجزاً متاحاً في ٢٣ أغسطس. */
@@ -791,7 +795,7 @@ export function CustomerApp(){
   const isFlow=FLOW_SCREENS.includes(screen);
   /* الحساب والحجوزات جزءٌ من الواجهة الجديدة كذلك؛ لا تعود لهما خلفية
      الحرم القديمة أو لون قاعدة مختلف حين ينتقل العميل بين التبويبات. */
-  const whiteBase=isFlow||screen==="packages"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
+  const whiteBase=isFlow||screen==="packages"||screen==="focus"||screen==="focusListing"||screen==="focusConfigure"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
 
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
@@ -843,7 +847,7 @@ export function CustomerApp(){
           tripsOf={pkgTrips}
           /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
              وتوزيع غرفها إلى نموذج باقة أخرى. */
-          onOpen={p=>{clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
+          onOpen={p=>{setBookingOrigin("standard");clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
           onCustom={()=>setScreen("custom")}
           signedIn={!!session}
           onAccount={()=>session ? setScreen("profile") : openLogin("track")}
@@ -851,6 +855,38 @@ export function CustomerApp(){
         />
         <BottomBar screen={screen} onNav={setScreen} t={t}/>
       </>}
+
+      {/* نسخة تجريبية منفصلة: /focus. لا تغيّر شاشة الاستكشاف الرئيسية (/). */}
+      {screen==="focus"&&<>
+        <Explore
+          packages={activePkgs}
+          hotels={cat.hotels}
+          transports={cat.transports}
+          cities={cities} city={city} setCity={nextCity=>{
+            setCity(nextCity);
+            if(!nextCity){ setPkg(null); setTrip(null); setScreen("focus"); }
+          }}
+          tripsOf={pkgTrips}
+          destinationFirst
+          onOpen={(p,chosenTrip)=>{setBookingOrigin("focus");clearDraft();setPkg(p);setTrip(chosenTrip??pkgTrips(p)[0]??null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("focusListing",p.id);}}
+          onCustom={()=>setScreen("custom")}
+          signedIn={!!session}
+          onAccount={()=>session ? setScreen("profile") : openLogin("track")}
+          t={t} lang={lang} setLang={setLang}
+        />
+      </>}
+
+      {/* صفحات التفاصيل والتخصيص الخاصة بتجربة Focus فقط. */}
+      {screen==="focusListing"&&pkg&&(trip??pkgTrips(pkg)[0])&&
+        <FocusDetails pkg={pkg} trip={trip??pkgTrips(pkg)[0]} hotel={hotel} transport={transport} lang={lang}
+          persons={persons} setPersons={setPersons} split={split} setSplit={setSplit}
+          onBack={()=>setScreen("focus")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
+      }
+      {screen==="focusConfigure"&&pkg&&(trip??pkgTrips(pkg)[0])&&
+        <FocusConfigure pkg={pkg} trip={trip??pkgTrips(pkg)[0]} hotel={hotel} transport={transport}
+          persons={persons} setPersons={setPersons} split={split} setSplit={setSplit} lang={lang}
+          onBack={()=>setScreen("focusListing")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
+      }
 
       {/* ═══ LISTING — الصفحة الواحدة (تحل محل trip + seat + room) ═══ */}
       {screen==="listing"&&pkg&&
@@ -882,7 +918,7 @@ export function CustomerApp(){
         <FlowScreen
           variant="auth"
           title={t("passengers")} subtitle={t("pilgrimCardHint")} step={2}
-          onBack={()=>setScreen("listing")} onClose={()=>setScreen("listing")}
+          onBack={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")} onClose={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")}
           cta={goSeats} ctaLabel={t("next")}
           error={paxTried&&!paxValid?t("fillFirst"):undefined}>
           <div className="flex flex-col gap-4">
@@ -1397,13 +1433,12 @@ export function CustomerApp(){
       </AnimatePresence>
 
       {/* فراغ أسفل الشاشات بلا شريط سفلي حتى لا يغطّي زر الواتساب آخر عنصر */}
-      {!TABBED_SCREENS.includes(screen)&&screen!=="listing"&&!isFlow&&<div style={{height:76,flexShrink:0}}/>}
+      {!TABBED_SCREENS.includes(screen)&&screen!=="listing"&&screen!=="focus"&&screen!=="focusListing"&&screen!=="focusConfigure"&&!isFlow&&<div style={{height:76,flexShrink:0}}/>}
 
       {/* زر واتساب — ثابت في كل الشاشات، ويرتفع فوق الشريط السفلي حيث يظهر */}
-      {/* الزر العائم يختفي في شاشات المسار: زر الإجراء الثابت أهم منه،
-          وكان يغطّيه. ويرتفع فوق شريط التنقّل حيث يظهر. */}
-      {/* صفحة الباقة جزء من قرار الحجز؛ لا زر عائم يزاحم شريط الإجمالي أو الخيارات. */}
-      {!isFlow&&screen!=="listing"&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)?100:24}/>} 
+      {/* يظهر في تجربة Focus طوال التصفح؛ وفي صفحة تفاصيل الحجز يرتفع كي
+          لا يغطي زر الإكمال. صفحة الحجز الرئيسية القديمة تبقيه مخفياً. */}
+      {!isFlow&&screen!=="listing"&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)?100:(screen==="focusListing"||screen==="focusConfigure"?88:24)}/>}
 
       {/* كان مركّباً في AdminApp وحده، فكل toast من طبقة البيانات كان
           يُطلَق في لا مكان: العميل يرى «تم استلام طلبك» ثم لا شيء. dir

@@ -8,7 +8,7 @@
    في CustomerApp صار يُنادي navigate، و`screen` يُقرأ من المسار.
    نسختان تُزامنان تتفارقان دائماً عند أول حالة لم تُحسب. */
 export type Screen =
-  | "packages" | "listing" | "custom" | "passengers" | "seats" | "review"
+  | "packages" | "focus" | "focusListing" | "focusConfigure" | "listing" | "custom" | "passengers" | "seats" | "review"
   | "success" | "track" | "profile" | "login" | "otp" | "account";
 
 export interface CustomerRoute {
@@ -30,7 +30,7 @@ const isBookStep = (s: string): s is BookStep =>
   (BOOK_STEPS as readonly string[]).includes(s);
 
 /** الخطوات التي تحتاج باقة مُحدّدة — بدونها المسار ناقص ويُعاد توجيهه. */
-export const NEEDS_PACKAGE: Screen[] = ["listing", ...BOOK_STEPS];
+export const NEEDS_PACKAGE: Screen[] = ["listing", "focusListing", "focusConfigure", ...BOOK_STEPS];
 
 /** ترتيب خطوات المسار — لحساب «الخطوة السابقة» ولمنع القفز للأمام. */
 export const STEP_ORDER: Screen[] = ["listing", "passengers", "seats", "review", "success"];
@@ -39,6 +39,9 @@ export function parseRoute(pathname: string): CustomerRoute {
   const seg = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   const [a, b, c] = seg;
   if (!a) return { screen: "packages" };
+  if (a === "focus" && b === "p" && c) return { screen: "focusListing", packageId: c };
+  if (a === "focus" && b === "book" && c) return { screen: "focusConfigure", packageId: c };
+  if (a === "focus") return { screen: "focus" };
   if (a === "p" && b) return { screen: "listing", packageId: b };
   if (a === "book" && b) {
     /* خطوة مجهولة في مسار حجز صحيح ⇒ أول خطوة، لا صفحة الاستكشاف:
@@ -57,6 +60,9 @@ export function pathOf(screen: Screen, packageId?: string): string {
   const pid = packageId ? encodeURIComponent(packageId) : "";
   switch (screen) {
     case "packages":   return "/";
+    case "focus":      return "/focus";
+    case "focusListing": return pid ? `/focus/p/${pid}` : "/focus";
+    case "focusConfigure": return pid ? `/focus/book/${pid}` : "/focus";
     case "custom":     return "/custom";
     case "track":      return "/orders";
     case "profile":    return "/profile";
