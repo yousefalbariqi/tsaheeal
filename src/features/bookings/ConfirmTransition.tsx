@@ -75,7 +75,7 @@ export function ConfirmTransition({ t, booking, busy, onConfirm, onCancel }: {
         </div>
 
         {/* الأثر — أهمّ ما في النافذة، فهو أوّل ما يُقرأ */}
-        <div className="mx-6 mb-4 rounded-xl px-4 py-3" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+        <div className="mx-6 mb-4 rounded-xl px-4 py-3" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
           <div className="text-xs font-bold mb-2" style={{ color: B.text3 }}>ما سيحدث</div>
           <ul className="m-0 ps-4 flex flex-col gap-1.5">
             {t.effects.map(e => (
@@ -123,13 +123,13 @@ export function ConfirmTransition({ t, booking, busy, onConfirm, onCancel }: {
           <button onClick={() => ready && onConfirm({ internalReason: internalReason.trim(), customerMessage: customerMessage.trim(), notify })}
             disabled={!ready}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold"
-            style={{ background: risky ? "#BE2626" : B.primary, color: "#fff", border: "none", opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "not-allowed" }}>
-            {busy && <Spinner size={13} color="#fff" track="rgba(255,255,255,0.3)" />}
+            style={{ background: risky ? "#BE2626" : B.gold, color: risky ? "#fff" : B.black, border: "none", opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "not-allowed" }}>
+            {busy && <Spinner size={13} color={risky ? "#fff" : B.black} track={risky ? "rgba(255,255,255,0.3)" : "rgba(27,23,18,0.25)"} />}
             {busy ? "جارٍ التنفيذ…" : t.label}
           </button>
           <button onClick={() => !busy && onCancel()}
             className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.bg, color: B.text2, border: "none" }}>تراجع</button>
+            style={{ background: B.fill, color: B.text2, border: "none" }}>تراجع</button>
         </div>
       </motion.div>
     </motion.div>

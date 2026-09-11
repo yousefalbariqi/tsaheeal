@@ -28,7 +28,7 @@ import { Spinner } from "@/components/Spinner";
 /* ═══ حوار الحذف النهائي ═══════════════════════════════════════════
    منفصلٌ عن حوار الأرشفة قصداً: لونه ونصّه وإقرارُه يجب أن يقولا «هذا
    مختلف». وبلا إقرارٍ صريح يصير الحذف النهائي ضغطتين كالأرشفة تماماً. */
-export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, onCancel }: {
+export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, onCancel, safeAlternative = "الأرشفة" }: {
   name: string;
   /** اسم الكيان في الجملة: «الفندق» · «الطلب المخصّص». */
   label: string;
@@ -36,6 +36,8 @@ export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, 
   busy: boolean;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
+  /** الإجراء الآمن البديل للكيانات التي لا تستخدم الأرشفة. */
+  safeAlternative?: string;
 }) {
   const [reason, setReason] = useState("");
   const [understood, setUnderstood] = useState(false);
@@ -55,7 +57,7 @@ export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, 
         <h3 className="text-base font-bold mb-1" style={{ color: B.black }}>حذف {label} نهائياً</h3>
         <p className="text-sm leading-relaxed mb-4" style={{ color: B.text2 }}>
           <b style={{ color: B.black }}>{name}</b> سيُمحى من قاعدة البيانات ولا يمكن استرجاعه.
-          إن أردتَ إخفاءه مع الاحتفاظ به فاستخدم الأرشفة.
+          إن أردتَ إخفاءه مع الاحتفاظ به فاستخدم {safeAlternative}.
         </p>
 
         {blocked ? (
@@ -64,7 +66,7 @@ export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, 
             <ul className="text-xs leading-relaxed m-0 ps-4" style={{ color: "#6b5a2a" }}>
               {blockers.map(b => <li key={b}>{b}</li>)}
             </ul>
-            <div className="text-xs mt-2" style={{ color: "#8A6A08" }}>الأرشفة متاحة دائماً بدلاً منه.</div>
+            <div className="text-xs mt-2" style={{ color: "#8A6A08" }}>{safeAlternative} متاح دائماً بدلاً منه.</div>
           </div>
         ) : (
           <>
@@ -100,7 +102,7 @@ export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, 
           )}
           <button onClick={onCancel}
             className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.bg, color: B.text2, border: "none" }}>
+            style={{ background: B.fill, color: B.text2, border: "none" }}>
             {blocked ? "إغلاق" : "إلغاء"}
           </button>
         </div>
@@ -128,19 +130,24 @@ export interface EntityActionsProps {
   /** نصّ التعطيل — يختلف بحسب الكيان: «إيقاف مؤقت» للفندق. */
   disableLabel?: string;
   /** الأرشفة بسببها. المكوّن يفتح الحوار ويستدعيها بالسبب. */
-  onArchive: (reason: string) => void;
+  onArchive?: (reason: string) => void;
   /** الحذف النهائي. يُحذف الزرّ إن لم يُمرَّر. */
   onPermanentDelete?: (reason: string) => Promise<void> | void;
   /** أسبابٌ تمنع الحذف النهائي — تُعرض في الحوار بنصّها. */
   deleteBlockers?: string[];
   /** true فيصير زرّ التعديل عريضاً في أسفل بطاقة. */
   primaryEdit?: boolean;
+  /** في المواصلات يكون الإجراء لفظياً بدلاً من رمز العين. */
+  toggleAsLabel?: boolean;
+  /** البديل الآمن للحذف النهائي؛ الإيقاف للمواصلات. */
+  safeAlternative?: string;
 }
 
 export function EntityActions({
   name, label, canWrite, isAdmin, onEdit,
   active, onToggleActive, disableLabel = "إيقاف مؤقت",
   onArchive, onPermanentDelete, deleteBlockers = [], primaryEdit = true,
+  toggleAsLabel = false, safeAlternative,
 }: EntityActionsProps) {
   const [dialog, setDialog] = useState<null | "archive" | "delete">(null);
   const [busy, setBusy] = useState(false);
@@ -173,29 +180,37 @@ export function EntityActions({
 
   return (
     <>
-      <div className="flex gap-2 items-center">
+      <div className="relative z-10 flex gap-2 items-center min-w-0" style={{ isolation: "isolate" }}>
         {onEdit && (
-          <button onClick={onEdit}
+          <button type="button" onClick={onEdit}
             className={`${primaryEdit ? "flex-1" : ""} flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold cursor-pointer`}
-            style={{ background: B.primary, color: B.cream, border: "none", height: 38 }}>
+            style={{ background: B.gold, color: B.black, border: "none", height: 38 }}>
             <Pencil size={13} />تعديل
           </button>
         )}
 
-        {onToggleActive && (
-          <button onClick={() => onToggleActive(!active)} style={iconBtn(active ? "neutral" : "gold")}
+        {onToggleActive && !toggleAsLabel && (
+          <button type="button" onClick={() => onToggleActive(!active)} style={iconBtn(active ? "neutral" : "gold")}
             title={active ? disableLabel : "تنشيط"} aria-label={active ? disableLabel : "تنشيط"}>
             {active ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         )}
 
-        <button onClick={() => setDialog("archive")} style={iconBtn("gold")}
+        {onToggleActive && toggleAsLabel && (
+          <button type="button" onClick={() => onToggleActive(!active)}
+            className="flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer"
+            style={{height:38,background:active?"#FBE6E6":"#E3F3E8",border:`1px solid ${active?"#F3C9C9":"#C4E4CE"}`,color:active?"#BE2626":"#1E7A44"}}>
+            {active ? "إيقاف" : "تفعيل"}
+          </button>
+        )}
+
+        {onArchive && <button type="button" onClick={() => setDialog("archive")} style={iconBtn("gold")}
           title="أرشفة" aria-label={`أرشفة ${label}`}>
           <Archive size={15} />
-        </button>
+        </button>}
 
         {onPermanentDelete && isAdmin && (
-          <button onClick={() => setDialog("delete")} style={iconBtn("danger")}
+          <button type="button" onClick={() => setDialog("delete")} style={iconBtn("danger")}
             title={deleteBlockers.length ? "الحذف غير متاح — السجل مرتبط بغيره" : "حذف نهائي"}
             aria-label={`حذف ${label} نهائياً`}>
             <Trash2 size={15} />
@@ -203,13 +218,13 @@ export function EntityActions({
         )}
       </div>
 
-      {dialog === "archive" && (
+      {dialog === "archive" && onArchive && (
         <DeleteDialog onCancel={() => setDialog(null)}
           onConfirm={reason => { onArchive(reason); setDialog(null); }} />
       )}
       {dialog === "delete" && (
         <PermanentDeleteDialog name={name} label={label} blockers={deleteBlockers} busy={busy}
-          onConfirm={runDelete} onCancel={() => !busy && setDialog(null)} />
+          onConfirm={runDelete} onCancel={() => !busy && setDialog(null)} safeAlternative={safeAlternative} />
       )}
     </>
   );

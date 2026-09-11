@@ -77,9 +77,9 @@ export function Pager({ p, unit = "صف" }: { p: Paged<unknown>; unit?: string }
     minWidth: 34, height: 34, padding: "0 9px", borderRadius: 10,
     fontSize: 13, fontWeight: 700, fontFamily: "var(--font-app)",
     cursor: on ? ("pointer" as const) : ("not-allowed" as const),
-    background: active ? B.primary : "#fff",
-    border: `1px solid ${active ? B.primary : B.border}`,
-    color: active ? B.gold : on ? B.text2 : B.muted,
+    background: active ? B.gold : "#fff",
+    border: `1px solid ${active ? B.gold : B.border}`,
+    color: active ? B.black : on ? B.text2 : B.muted,
     display: "flex", alignItems: "center", justifyContent: "center",
     opacity: on ? 1 : 0.55,
   });

@@ -19,7 +19,7 @@ import { ticketPhase, TICKET_PHASE_LABEL, TICKET_PHASE_TONE, docFileName } from 
 import type { TicketPhase } from "@/types";
 
 /* ─── Ticket Print View ─── */
-export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void}) {
+export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPrint?:boolean;onClose:()=>void}) {
   /* الرحلة والفرع من المخزن: جدول tickets يحمل `departure_point` نصّاً
      منسوخاً لحظة الإصدار ولا يحمل معرّف فرع. الوصول إليه عبر الحجز →
      الرحلة → الفرع. وكلّها في المخزن أصلاً فلا طلب إضافي. */
@@ -54,10 +54,14 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
       style={{background:"rgba(14,12,11,.75)"}} onClick={onClose}>
       <div className="w-full max-w-2xl flex flex-col gap-3 my-4" onClick={e=>e.stopPropagation()}>
+        {/* نطاق الطباعة — كان ناقصاً هنا وحده: زرّ «طباعة» في التذكرة
+            يطبع الصفحة كلها (القائمة الجانبية والجدول خلف النافذة) لا
+            التذكرة. نفس القاعدة المستعملة في الفاتورة. */}
+        <style>{`@media print{ body *{visibility:hidden !important;} #ticket-sheet, #ticket-sheet *{visibility:visible !important;} #ticket-sheet{position:absolute !important;inset:0 !important;margin:0 !important;max-width:none !important;box-shadow:none !important;border-radius:0 !important;} }`}</style>
         {/* شريط الإجراءات — نفسه المستعمل في الفاتورة.
             كان هنا زرّ «إغلاق» وحده: لا طباعة ولا تنزيل ولا إرسال. */}
         <DocActions
-          docType="ticket" docId={ticket.ticketNo}
+          docType="ticket" docId={ticket.ticketNo} autoPrint={autoPrint}
           fileName={docFileName("ticket", ticket.ticketNo, ticket.clientName)}
           whatsapp={{
             phone: ticket.clientPhone,
@@ -66,9 +70,9 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
           onClose={onClose}
         />
         {/* ticket body */}
-        <div className="rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(14,12,11,.5)"}}>
+        <div id="ticket-sheet" className="rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(14,12,11,.5)"}}>
           {/* Hero band */}
-          <div className="relative px-8 py-7" style={{background:B.primary,backgroundImage:geoBg}}>
+          <div className="relative px-8 py-7" style={{background:B.primaryDeep,backgroundImage:geoBg}}>
             <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
             <div className="flex items-start justify-between gap-6">
               <div>
@@ -135,7 +139,7 @@ export function TicketCard({ticket,onClose}:{ticket:TicketEntry;onClose:()=>void
             </div>
             <div className="flex-1 flex items-center gap-2">
               <div className="flex-1 h-px" style={{background:B.border}}/>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{background:B.primary}}>🕋</div>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-lg flex-shrink-0" style={{background:B.primaryDeep}}>🕋</div>
               <div className="flex-1 h-px" style={{background:B.border}}/>
             </div>
             <div className="text-center min-w-0">
@@ -286,7 +290,7 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     : base;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="التذاكر" crumb="تذاكر السفر" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       {/* Stats */}
       <div className="px-4 md:px-8 pt-4 md:pt-5">
@@ -303,8 +307,8 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
             <button key={v} onClick={()=>setPhaseFilter(v as "all"|TicketPhase)}
               style={{padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer",
                 border:`1px solid ${phaseFilter===v?B.gold:B.border}`,
-                background:phaseFilter===v?B.primary:"#fff",
-                color:phaseFilter===v?B.gold:B.text2,whiteSpace:"nowrap"}}>{l}</button>
+                background:phaseFilter===v?B.gold:"#fff",
+                color:phaseFilter===v?B.black:B.text2,whiteSpace:"nowrap"}}>{l}</button>
           ))}
           <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{serverSearching?"جارِ البحث…":`${activePg.total} / ${tickets.length}`}</span>
         </div>
@@ -371,7 +375,7 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
           {activePg.rows.map(t=>(
             <motion.div key={t.ticketNo} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
               className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="px-4 py-3 flex items-center justify-between" style={{background:B.primary}}>
+              <div className="px-4 py-3 flex items-center justify-between" style={{background:B.primaryDeep}}>
                 <span style={{fontFamily:"var(--font-app)",fontWeight:800,fontSize:15,color:B.gold}}>{t.ticketNo}</span>
                 <span style={{fontFamily:"var(--font-app)",fontSize:12,color:"#9DBAB6"}}>{t.bookingId}</span>
               </div>

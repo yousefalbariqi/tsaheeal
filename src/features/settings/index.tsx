@@ -41,7 +41,7 @@ const ltr = { direction: "ltr" as const, textAlign: "right" as const };
 function Card({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl p-5 md:p-6" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-      <h2 className="font-extrabold text-base" style={{ color: B.black, margin: 0 }}>{title}</h2>
+      <h2 className="font-extrabold text-base" style={{ color: B.primaryDeep, margin: 0 }}>{title}</h2>
       {note && <p className="text-xs mt-1 mb-4 leading-relaxed" style={{ color: B.muted }}>{note}</p>}
       <div className={note ? "" : "mt-4"}>{children}</div>
     </section>
@@ -380,8 +380,8 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
                       className="px-3 py-2 rounded-xl text-sm font-bold"
                       style={{
                         border: `1px solid ${on ? B.gold : B.border}`,
-                        background: on ? B.primary : "#fff",
-                        color: on ? B.gold : B.text2,
+                        background: on ? B.gold : "#fff",
+                        color: on ? B.black : B.text2,
                         cursor: isAdmin ? "pointer" : "not-allowed",
                       }}>{d}</button>
                   );
@@ -455,12 +455,12 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
                   <button type="button" aria-label={`حذف ${option.label}`} title="حذف من مكتبة المرافق"
                     disabled={form.internal.hotelFeatureOptions.length===1} onClick={()=>removeHotelFeatureOption(option.id)}
                     className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626",opacity:form.internal.hotelFeatureOptions.length===1?.45:1,cursor:form.internal.hotelFeatureOptions.length===1?"not-allowed":"pointer"}}><X size={15}/></button>
+                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626",opacity:form.internal.hotelFeatureOptions.length===1 ? .45 : 1,cursor:form.internal.hotelFeatureOptions.length===1?"not-allowed":"pointer"}}><X size={15}/></button>
                 </div>
               ))}
               <button type="button" onClick={addHotelFeatureOption} disabled={form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length}
                 className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold"
-                style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08",cursor:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?"not-allowed":"pointer",opacity:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?.55:1}}><Plus size={13}/>إضافة مرفق معتمد</button>
+                style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08",cursor:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?"not-allowed":"pointer",opacity:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length ? .55 : 1}}><Plus size={13}/>إضافة مرفق معتمد</button>
             </div>
           </Card>
         </fieldset>

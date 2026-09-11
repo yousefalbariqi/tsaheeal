@@ -48,7 +48,7 @@ export function AppSelect({
         className={`w-full flex items-center justify-between gap-2 border rounded-xl px-3.5 py-2.5 text-sm text-right focus:outline-none ${className ?? ""}`}
         style={{
           borderColor: invalid ? "#E1A3A3" : B.border,
-          background: disabled ? B.bg : "#fff",
+          background: disabled ? B.fill : "#fff",
           color: inner ? B.black : B.placeholder,
           fontFamily: "inherit",
           cursor: disabled ? "not-allowed" : "pointer",
@@ -84,7 +84,7 @@ export function AppSelect({
                 value={o.value === "" ? EMPTY : o.value}
                 disabled={o.disabled}
                 className="relative flex items-center justify-between gap-2 rounded-lg py-2 pr-3 pl-8 text-sm text-right outline-none cursor-pointer select-none data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed data-[highlighted]:bg-[color:var(--sel-hl)]"
-                style={{ color: B.black, ["--sel-hl" as any]: B.bg }}
+                style={{ color: B.black, ["--sel-hl" as any]: B.fill }}
               >
                 <RS.ItemText>{o.label}</RS.ItemText>
                 <RS.ItemIndicator className="absolute left-2 inline-flex items-center">

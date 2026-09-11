@@ -126,7 +126,7 @@ function TripFormModal({
   const set=<K extends keyof TripForm>(k:K,v:TripForm[K])=>setForm(f=>({...f,[k]:v}));
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
-  const istOff={...ist,background:B.bg,color:B.text2} as const;
+  const istOff={...ist,background:B.fill,color:B.text2} as const;
   const req=<span style={{color:B.gold}}>*</span>;
 
   const selPkg=packages.find(p=>p.id===form.packageId);
@@ -212,7 +212,7 @@ function TripFormModal({
       <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} exit={{opacity:0,y:30}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:540,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
+        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -282,12 +282,12 @@ function TripFormModal({
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold" style={{color:B.text3}}>السائقون <span style={{color:B.muted,fontWeight:600}}>(اختياري — بالتعاقد)</span></label>
-              <button onClick={addDriver} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={10}/>سائق آخر</button>
+              <button onClick={addDriver} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={10}/>سائق آخر</button>
             </div>
             <div className="flex flex-col gap-2">
               {form.drivers.map((d,i)=>(
                 <div key={d.id} className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0" style={{background:B.primary,color:B.gold}}>{i+1}</div>
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0" style={{background:B.gold,color:B.black}}>{i+1}</div>
                   <input className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none" style={ist} value={d.name} placeholder="اسم السائق" onChange={e=>updDriver(d.id,"name",e.target.value)}/>
                   <input className="border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{...ist,direction:"ltr",width:140}} value={d.phone} placeholder="+966 5x xxx xxxx" onChange={e=>updDriver(d.id,"phone",e.target.value)}/>
                   {form.drivers.length>1&&<button aria-label="حذف السائق" title="حذف السائق" onClick={()=>delDriver(d.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>}
@@ -301,7 +301,7 @@ function TripFormModal({
             <div className="flex gap-2 mb-2">
               {([["branch","من الفروع"],["custom","موقع آخر (خريطة)"]] as const).map(([m,lbl])=>(
                 <button key={m} type="button" onClick={()=>setDepMode(m)} className="flex-1 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{border:`1px solid ${depMode===m?B.gold:B.border}`,background:depMode===m?B.primary:"#fff",color:depMode===m?B.gold:B.text2}}>{lbl}</button>
+                  style={{border:`1px solid ${depMode===m?B.gold:B.border}`,background:depMode===m?B.gold:"#fff",color:depMode===m?B.black:B.text2}}>{lbl}</button>
               ))}
             </div>
             {depMode==="branch"
@@ -350,7 +350,7 @@ function TripFormModal({
             {isEdit?<Pencil size={14}/>:<Plane size={14}/>}
             {busy?(isEdit?"جارٍ الحفظ…":"جارٍ الإطلاق…"):(isEdit?"حفظ التعديلات":"إطلاق الرحلة")}
           </button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>
     </motion.div>
@@ -395,7 +395,7 @@ function CancelTripConfirm({trip,pkgName,impact,onConfirm,onCancel}:{trip:Trip;p
               </div>
             ))}
           </div>
-          <div className="rounded-xl px-4 py-3 mt-3 text-xs w-full text-right leading-relaxed" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2}}>
+          <div className="rounded-xl px-4 py-3 mt-3 text-xs w-full text-right leading-relaxed" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>
             {n===0
               ? "لا حجوزات قائمة على هذه الرحلة — لا أحد يتأثّر بإلغائها."
               : <>عند التأكيد تُلغي القاعدة <b style={{color:B.black}}>تذاكر</b> هذه الحجوزات تلقائياً وتُحرَّر <b style={{color:B.black}}>مقاعدها</b>. الفواتير المدفوعة تبقى محفوظة حتى يُقرَّر استرجاعها. لا تُرسَل أي رسالة تلقائياً — بعد التأكيد تظهر قائمة العملاء للتواصل معهم.</>}
@@ -412,7 +412,7 @@ function CancelTripConfirm({trip,pkgName,impact,onConfirm,onCancel}:{trip:Trip;p
         <div className="flex gap-3 px-6 pb-6">
           <button onClick={()=>ready&&onConfirm(reason.trim())} disabled={!ready} className="flex-1 py-2.5 rounded-xl font-extrabold text-sm"
             style={{background:"#BE2626",color:"#fff",border:"none",opacity:ready?1:.45,cursor:ready?"pointer":"not-allowed"}}>تأكيد إلغاء الرحلة</button>
-          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>تراجع</button>
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>تراجع</button>
         </div>
       </motion.div>
     </motion.div>
@@ -437,7 +437,7 @@ function CancelFollowUp({trip,pkgName,reason,impact,onClose}:{trip:Trip;pkgName:
       style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
       <motion.div initial={{opacity:0,y:24}} animate={{opacity:1,y:0}} exit={{opacity:0,y:24}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:600,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
+        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -470,7 +470,7 @@ function CancelFollowUp({trip,pkgName,reason,impact,onClose}:{trip:Trip;pkgName:
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-sm truncate" style={{color:B.black}}>{b.clientName||"—"}</span>
-                            <span className="font-mono text-xs px-1.5 py-0.5 rounded-md" style={{background:B.bg,color:B.muted}}>{b.id}</span>
+                            <span className="font-mono text-xs px-1.5 py-0.5 rounded-md" style={{background:B.fill,color:B.muted}}>{b.id}</span>
                             {b.paymentStatus==="verified"&&<span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{background:"#E3F3E8",color:"#1E7A44"}}>مدفوع {money(b.total)}</span>}
                           </div>
                           <div className="text-xs mt-0.5 flex items-center gap-2" style={{color:B.muted}}>
@@ -488,7 +488,7 @@ function CancelFollowUp({trip,pkgName,reason,impact,onClose}:{trip:Trip;pkgName:
               </>}
         </div>
         <div className="flex gap-2 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={onClose} className="mr-auto px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إغلاق</button>
+          <button onClick={onClose} className="mr-auto px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إغلاق</button>
         </div>
       </motion.div>
     </motion.div>
@@ -530,7 +530,7 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
       style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
       <motion.div initial={{opacity:0,y:24}} animate={{opacity:1,y:0}} exit={{opacity:0,y:24}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:560,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
+        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <h2 className="font-extrabold text-white" style={{fontSize:15,fontFamily:"var(--font-app)"}}>تفاصيل الرحلة – {tripLabel(trip,pkgName)}</h2>
@@ -600,14 +600,14 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
             وعودٌ بأثرٍ على المستقبل، ولا مستقبل لها. */}
         <div className="flex gap-2 px-6 py-4 flex-shrink-0 flex-wrap" style={{borderTop:`1px solid ${B.border}`}}>
           {!isCancelled&&!isEnded&&canEdit&&<button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.primary,color:B.cream,border:"none"}}><Pencil size={13}/>تعديل</button>}
+            style={{background:B.gold,color:B.black,border:"none"}}><Pencil size={13}/>تعديل</button>}
           {!isCancelled&&!isEnded&&<button onClick={onToggleStatus} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:isFull?"#E3F3E8":"#FBF3D6",color:isFull?"#1E7A44":"#8A6A08",border:`1px solid ${isFull?"#C4E4CE":"#F0E3AE"}`}}>
             {isFull?"استئناف الحجز":"إيقاف الحجز مؤقتاً"}</button>}
           {!isCancelled&&!isEnded&&<button onClick={()=>setConfirmCancel(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}><X size={13}/>إلغاء الرحلة</button>}
           {isEnded&&<span className="flex items-center px-4 py-2.5 text-xs font-bold" style={{color:B.muted}}>انتهت هذه الرحلة — لا إجراءات تشغيلية عليها.</span>}
-          <button onClick={onClose} className="mr-auto px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إغلاق</button>
+          <button onClick={onClose} className="mr-auto px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إغلاق</button>
         </div>
       </motion.div>
       <AnimatePresence>
@@ -718,7 +718,7 @@ function MonthGrid({y,m,depMap,spanSet,onPick}:{y:number;m:number;depMap:Map<str
                   ? <span style={{fontSize:7.5,fontWeight:700,opacity:0.95}}>{remaining} مقعد</span>
                   : <span style={{fontSize:7.5,fontWeight:700,opacity:0.9}}>{tail}</span>}
                 {deps.length>1&&<span className="absolute flex items-center justify-center rounded-full"
-                  style={{top:-4,left:-4,width:13,height:13,fontSize:8,fontWeight:800,background:B.primary,color:B.gold,border:"1px solid #fff"}}>{deps.length}</span>}
+                  style={{top:-4,left:-4,width:13,height:13,fontSize:8,fontWeight:800,background:B.gold,color:B.black,border:"1px solid #fff"}}>{deps.length}</span>}
               </button>
             );
           }
@@ -767,14 +767,14 @@ function TripCalendar({trips,onOpen}:{trips:Trip[];onOpen:(t:Trip)=>void}) {
             <div className="mt-3 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold flex items-center gap-1.5" style={{color:B.black}}><CalendarDays size={13} style={{color:B.gold}}/>رحلات يوم {picked.ds}</span>
-                <button aria-label="إلغاء اختيار اليوم" title="إلغاء اختيار اليوم" onClick={()=>setPicked(null)} className="w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.muted}}><X size={11}/></button>
+                <button aria-label="إلغاء اختيار اليوم" title="إلغاء اختيار اليوم" onClick={()=>setPicked(null)} className="w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}><X size={11}/></button>
               </div>
               {picked.deps.map(t=>{
                 const st=tripState(t);
                 const {booked,capacity,available}=seatsOf(t);
                 return (
                   <button key={t.id} onClick={()=>onOpen(t)} className="w-full text-right rounded-xl p-3 flex items-center justify-between gap-2 cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                    <div className="flex items-center gap-2"><span className="font-mono px-2 py-0.5 rounded-lg text-xs" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.muted}}>{t.id}</span><StatusBadge status={st} entity="trip"/></div>
+                    <div className="flex items-center gap-2"><span className="font-mono px-2 py-0.5 rounded-lg text-xs" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>{t.id}</span><StatusBadge status={st} entity="trip"/></div>
                     <span className="text-xs font-bold" style={{color:B.text2}}>
                       {st==="cancelled"||st==="archived" ? "—" : st==="ended" ? `سافر ${booked} من ${capacity}` : `${booked}/${capacity} · متبقٍّ ${available}`}
                     </span>
@@ -856,13 +856,13 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const ungrouped=liveTrips.filter(t=>!packages.find(p=>p.id===t.packageId));
 
   const stats=tripTotals(trips);
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s"});
+  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
   const detailTrip = detailId ? trips.find(t=>t.id===detailId) : undefined;
   const editTrip = editId ? trips.find(t=>t.id===editId) : undefined;
   const cardEdit=(t:Trip)=>mayWrite?()=>setEditId(t.id):undefined;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الرحلات" crumb="إدارة الرحلات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <div className="px-4 md:px-8 pt-4 md:pt-5">
         {/* كل بطاقة تقول ما تعدّه بالضبط: «الرحلات القائمة» ليست «إجمالي
@@ -903,9 +903,9 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
         <EntityGate entity="trips" label="الرحلات" skeleton="cards">
         {grouped.map(({pkg,trips:pkgTrips,totals,next})=>(
           <div key={pkg.id} className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="px-5 py-4" style={{background:B.bg,borderBottom:`1px solid ${B.border}`}}>
+            <div className="px-5 py-4" style={{background:B.fill,borderBottom:`1px solid ${B.border}`}}>
               <div className="flex items-center gap-4 flex-wrap mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{background:B.primary,border:"1px solid rgba(192,134,44,0.25)"}}>📦</div>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{background:B.primaryDeep,border:"1px solid rgba(192,134,44,0.25)"}}>📦</div>
                 <div className="flex-1">
                   <div className="font-extrabold" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{pkg.name}</div>
                   <div className="text-xs mt-0.5" style={{color:B.text2}}>{pkgTrips.length} رحلة قائمة · {pkg.days} أيام · {destBadge(pkg.destination)}</div>
@@ -961,7 +961,7 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
           <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
             <button onClick={()=>setShowEnded(v=>!v)} aria-expanded={showEnded}
               className="w-full flex items-center gap-3 px-5 py-4 cursor-pointer text-right"
-              style={{background:B.bg,border:"none",borderBottom:showEnded?`1px solid ${B.border}`:"none"}}>
+              style={{background:B.fill,border:"none",borderBottom:showEnded?`1px solid ${B.border}`:"none"}}>
               <Archive size={15} style={{color:B.muted,flexShrink:0}}/>
               <span className="font-extrabold text-sm" style={{color:B.black}}>الرحلات المنتهية</span>
               <span className="px-2 py-0.5 rounded-lg text-xs font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.muted}}>{endedTrips.length}</span>

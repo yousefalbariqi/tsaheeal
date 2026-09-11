@@ -64,7 +64,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
         className="w-full max-w-md rounded-2xl overflow-hidden"
         style={{ background: "#fff" }} onClick={e => e.stopPropagation()}>
 
-        <div className="relative px-6 py-5" style={{ background: B.primary }}>
+        <div className="relative px-6 py-5" style={{ background:B.primaryDeep }}>
           <div className="absolute top-0 inset-x-0 h-1" style={{ background: accent }} />
           <h3 className="font-extrabold text-base" style={{ color: "#fff", margin: 0 }}>{p.title}</h3>
           <button onClick={p.onCancel} aria-label="إغلاق"
@@ -117,7 +117,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
             </button>
             <button onClick={p.onCancel} disabled={busy}
               className="px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-              style={{ background: B.bg, color: B.text2, border: "none" }}>رجوع</button>
+              style={{ background: B.fill, color: B.text2, border: "none" }}>رجوع</button>
           </div>
         </div>
       </motion.div>

@@ -293,7 +293,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const visible = q ? reqs.filter(r=>r.id.includes(q)||r.title.includes(q)||r.category.includes(q)) : reqs;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الدعم الفني" crumb="إرسال طلب دعم" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <main className="flex-1 px-4 md:px-8 py-6 max-w-5xl">
         {/* ── بيانات المُرسِل ──
@@ -304,13 +304,13 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
 
             وما لا تعرفه الجلسة يُقال «—» صراحةً: قيمةٌ مخترعة في حقل
             هوية أسوأ من فراغٍ معلَن. */}
-        <div className="rounded-2xl px-6 py-5 mb-6" style={{background:B.primary}}>
-          <div className="text-xs font-bold mb-3" style={{color:"#9DBAB6"}}>بيانات المُرسِل (من حسابك)</div>
+        <div className="rounded-2xl px-6 py-5 mb-6" style={{background:B.surface,border:`1px solid ${B.border}`}}>
+          <div className="text-xs font-bold mb-3" style={{color:B.primaryDeep}}>بيانات المُرسِل (من حسابك)</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {sender.map(f=>(
               <div key={f.l}>
-                <div className="text-xs mb-0.5" style={{color:"#9DBAB6",fontWeight:600}}>{f.l}</div>
-                <div className="font-bold text-sm" style={{color:"#F0E6CC"}}>{f.v}</div>
+                <div className="text-xs mb-0.5" style={{color:B.muted,fontWeight:600}}>{f.l}</div>
+                <div className="font-bold text-sm" style={{color:B.black}}>{f.v}</div>
               </div>
             ))}
           </div>
@@ -356,7 +356,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                     )}
                     <div className="flex gap-2 mt-3">
                       <button onClick={()=>follow(lastSent.id)}
-                        className="px-4 py-2 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>متابعة الطلب</button>
+                        className="px-4 py-2 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>متابعة الطلب</button>
                     </div>
                   </div>
                 </div>
@@ -412,7 +412,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                     </label>
                     <div className="flex flex-wrap gap-2 items-center">
                       {attachments.map((url,i)=>(
-                        <div key={i} className="relative rounded-xl overflow-hidden" style={{width:72,height:72,border:`1px solid ${B.border}`,background:B.bg}}>
+                        <div key={i} className="relative rounded-xl overflow-hidden" style={{width:72,height:72,border:`1px solid ${B.border}`,background:B.fill}}>
                           {isPdfUrl(url)
                             ? <div className="w-full h-full flex flex-col items-center justify-center gap-1" style={{color:B.text2}}><FileText size={20}/><span style={{fontSize:9,fontWeight:700}}>PDF</span></div>
                             : <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
@@ -420,7 +420,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                         </div>
                       ))}
                       {attachments.length<MAX_ATTACHMENTS&&(
-                        <label className="flex flex-col items-center justify-center gap-1 rounded-xl" style={{width:72,height:72,border:`1.5px dashed ${B.border}`,background:B.bg,color:B.muted,cursor:uploading?"progress":"pointer",opacity:uploading?0.6:1}}>
+                        <label className="flex flex-col items-center justify-center gap-1 rounded-xl" style={{width:72,height:72,border:`1.5px dashed ${B.border}`,background:B.fill,color:B.muted,cursor:uploading?"progress":"pointer",opacity:uploading?0.6:1}}>
                           <ImagePlus size={18}/><span style={{fontSize:9,fontWeight:700}}>{uploading?"جارٍ الرفع…":"إرفاق"}</span>
                           <input type="file" accept={ACCEPT} className="hidden" disabled={uploading} onChange={pickAttachment}/>
                         </label>
@@ -479,7 +479,7 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                     <button key={r.id} id={`sup-${r.id}`} type="button" onClick={()=>setOpenId(isOpen?null:r.id)}
                       aria-pressed={isOpen} aria-label={`فتح الطلب ${r.id}`}
                       className="rounded-xl p-3 text-right cursor-pointer w-full"
-                      style={{border:`1px solid ${isOpen?B.primary:B.border}`,background:lit?B.cream:isOpen?"#F3F8F7":"#fff",
+                      style={{border:`1px solid ${isOpen?B.gold:B.border}`,background:lit?B.black:isOpen?"#F3F8F7":"#fff",
                               boxShadow:lit?`0 0 0 3px ${B.gold2}`:"none",transition:"box-shadow .3s, background .3s",fontFamily:"inherit"}}>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span className="font-mono text-xs font-bold" dir="ltr" style={{color:B.muted}}>{r.id}</span>
@@ -585,7 +585,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
     <div className="rounded-2xl p-6" style={{background:"#fff",border:`1px solid ${B.border}`}}>
       <div className="flex items-center gap-3 mb-4">
         <button onClick={onBack} aria-label="رجوع إلى النموذج" title="رجوع إلى النموذج"
-          className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2}}><ArrowRight size={16}/></button>
+          className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ArrowRight size={16}/></button>
         <span className="font-mono text-xs font-bold" dir="ltr" style={{color:B.muted}}>{req.id}</span>
         <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{background:sc.bg,color:sc.fg}}>{SUP_STATUS_LABELS[req.status]}</span>
         <span className="text-xs font-bold px-2 py-0.5 rounded" style={{background:pm.bg,color:pm.fg}}>{req.priority}</span>
@@ -599,7 +599,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
         {row(<Clock size={13}/>,"وعد الردّ",<PromiseLine p={promise}/>)}
       </div>
 
-      <div className="rounded-xl px-4 py-3 mt-4 text-sm whitespace-pre-line" style={{background:B.bg,border:`1px solid ${B.border}`,color:req.desc?B.text3:B.muted}}>
+      <div className="rounded-xl px-4 py-3 mt-4 text-sm whitespace-pre-line" style={{background:B.fill,border:`1px solid ${B.border}`,color:req.desc?B.text3:B.muted}}>
         {req.desc||"بلا وصف"}
       </div>
 
@@ -609,7 +609,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
           <div className="flex flex-wrap gap-2">
             {req.attachments.map((url,i)=>(
               <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="فتح المرفق في تبويب جديد"
-                className="rounded-xl overflow-hidden flex items-center justify-center" style={{width:88,height:88,border:`1px solid ${B.border}`,background:B.bg,color:B.text2}}>
+                className="rounded-xl overflow-hidden flex items-center justify-center" style={{width:88,height:88,border:`1px solid ${B.border}`,background:B.fill,color:B.text2}}>
                 {isPdfUrl(url)
                   ? <span className="flex flex-col items-center gap-1"><FileText size={22}/><span style={{fontSize:10,fontWeight:700}}>PDF</span></span>
                   : <img src={url} alt={`مرفق ${i+1}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
@@ -620,7 +620,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
       )}
 
       {/* ── المسؤول ── */}
-      <div className="rounded-xl p-4 mt-5 flex flex-col gap-2" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+      <div className="rounded-xl p-4 mt-5 flex flex-col gap-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
         <div className="flex items-center gap-2 text-xs font-bold" style={{color:B.text3}}><UserCheck size={13}/>الموظف المسؤول</div>
         <AppSelect value={req.assignedTo??""} placeholder="غير معيَّن" onChange={v=>assign(v||null)} ariaLabel="الموظف المسؤول"
           options={[{value:"",label:"— بلا مسؤول —"},...activeUsers.map(u=>({value:u.id,label:u.name}))]}/>
@@ -639,7 +639,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
       </div>
 
       {/* ── الحالة والحلّ ── */}
-      <div className="rounded-xl p-4 mt-4 flex flex-col gap-2" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+      <div className="rounded-xl p-4 mt-4 flex flex-col gap-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
         <div className="text-xs font-bold" style={{color:B.text3}}>حالة الطلب</div>
         <AppSelect value={pendingStatus??req.status} onChange={v=>changeStatus(v as SupportStatus)} ariaLabel="حالة الطلب"
           options={SUP_STATUSES.map(s=>({value:s,label:SUP_STATUS_LABELS[s]}))}/>
@@ -684,7 +684,7 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
             onKeyDown={e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)) void addNote(); }}/>
           <button onClick={addNote} disabled={!note.trim()||saving} aria-label="إضافة ملاحظة" title="إضافة ملاحظة (Ctrl+Enter)"
             className="w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-            style={{background:note.trim()&&!saving?B.primary:"#D8D0C4",color:note.trim()&&!saving?B.cream:"#9a9186",border:"none"}}>
+            style={{background:note.trim()&&!saving?B.gold:"#D8D0C4",color:note.trim()&&!saving?B.black:"#9a9186",border:"none"}}>
             <Send size={15}/>
           </button>
         </div>

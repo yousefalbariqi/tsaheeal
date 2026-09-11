@@ -46,7 +46,7 @@ export class ErrorBoundary extends Component<Props, State> {
         }}>
           <div style={{ height: 3, background: `linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`,
             borderRadius: 2, width: 56, margin: "0 auto 22px" }}/>
-          <h1 style={{ fontSize: 21, fontWeight: 600, color: B.black, margin: "0 0 10px" }}>
+          <h1 style={{ fontSize: 21, fontWeight: 600, color: B.primaryDeep, margin: "0 0 10px" }}>
             حدث خطأ غير متوقّع
           </h1>
           <p style={{ fontSize: 15, lineHeight: 1.7, color: B.text2, margin: "0 0 24px" }}>
@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={() => window.location.reload()}
             style={{
               width: "100%", padding: "13px 20px", borderRadius: 12, border: "none",
-              background: B.primary, color: "#fff", fontSize: 15, fontWeight: 600,
+              background: B.gold, color: B.black, fontSize: 15, fontWeight: 600,
               fontFamily: "inherit", cursor: "pointer",
             }}>
             إعادة تحميل الصفحة
@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </summary>
             <pre style={{
               marginTop: 10, fontSize: 11.5, lineHeight: 1.6, color: B.text2,
-              background: B.bg, border: `1px solid ${B.border}`, borderRadius: 8,
+              background: B.fill, border: `1px solid ${B.border}`, borderRadius: 8,
               padding: 12, overflowX: "auto", direction: "ltr", whiteSpace: "pre-wrap",
             }}>{error.message || String(error)}</pre>
           </details>

@@ -55,7 +55,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
       style={{background:"rgba(21,76,72,.55)"}} onClick={onClose}>
       <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
         className="w-full max-w-md rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primary}}>
+        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0}}>{isEdit?"تعديل بيانات المستخدم":"دعوة مستخدم جديد"}</h3>
           <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
@@ -70,7 +70,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
           <div>
             <Field label={<>البريد الإلكتروني <span style={{color:"#BE2626"}}>*</span></>} error={tried?errors.email:undefined}>
               <input value={form.email} onChange={e=>f("email")(e.target.value)} placeholder="name@company.sa" type="email" disabled={isEdit} aria-invalid={tried&&!!errors.email}
-                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:tried&&errors.email?"#BE2626":B.border,fontFamily:"var(--font-app)",background:isEdit?B.bg:"#fff",opacity:isEdit?0.7:1,direction:"ltr",textAlign:"left"}}/>
+                className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:tried&&errors.email?"#BE2626":B.border,fontFamily:"var(--font-app)",background:isEdit?B.fill:"#fff",opacity:isEdit?0.7:1,direction:"ltr",textAlign:"left"}}/>
             </Field>
           </div>
           {/* لا حقل كلمة مرور: المدير لا يعرف كلمة أحد. تُرسَل دعوةٌ يضبط
@@ -87,7 +87,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
               {(["مدير عام","مدير النظام","موظف"] as UserRole[]).map(r=>(
                 <button key={r} type="button" onClick={()=>f("role")(r)}
                   className="px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all"
-                  style={{border:`1px solid ${form.role===r?B.gold:B.border}`,background:form.role===r?B.primary:"#fff",color:form.role===r?B.gold:B.text2}}>
+                  style={{border:`1px solid ${form.role===r?B.gold:B.border}`,background:form.role===r?B.gold:"#fff",color:form.role===r?B.black:B.text2}}>
                   {r}
                 </button>
               ))}
@@ -115,7 +115,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
               {busy&&<Spinner size={14} color={B.black}/>}
               {busy?"جارٍ الحفظ…":isEdit?"حفظ التعديلات":"إرسال الدعوة"}</button>
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-              style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+              style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           </div>
         </div>
       </motion.div>
@@ -206,7 +206,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="المستخدمون" crumb="إدارة المستخدمين" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       {/* Stats */}
       <div className="px-4 md:px-8 pt-4 md:pt-5">
@@ -246,7 +246,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                     <td style={{padding:"14px 16px"}}>
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-sm flex-shrink-0"
-                          style={{background:B.primary,color:B.gold}}>{u.name[0]}</div>
+                          style={{background:B.gold,color:B.black}}>{u.name[0]}</div>
                         <span className="font-bold" style={{color:B.black}}>{u.name}</span>
                       </div>
                     </td>
@@ -288,7 +288,7 @@ export function UsersPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center font-extrabold flex-shrink-0"
-                    style={{background:B.primary,color:B.gold}}>{u.name[0]}</div>
+                    style={{background:B.gold,color:B.black}}>{u.name[0]}</div>
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm" style={{color:B.black}}>{u.name}</div>
                     <div className="text-xs font-mono truncate" style={{color:B.muted}}>{u.email}</div>

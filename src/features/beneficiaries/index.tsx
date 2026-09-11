@@ -108,7 +108,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
       style={{background:"rgba(21,76,72,.55)"}} onClick={onClose}>
       <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primary}}>
+        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0}}>{ben.id?"تعديل بيانات المستفيد":"إضافة مستفيد جديد"}</h3>
           <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>الحقول المعلَّمة بـ<span style={{color:"#F3A3A3"}}> * </span>إلزامية — لا يُحفظ ملفٌ ناقص</div>
@@ -163,7 +163,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
               {(["male","female"] as const).map(g=>(
                 <button key={g} type="button" onClick={()=>f("gender")(g)}
                   className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                  style={{border:`1px solid ${form.gender===g?B.gold:B.border}`,background:form.gender===g?B.primary:"#fff",color:form.gender===g?B.gold:B.text2}}>
+                  style={{border:`1px solid ${form.gender===g?B.gold:B.border}`,background:form.gender===g?B.gold:"#fff",color:form.gender===g?B.black:B.text2}}>
                   {g==="male"?"ذكر":"أنثى"}
                 </button>
               ))}
@@ -185,7 +185,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
             </Field>
             <Err k="contactPhone"/>
           </div>
-          <div className="col-span-2 rounded-xl px-3.5 py-2.5 text-xs" style={{background:B.bg,border:`1px dashed ${B.border}`,color:B.muted}}>
+          <div className="col-span-2 rounded-xl px-3.5 py-2.5 text-xs" style={{background:B.fill,border:`1px dashed ${B.border}`,color:B.muted}}>
             صورة الوثيقة: تُفعَّل مع دلو التخزين الخاص (روابط موقّتة، حفظ حتى انتهاء الرحلة + ٩٠ يوماً). صورة جوازٍ في الدلو العام أسوأ من غيابها.
           </div>
         </div>
@@ -195,7 +195,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
             <button onClick={submit} className="px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
               style={{background:B.gold,color:B.black,border:"none",opacity:tried&&invalid?0.6:1}}>حفظ المستفيد</button>
             <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-              style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+              style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           </div>
         </div>
       </motion.div>
@@ -250,7 +250,7 @@ function LinkPreviewModal({plan,bens,bookings,onConfirm,onClose}:{plan:LinkPlan;
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {a.add.map(id=>{ const bk=bkById.get(id); return (
-                        <span key={id} className="px-2 py-0.5 rounded-md" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)"}}>
+                        <span key={id} className="px-2 py-0.5 rounded-md" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)"}}>
                           {id}{bk?` · ${bk.createdAt?.slice(0,10)}`:""}
                         </span>
                       );})}
@@ -263,7 +263,7 @@ function LinkPreviewModal({plan,bens,bookings,onConfirm,onClose}:{plan:LinkPlan;
         </div>
         <div className="flex gap-3 px-6 py-5" style={{borderTop:`1px solid ${B.border}`}}>
           <button onClick={onConfirm} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>تنفيذ الربط</button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>تراجع</button>
+          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>تراجع</button>
         </div>
       </motion.div>
     </motion.div>
@@ -326,9 +326,9 @@ function DuplicatesModal({pairs,countOf,onMerge,onClose}:{pairs:DupPair[];countO
           </table>
         </div>
         <div className="flex flex-wrap gap-3 px-6 py-5" style={{borderTop:`1px solid ${B.border}`}}>
-          <button disabled={busy} onClick={()=>merge(pair.a,pair.b)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.a.id} وادمج الآخر فيه</button>
-          <button disabled={busy} onClick={()=>merge(pair.b,pair.a)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.b.id} وادمج الآخر فيه</button>
-          <button disabled={busy} onClick={()=>idx<pairs.length-1?setIdx(i=>i+1):onClose()} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>{idx<pairs.length-1?"ليسا الشخص نفسه — التالي":"إغلاق"}</button>
+          <button disabled={busy} onClick={()=>merge(pair.a,pair.b)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.a.id} وادمج الآخر فيه</button>
+          <button disabled={busy} onClick={()=>merge(pair.b,pair.a)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.b.id} وادمج الآخر فيه</button>
+          <button disabled={busy} onClick={()=>idx<pairs.length-1?setIdx(i=>i+1):onClose()} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>{idx<pairs.length-1?"ليسا الشخص نفسه — التالي":"إغلاق"}</button>
         </div>
       </motion.div>
     </motion.div>
@@ -371,7 +371,7 @@ function PrivateNeeds({benId}:{benId:string}) {
               className="w-full rounded-xl border px-3.5 py-2.5 text-sm resize-none focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit",color:B.black}}/></Field></div>
           </div>
           <div className="flex justify-end mt-3">
-            <button onClick={save} disabled={!dirty||busy} className="px-5 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:dirty?B.gold:B.bg,color:dirty?B.black:B.muted,border:"none"}}>{busy?"جارٍ الحفظ…":dirty?"حفظ":"محفوظ"}</button>
+            <button onClick={save} disabled={!dirty||busy} className="px-5 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:dirty?B.gold:B.fill,color:dirty?B.black:B.muted,border:"none"}}>{busy?"جارٍ الحفظ…":dirty?"حفظ":"محفوظ"}</button>
           </div>
         </>
       )}
@@ -385,7 +385,7 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
       style={{background:"rgba(21,76,72,.65)"}} onClick={onClose}>
       <div className="w-full max-w-md my-6 rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(21,76,72,.45)"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primary}}>
+        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div>
@@ -404,7 +404,7 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
           <div className="rounded-xl px-4 py-3 text-sm font-bold flex items-center gap-2" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
             <X size={14}/>تم إلغاء هذا الطلب.
           </div>
-          <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+          <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
             <span className="font-bold text-sm" style={{color:"#000"}}>المبلغ المسترد</span>
             <span style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#000"}}>{sar(booking.total)}</span>
           </div>
@@ -553,8 +553,8 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
   const gBtn=(v:"all"|"male"|"female",l:string)=>({
     padding:"7px 18px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,
     border:`1px solid ${genderFilter===v?B.gold:B.border}`,
-    background:genderFilter===v?B.primary:"#fff",
-    color:genderFilter===v?B.gold:B.text2,
+    background:genderFilter===v?B.gold:"#fff",
+    color:genderFilter===v?B.black:B.text2,
   });
 
   /* سجلّ الملف مشتقٌّ لا مقروءٌ من bookingIds وحده: حجزٌ وصل من التطبيق
@@ -562,7 +562,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
      طلبات مسجّلة». */
   const detailBookings = detail ? (benBookings.get(detail.id) ?? []) : [];
   if(detail) return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="المستفيدون" crumb="ملف المستفيد" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="flex-1 px-4 md:px-8 pb-12 pt-5 max-w-4xl">
         <button onClick={()=>setDetailId(null)} className="flex items-center gap-2 text-sm font-bold mb-5 cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>
@@ -588,12 +588,12 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
               </button>
             </div>
           </div>
-          <div className="rounded-2xl p-5" style={{background:B.primary}}>
+          <div className="rounded-2xl p-5" style={{background:B.surface,border:`1px solid ${B.border}`}}>
             <div className="grid grid-cols-3 gap-4">
-              {[{l:"الطلبات",v:detailBookings.length,c:"#fff"},{l:"مكتملة",v:detailBookings.filter(bk=>bk.status==="confirmed").length,c:"#fff"},{l:"الإنفاق",v:sar(detailBookings.filter(bk=>["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0)),c:B.gold}].map(s=>(
+              {[{l:"الطلبات",v:detailBookings.length},{l:"مكتملة",v:detailBookings.filter(bk=>bk.status==="confirmed").length},{l:"الإنفاق",v:sar(detailBookings.filter(bk=>["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0))}].map(s=>(
                 <div key={s.l}>
-                  <div className="text-xs mb-1" style={{color:"#9DBAB6",fontWeight:600}}>{s.l}</div>
-                  <div className="font-extrabold text-xl leading-tight" style={{color:s.c,fontFamily:"var(--font-app)"}}>{s.v}</div>
+                  <div className="text-xs mb-1" style={{color:B.muted,fontWeight:600}}>{s.l}</div>
+                  <div className="font-extrabold text-xl leading-tight" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{s.v}</div>
                 </div>
               ))}
             </div>
@@ -655,7 +655,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                 {detailBookings.map(bk=>{
                   const docBtn=(label:string,on:()=>void,icon:any)=>{const Icon=icon;return (
                     <button onClick={on} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                      style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Icon size={12}/>{label}</button>
+                      style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Icon size={12}/>{label}</button>
                   );};
                   const cancelled=bk.status==="cancelled"||bk.status==="rejected";
                   const confirmed=bk.status==="confirmed";
@@ -693,7 +693,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
   );
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="المستفيدون" crumb="إدارة المستفيدين" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       {/* Stats */}
       <div className="px-4 md:px-8 pt-4 md:pt-5">
@@ -794,7 +794,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
                   <td style={{padding:"14px 16px"}}><BenTag b={b} count={countOf(b)}/></td>
                   <td className="col-action" style={{padding:"14px 16px"}}>
                     <div className="flex gap-2">
-                      <button onClick={()=>setDetailId(b.id)} className="px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>الملف</button>
+                      <button onClick={()=>setDetailId(b.id)} className="px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>الملف</button>
                       <button onClick={()=>openEdit(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
                     </div>
                   </td>
@@ -824,7 +824,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
               <div className="flex items-center justify-between">
                 <div className="flex gap-0.5">{[1,2,3,4,5].map(n=><span key={n} style={{color:n<=b.rating?B.gold:"#D8D0C4",fontSize:14}}>★</span>)}</div>
                 <div className="flex gap-2">
-                  <button onClick={()=>setDetailId(b.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>الملف</button>
+                  <button onClick={()=>setDetailId(b.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>الملف</button>
                   <button onClick={()=>openEdit(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
                 </div>
               </div>

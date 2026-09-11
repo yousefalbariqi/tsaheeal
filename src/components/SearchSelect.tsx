@@ -93,7 +93,7 @@ export function SearchSelect({
           className={`w-full flex items-center justify-between gap-2 border rounded-xl ${pad} text-sm focus:outline-none`}
           style={{
             borderColor: invalid ? "#E1A3A3" : B.border,
-            background: disabled ? B.bg : "#fff",
+            background: disabled ? B.fill : "#fff",
             color: selected ? B.black : B.placeholder,
             fontFamily: "inherit",
             cursor: disabled ? "not-allowed" : "pointer",
@@ -145,7 +145,7 @@ export function SearchSelect({
               {q && (
                 <button type="button" onClick={() => { setQ(""); inputRef.current?.focus(); }} aria-label="مسح البحث"
                   className="flex items-center justify-center rounded-full cursor-pointer"
-                  style={{ width: 20, height: 20, background: B.bg, border: "none", color: B.muted, flexShrink: 0 }}>
+                  style={{ width: 20, height: 20, background: B.fill, border: "none", color: B.muted, flexShrink: 0 }}>
                   <X size={12} />
                 </button>
               )}
@@ -178,7 +178,7 @@ export function SearchSelect({
                     onMouseEnter={() => setActive(i)}
                     onClick={() => pick(o.value)}
                     className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm cursor-pointer select-none"
-                    style={{ background: i === active ? B.bg : "transparent", color: B.black }}
+                    style={{ background: i === active ? B.fill : "transparent", color: B.black }}
                   >
                     {o.prefix && <span style={{ fontSize: 17, lineHeight: 1 }}>{o.prefix}</span>}
                     <span className="truncate" style={{ fontWeight: isSel ? 700 : 500 }}>{o.label}</span>

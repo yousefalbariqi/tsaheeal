@@ -64,7 +64,7 @@ export function NotificationsMenu() {
     <div className="relative">
       <button onClick={toggle} aria-label={unread ? `التنبيهات، ${unread} غير مقروءة` : "التنبيهات"}
         title="التنبيهات" className="relative w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer"
-        style={{ background: B.primary, border: "none" }}>
+        style={{ background: B.primaryDeep, border: "none" }}>
         <BellRing size={15} style={{ color: B.gold }} />
         {unread > 0 && <span aria-hidden="true" className="absolute -top-1 -left-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center font-bold"
           style={{ background: B.gold, color: B.black, fontSize: 9 }}>{unread > 99 ? "99+" : unread}</span>}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Building2, MapPin, Star, Plus, Trash2, X, Check, Wifi, UtensilsCrossed, Coffee, ShieldCheck, Package, Plane, Bus, BookOpen, Users, Ticket, Search, ChevronRight, ImagePlus, Armchair, ChevronUp, ChevronDown, Copy, ArrowRight, Repeat, CalendarDays, ListChecks, Archive, ArchiveRestore, ChevronLeft, Eye, AlertTriangle, Loader2, Info } from "lucide-react";
+import { Building2, MapPin, Star, Plus, Trash2, X, Check, Package, Search, ChevronRight, ImagePlus, ChevronUp, ChevronDown, Copy, ArrowRight, Repeat, CalendarDays, ListChecks, Archive, ArchiveRestore, ChevronLeft, Eye, AlertTriangle, Loader2, Info, BookOpen, BedDouble, Bus as BusIcon, Wallet } from "lucide-react";
 import { B } from "@/lib/theme";
 import { SAR, sar, sarNumber } from "@/lib/money";
 import { cleanHotelName, hotelDisplayName } from "@/lib/hotelName";
@@ -10,7 +10,7 @@ import { EntityGate } from "@/components/States";
 import { linkableTransports } from "@/features/transport/readiness";
 import { TabStrip } from "@/components/Tabs";
 import type { Hotel, Transport, PkgStatus, PkgDest, ProgramStage, RoomPrice, PkgReview, PkgFeature, Pkg, TripSettings } from "@/types";
-import { uid, distanceLabel, newId} from "@/lib/utils";
+import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -22,30 +22,18 @@ import { NumericInput } from "@/components/NumericInput";
 import { onPickMedia } from "@/lib/mediaUpload";
 import { useEditor } from "@/lib/useEditor";
 import { useInternalSettings } from "@/data/useSettings";
-import { readiness, type PkgTab, type Readiness } from "./readiness";
+import { readiness, isSellableTier, type PkgTab, type Readiness } from "./readiness";
 import { packageDeleteImpact, packageDeleteBlockers, countAr, tripsCount, bookingsCount, tripsDetail, bookingsDetail, type PackageDeleteImpact } from "./deletion";
 import { setArchiveReason, permanentlyDelete } from "@/data/repository";
 import { useRole } from "@/lib/useRole";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { PermanentDeleteDialog } from "@/components/EntityActions";
+import {
+  PROGRAM_STAGE_CATALOG, DEFAULT_STAGE_ICON, stageIconLabel,
+  PKG_FEATURE_CATALOG, DEFAULT_PKG_FEATURE_ICON, pkgFeatureIcon, pkgFeatureKey,
+} from "./featureIcons";
 
-/* شعارات مميزات الباقة — قائمة يختار منها المستخدم */
-const PKG_FEATURE_ICONS: Record<string,{icon:React.FC<{size?:number;style?:React.CSSProperties}>;label:string}> = {
-  check:{icon:Check,label:"عام"},
-  guide:{icon:BookOpen,label:"مرشد ديني"},
-  meal:{icon:UtensilsCrossed,label:"ضيافة / وجبة"},
-  coffee:{icon:Coffee,label:"مشروبات"},
-  supervisor:{icon:Users,label:"مشرف"},
-  transport:{icon:Bus,label:"مواصلات"},
-  flight:{icon:Plane,label:"طيران"},
-  hotel:{icon:Building2,label:"سكن / فندق"},
-  wifi:{icon:Wifi,label:"واي فاي"},
-  seat:{icon:Armchair,label:"مقاعد مريحة"},
-  view:{icon:Star,label:"إطلالة مميزة"},
-  vip:{icon:ShieldCheck,label:"خدمة VIP"},
-  ticket:{icon:Ticket,label:"تذاكر / دخول"},
-  location:{icon:MapPin,label:"موقع مميز"},
-};
+/* بنكا الأيقونات — مراحل البرنامج والمميزات — في وحدةٍ مجاورة (featureIcons). */
 
 /* ═══════════════════════ UTILS ═══════════════════════ */
 
@@ -62,7 +50,15 @@ const AUDIENCE_OPTS = ["عموم المعتمرين","العائلات","كبا�
 const RECUR_DAYS = ["السبت","الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة"];
 const PKG_GALLERY_MAX = 6;
 const DEFAULT_PKG_SETTINGS:TripSettings = {allowOnlineBooking:true,manualConfirm:true,waitlistEnabled:false,requirePaymentFirst:true,showTicketAfterConfirm:true,paymentDeadlineHours:24,maxPilgrims:10};
-const STAGE_ICONS = ["🚌","✈️","🕋","🕌","🏨","🏛️","🍽️","🌙","🔙","📿","🎒","⭐"];
+/* عرض منطقة المحتوى — رقمٌ واحد يحكم الرأس والتبويبات وكل لوح.
+   قبله كان لكل لوحٍ سقفه (٦٠٠ و٦٤٠ و٨٠٠ و٩٠٠)، فتتراقص حافة المحتوى
+   كلما انتقل الموظف بين التبويبات، ويبقى نصف الشاشة فارغاً بلا سبب. */
+const PANEL_MAX = 1180;
+const panelBox: React.CSSProperties = { maxWidth: PANEL_MAX, marginInline: "auto", width: "100%" };
+/* الألواح ذات العمود الواحد لا تُمطّ إلى ١١٨٠ — سطرٌ بهذا الطول يتعب
+   العين. تُحدّ ثم تتوسّط: `marginInline:auto` هو ما كان ناقصاً، إذ كان
+   السقف وحده يلصقها بحافة البداية (يمين الشاشة) وتُترك الشاشة فارغة. */
+const formBox: React.CSSProperties = { maxWidth: 880, marginInline: "auto", width: "100%" };
 
 /* مسودة المتصفح مكملة للحفظ الخادمي وليست بديلاً عنه: تُكتب فور كل
    تعديل كي لا تضيع دقيقة الانتظار أو انقطاع الشبكة قبل وصول الحفظ. */
@@ -116,7 +112,7 @@ export function destBadge(d:string) {
 }
 export function typeBadge(t:string) {
   const isVip = t.includes("VIP");
-  return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:isVip?"rgba(192,134,44,0.12)":"#EEECEA",color:isVip?B.gold:B.text2,border:isVip?"1px solid rgba(192,134,44,0.3)":"none"}}>{t}</span>;
+  return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:isVip?"rgba(192,134,44,0.12)":"#EEECEA",color:isVip?B.black:B.text2,border:isVip?"1px solid rgba(192,134,44,0.3)":"none"}}>{t}</span>;
 }
 
 /* ─── Add Package Modal ─── */
@@ -170,7 +166,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full rounded-2xl overflow-hidden flex flex-col"
         style={{maxWidth:520,maxHeight:"90vh",background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
+        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -205,7 +201,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
                  </Field></div>
           </div>
           {/* الليالي تحدّد وجود السكن — لا علمَ منفصلاً يتعارض معها */}
-          <div className="rounded-xl px-4 py-2.5 flex items-start gap-2" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+          <div className="rounded-xl px-4 py-2.5 flex items-start gap-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
             <Info size={13} style={{color:B.gold,flexShrink:0,marginTop:2}}/>
             <p className="text-xs leading-relaxed" style={{color:B.text2}}>
               {form.nights>0
@@ -213,7 +209,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
                 : <>صفر ليالٍ = <b>مواصلات فقط</b> بلا سكن — لن يُطلب فندق ولا غرف.</>}
             </p>
           </div>
-          <div className="rounded-xl p-4" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+          <div className="rounded-xl p-4" style={{background:B.fill,border:`1px solid ${B.border}`}}>
             <Field label="أيام التشغيل المقترحة">
               <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
             </Field>
@@ -227,7 +223,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
             {saving?<Loader2 size={14} className="animate-spin"/>:<Check size={14}/>}{saving?"جارٍ الحفظ…":"حفظ الآن"}
           </button>
           <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+            style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           {!nameOk&&<span className="text-xs" style={{color:B.muted}}>اسم الباقة مطلوب</span>}
         </div>
       </motion.div>
@@ -236,43 +232,103 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
 }
 
 /* ─── Searchable feature-icon picker (with logos) ─── */
+/* منتقي أيقونة الميزة — شبكةٌ صغيرة بلا بحث.
+
+   أحد عشر خياراً لا تُبحث، تُرى. وصندوق البحث في قائمةٍ بهذا الحجم
+   ضغطةٌ وحقلُ كتابةٍ ثمناً لما كان ظاهراً أصلاً. و«بدون أيقونة» خيارٌ
+   أول لا استثناء: أكثر المميزات نصٌّ يكفي نفسه. */
 function FeatureIconPicker({value,onChange}:{value:string;onChange:(k:string)=>void}) {
   const [open,setOpen]=useState(false);
-  const [q,setQ]=useState("");
-  const CurIcon=(PKG_FEATURE_ICONS[value]??PKG_FEATURE_ICONS.check).icon;
-  const entries=Object.entries(PKG_FEATURE_ICONS).filter(([,v])=>v.label.includes(q.trim()));
+  const current=pkgFeatureKey(value);
+  const CurIcon=pkgFeatureIcon(value);
   return (
     <div className="relative flex-shrink-0">
-      <button type="button" onClick={()=>setOpen(o=>!o)} title="اختر شعار الميزة"
-        className="h-10 px-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
-        style={{background:`linear-gradient(135deg,${B.gold},${B.gold2})`,color:B.black,border:"none"}}>
-        <CurIcon size={16}/>
-        <ChevronDown size={13} style={{opacity:0.75}}/>
+      <button type="button" onClick={()=>setOpen(o=>!o)} title="اختر أيقونة الميزة" aria-label="اختر أيقونة الميزة"
+        className="h-10 w-11 rounded-xl flex items-center justify-center gap-1 cursor-pointer"
+        style={{background:CurIcon?B.fill:"#fff",color:CurIcon?B.text3:B.muted,border:`1px solid ${B.border}`}}>
+        {CurIcon?<CurIcon size={16}/>:<span className="text-xs font-bold">—</span>}
+        <ChevronDown size={11} style={{opacity:0.55}}/>
       </button>
       {open&&(
         <>
-          <div className="fixed inset-0" style={{zIndex:40}} onClick={()=>{setOpen(false);setQ("");}}/>
+          <div className="fixed inset-0" style={{zIndex:40}} onClick={()=>setOpen(false)}/>
+          <div className="absolute mt-1 rounded-xl p-2"
+            style={{zIndex:41,top:"100%",insetInlineStart:0,width:196,background:"#fff",border:`1px solid ${B.border}`,boxShadow:"0 12px 30px rgba(0,0,0,0.15)"}}>
+            <div className="grid grid-cols-4 gap-1">
+              {PKG_FEATURE_CATALOG.map(({id,label,Icon})=>{
+                const active=id===current;
+                return (
+                  <button key={id} type="button" title={label} aria-label={label}
+                    onClick={()=>{onChange(id);setOpen(false);}}
+                    className="h-10 rounded-lg flex items-center justify-center cursor-pointer"
+                    style={{background:active?B.gold:B.fill,color:active?B.black:B.text2,border:`1px solid ${active?B.gold:B.border}`}}>
+                    {Icon?<Icon size={15}/>:<span className="text-xs font-bold">بلا</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* منتقي أيقونة المرحلة — بنكٌ واسع مصنّف، لا قائمةٌ من اثني عشر.
+
+   القائمة المنسدلة القديمة كانت تحصر المرحلة في رموزٍ معدودة، فيُكتب
+   «الإفطار في الفندق» برمز الحافلة لعدم وجود غيره. وهنا بحثٌ بالاسم
+   العربي: من يريد رمز الطيران يكتب «طيران» ولا يفتّش شبكةً من أربعين. */
+function StageIconPicker({value,onChange}:{value:string;onChange:(icon:string)=>void}) {
+  const [open,setOpen]=useState(false);
+  const [q,setQ]=useState("");
+  const term=q.trim();
+  const groups=PROGRAM_STAGE_CATALOG
+    .map(g=>({...g,items:term?g.items.filter(i=>i.label.includes(term)):g.items}))
+    .filter(g=>g.items.length>0);
+  const close=()=>{setOpen(false);setQ("");};
+  return (
+    <div className="relative">
+      <button type="button" onClick={()=>setOpen(o=>!o)}
+        title={stageIconLabel(value)||"اختر أيقونة المرحلة"} aria-label="اختر أيقونة المرحلة"
+        className="w-full rounded-xl px-3 py-2 flex items-center gap-2 cursor-pointer"
+        style={{background:"#fff",border:`1px solid ${B.border}`}}>
+        <span style={{fontSize:18,lineHeight:1}}>{value||DEFAULT_STAGE_ICON}</span>
+        <span className="text-xs flex-1 text-right truncate" style={{color:B.muted}}>{stageIconLabel(value)}</span>
+        <ChevronDown size={12} style={{color:B.muted}}/>
+      </button>
+      {open&&(
+        <>
+          <div className="fixed inset-0" style={{zIndex:40}} onClick={close}/>
           <div className="absolute mt-1 rounded-xl overflow-hidden flex flex-col"
-            style={{zIndex:41,top:"100%",insetInlineStart:0,width:230,maxWidth:"calc(100vw - 32px)",background:"#fff",border:`1px solid ${B.border}`,boxShadow:"0 12px 30px rgba(0,0,0,0.15)"}}>
+            style={{zIndex:41,top:"100%",insetInlineStart:0,width:268,maxWidth:"calc(100vw - 32px)",background:"#fff",border:`1px solid ${B.border}`,boxShadow:"0 12px 30px rgba(0,0,0,0.15)"}}>
             <div className="p-2" style={{borderBottom:`1px solid ${B.border}`}}>
-              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{background:B.fill,border:`1px solid ${B.border}`}}>
                 <Search size={13} style={{color:B.muted}}/>
-                <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="ابحث عن شعار..."
+                <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="ابحث: فندق، وجبة، رجوع…"
                   className="flex-1 text-xs focus:outline-none" style={{background:"none",border:"none",color:B.black,fontFamily:"inherit"}}/>
               </div>
             </div>
-            <div className="overflow-y-auto" style={{maxHeight:248,scrollbarWidth:"thin"}}>
-              {entries.map(([k,v])=>{ const Icon=v.icon; const active=k===value; return (
-                <button key={k} type="button" onClick={()=>{onChange(k);setOpen(false);setQ("");}}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 cursor-pointer text-right"
-                  style={{background:active?"rgba(192,134,44,0.1)":"#fff",border:"none",borderBottom:`1px solid ${B.border}`}}>
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{background:active?`linear-gradient(135deg,${B.gold},${B.gold2})`:B.bg,color:active?B.black:B.text2}}><Icon size={14}/></span>
-                  <span className="text-sm font-semibold" style={{color:B.black}}>{v.label}</span>
-                  {active&&<Check size={14} style={{color:B.gold,marginRight:"auto"}}/>}
-                </button>
-              );})}
-              {entries.length===0&&<div className="px-3 py-5 text-center text-xs" style={{color:B.muted}}>لا نتائج مطابقة</div>}
+            <div className="overflow-y-auto p-2 flex flex-col gap-2" style={{maxHeight:280,scrollbarWidth:"thin"}}>
+              {groups.map(g=>(
+                <div key={g.group}>
+                  <div className="text-xs font-bold mb-1 px-0.5" style={{color:B.muted}}>{g.group}</div>
+                  <div className="grid grid-cols-6 gap-1">
+                    {g.items.map(item=>{
+                      const active=item.icon===value;
+                      return (
+                        <button key={item.icon} type="button" title={item.label} aria-label={item.label}
+                          onClick={()=>{onChange(item.icon);close();}}
+                          className="h-9 rounded-lg flex items-center justify-center cursor-pointer"
+                          style={{background:active?B.gold:B.fill,border:`1px solid ${active?B.gold:B.border}`,fontSize:17,lineHeight:1}}>
+                          {item.icon}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {groups.length===0&&<div className="px-3 py-5 text-center text-xs" style={{color:B.muted}}>لا رمز يطابق «{term}»</div>}
             </div>
           </div>
         </>
@@ -360,7 +416,7 @@ function LeaveGuard({onSaveAndLeave,onDiscard,onCancel,saving}:{onSaveAndLeave:(
             <button onClick={onDiscard} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
               style={{background:"#FBE6E6",color:"#BE2626",border:"none"}}>اخرج بلا حفظ</button>
             <button onClick={onCancel} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
-              style={{background:B.bg,color:B.text2,border:"none"}}>ابقَ هنا</button>
+              style={{background:B.fill,color:B.text2,border:"none"}}>ابقَ هنا</button>
           </div>
         </div>
       </motion.div>
@@ -386,7 +442,7 @@ function ImpactRow({ icon: Icon, title, value, detail, note, tone, divided }: {
 }) {
   const c = tone === "warn" ? { bg: "#FBE6E6", fg: "#BE2626", br: "#F3C9C9" }
     : tone === "clear" ? { bg: "#E3F3E8", fg: "#1E7A44", br: "#C4E4CE" }
-    : { bg: B.bg, fg: B.text3, br: B.border };
+    : { bg: B.fill, fg: B.text3, br: B.border };
   return (
     <div className="flex items-start gap-3 py-3" style={{ borderTop: divided ? `1px solid ${B.border}` : "none" }}>
       <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -493,7 +549,7 @@ function PackageDangerZone({ pkg, canWrite, isAdmin, onArchive, onPermanentDelet
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 px-5 py-4" style={{ borderTop: `1px solid ${B.border}`, background: B.bg }}>
+        <div className="flex flex-wrap gap-2 px-5 py-4" style={{ borderTop: `1px solid ${B.border}`, background: B.fill }}>
           <button onClick={() => setDialog("archive")}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{ background: "#FBF3D6", border: "1px solid #EBD9A0", color: "#8A6A08" }}>
@@ -648,16 +704,12 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
   const moveRoom=(i:number,dir:-1|1)=>{const arr=[...form.roomPrices];const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("roomPrices",arr);};
 
   // Features
-  const addFeat=()=>set("features",[...form.features,{id:uid(),icon:"check",text:""}]);
+  const addFeat=()=>set("features",[...form.features,{id:uid(),icon:DEFAULT_PKG_FEATURE_ICON,text:""}]);
   const delFeat=(id:string)=>set("features",form.features.filter(f=>f.id!==id));
   const updFeat=(id:string,field:keyof PkgFeature,val:string)=>set("features",form.features.map(f=>f.id===id?{...f,[field]:val}:f));
   const moveFeat=(i:number,dir:-1|1)=>{const arr=[...form.features];const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("features",arr);};
 
-  // Policies (each policy is a separate box)
-  const addPolicy=()=>set("policies",[...form.policies,""]);
-  const delPolicy=(i:number)=>set("policies",form.policies.filter((_,idx)=>idx!==i));
-  const updPolicy=(i:number,val:string)=>set("policies",form.policies.map((p,idx)=>idx===i?val:p));
-  const movePolicy=(i:number,dir:-1|1)=>{const arr=[...form.policies];const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("policies",arr);};
+  /* لا معالجات للسياسات: مربّع النصّ يكتب المصفوفة كاملةً بـset. */
 
   // Reviews — الاسم والتقييم والنص والصورة الاختيارية فقط.
   // consent:true توافقٌ خلفي مع العمود القديم، وليس حقلاً في واجهة الإدارة.
@@ -685,9 +737,12 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
   const TABS:{id:PkgTab;label:string}[]=[{id:"info",label:"المعلومات"},{id:"program",label:"تفاصيل البرنامج"},{id:"rooms",label:"الغرف والأسعار"},{id:"features",label:"مميزات الرحلة"},{id:"policies",label:"السياسات"},{id:"reviews",label:"الآراء"},{id:"settings",label:"الإعدادات"}];
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 px-4 md:px-8 pt-4 md:pt-6 pb-0" style={{background:B.bg}}>
+      <div className="sticky top-0 z-20 px-4 md:px-8 pt-4 md:pt-6 pb-0" style={{background:B.fill}}>
+        {/* الخلفية تمتدّ بعرض الشاشة والمحتوى يتوسّط — كي تُحاذي حافةُ
+            الرأس والتبويبات حافةَ ألواح المحتوى تحتها بالضبط. */}
+        <div style={panelBox}>
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <button onClick={back} className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
             style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
@@ -695,7 +750,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
           </button>
           <ChevronRight size={14} style={{color:B.border}}/>
           <span className="text-sm font-bold" style={{color:B.black}}>{form.name}</span>
-          <span className="text-xs font-mono px-2 py-0.5 rounded-lg" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.muted}}>{form.id}</span>
+          <span className="text-xs font-mono px-2 py-0.5 rounded-lg" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>{form.id}</span>
           <div className="mr-auto flex items-center gap-2">
             {ed.state==="saving"&&<span className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full" style={{background:"#FBF3D6",color:"#8A6A08"}}><Loader2 size={12} className="animate-spin"/>جاري الحفظ…</span>}
             {ed.state==="saved"&&<span className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full" style={{background:"#E3F3E8",color:"#1E7A44"}}><Check size={12}/>تم الحفظ</span>}
@@ -714,7 +769,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
           </div>
         </div>
         {/* Package hero strip */}
-        <div className="relative rounded-2xl overflow-hidden mb-0" style={{height:96,background:B.primary}}>
+        <div className="relative rounded-2xl overflow-hidden mb-0" style={{height:96,background:B.primaryDeep}}>
           <div className="absolute inset-0" style={{backgroundImage:`repeating-linear-gradient(45deg,rgba(192,134,44,0.035) 0px,rgba(192,134,44,0.035) 1px,transparent 1px,transparent 20px),repeating-linear-gradient(-45deg,rgba(192,134,44,0.035) 0px,rgba(192,134,44,0.035) 1px,transparent 1px,transparent 20px)`}}/>
           <div className="absolute inset-0" style={{background:"radial-gradient(ellipse at 20% 50%,rgba(60,40,10,0.4) 0%,rgba(14,12,11,0.85) 70%)"}}/>
           <div className="absolute top-0 inset-x-0 h-0.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
@@ -771,11 +826,13 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
         {/* Tabs */}
         <TabStrip tabs={TABS} active={tab} onChange={t=>setTab(t)} tone="onLight" idPrefix="pkg"/>
         <div style={{height:1,background:B.border}}/>
+        </div>
       </div>
       {/* Body */}
       <div className="flex-1 px-4 md:px-8 pb-12 pt-6 overflow-y-auto" style={{scrollbarWidth:"none"}}>
+        <div style={panelBox}>
         <AnimatePresence mode="wait">
-          {tab==="info"&&<motion.div role="tabpanel" id="pkg-panel-info" aria-labelledby="pkg-tab-info" key="info" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="grid gap-5" style={{gridTemplateColumns:"1.4fr 1fr",maxWidth:900}}>
+          {tab==="info"&&<motion.div role="tabpanel" id="pkg-panel-info" aria-labelledby="pkg-tab-info" key="info" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="grid gap-5 pkg-two-col" style={{...panelBox,gridTemplateColumns:"1.45fr 1fr"}}>
             {/* LEFT */}
             <div className="flex flex-col gap-4">
               <div className="rounded-2xl p-5 flex flex-col gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
@@ -827,7 +884,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                           </div>
                         ))}
                         {gallery.length<PKG_GALLERY_MAX&&(
-                          <label className="rounded-lg flex flex-col items-center justify-center cursor-pointer" style={{width:76,height:57,border:`1px dashed ${B.border}`,background:B.bg,color:B.muted}}>
+                          <label className="rounded-lg flex flex-col items-center justify-center cursor-pointer" style={{width:76,height:57,border:`1px dashed ${B.border}`,background:B.fill,color:B.muted}}>
                             <ImagePlus size={16}/>
                             <input type="file" accept="image/*" className="hidden"
                               onChange={onPickMedia("package-gallery",url=>{saveImmediately();addGalleryImg(url);})}/>
@@ -908,13 +965,13 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   </div>
                 )}
                 {selTransport && (()=>{ const cover=selTransport.media?.find(m=>m.primary&&m.kind==="image")?.url||selTransport.media?.find(m=>m.kind==="image")?.url; return (
-                  <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:`linear-gradient(135deg,${B.primary},${B.primaryDeep})`,border:"1px solid rgba(192,134,44,0.2)"}}>
-                    <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"rgba(255,255,255,0.08)"}}>
+                  <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:B.surface,border:`1px solid ${B.border}`}}>
+                    <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:B.fill}}>
                       {cover?<img src={cover} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span className="text-2xl">{selTransport.mode==="bus"?"🚌":"✈️"}</span>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold" style={{color:"#fff"}}>{selTransport.name}</div>
-                      <div className="text-xs mt-0.5" style={{color:B.gold2}}>{selTransport.vehicleType} · {selTransport.seats} مقعد</div>
+                      <div className="text-sm font-bold" style={{color:B.black}}>{selTransport.name}</div>
+                      <div className="text-xs mt-0.5" style={{color:B.muted}}>{selTransport.vehicleType} · {selTransport.seats} مقعد</div>
                     </div>
                   </div>
                 ); })()}
@@ -936,7 +993,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   </div>
                 )}
                 {selHotel && (()=>{ const cover=selHotel.media?.find(m=>m.primary&&m.kind==="image")?.url||selHotel.media?.find(m=>m.kind==="image")?.url; return (
-                  <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+                  <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:B.fill,border:`1px solid ${B.border}`}}>
                     <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0" style={{background:"#fff",border:`1px solid ${B.border}`}}>
                       {cover?<img src={cover} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<Building2 size={18} style={{color:B.muted}}/>}
                     </div>
@@ -945,8 +1002,11 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       <div className="flex items-center gap-2 text-xs" style={{color:B.text2}}>
                         <MapPin size={10} style={{color:B.gold}}/>
                         <span>{selHotel.city}</span><span>·</span>
-                        <span>{distanceLabel(selHotel.distanceM)}</span><span>·</span>
-                        <div className="flex gap-0.5">{Array.from({length:selHotel.stars},(_,i)=><Star key={i} size={9} fill={B.gold} stroke={B.gold}/>)}</div>
+                        {/* التصنيف نصّاً لا صفّاً من نجوم: خمس رسماتٍ ذهبية
+                            بقياس ٩ بكسل تُعيد رسم نفسها وتتبدّل عدداً مع كل
+                            تبديل فندق — ضجيجٌ بصري ثمنه معلومةٌ يقولها رقمٌ
+                            واحد بهدوء، وهي مكتوبة أصلاً في قائمة الاختيار. */}
+                        <span>{selHotel.stars} نجوم</span>
                       </div>
                     </div>
                   </div>
@@ -962,18 +1022,18 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
           </motion.div>}
 
           {tab==="program"&&<motion.div role="tabpanel" id="pkg-panel-program" aria-labelledby="pkg-tab-program" key="program" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}}>
-            <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:24,maxWidth:860}}>
+            <div className="pkg-two-col" style={{display:"grid",gridTemplateColumns:"1.35fr 1fr",gap:24}}>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold" style={{color:B.black}}>مراحل البرنامج</h3>
                   <button onClick={addStage} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.primary,border:"none",color:B.cream}}><Plus size={12}/>إضافة مرحلة</button>
+                    style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة مرحلة</button>
                 </div>
                 <AnimatePresence>{activeStages.map((s,idx)=>(
                   <motion.div key={s.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
                     className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-                    <div className="flex items-center gap-2 px-4 py-2.5" style={{background:B.bg,borderBottom:`1px solid ${B.border}`}}>
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs" style={{background:B.primary,color:B.gold}}>{idx+1}</div>
+                    <div className="flex items-center gap-2 px-4 py-2.5" style={{background:B.fill,borderBottom:`1px solid ${B.border}`}}>
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs" style={{background:B.gold,color:B.black}}>{idx+1}</div>
                       <span className="text-sm font-bold flex-1" style={{color:B.black}}>{s.title||"مرحلة جديدة"}</span>
                       <div className="flex gap-1">
                         <button aria-label="تقديم المرحلة في البرنامج" title="تقديم المرحلة في البرنامج" onClick={()=>moveStage(s.id,-1)} disabled={idx===0} className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
@@ -988,8 +1048,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-3">
                       <div><Field label="الأيقونة" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
-                             <select className={inp} style={{...ist,fontSize:16}} value={s.icon} onChange={e=>updStage(s.id,"icon",e.target.value)}>
-                                                       {STAGE_ICONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
+                             <StageIconPicker value={s.icon} onChange={icon=>updStage(s.id,"icon",icon)}/>
                            </Field></div>
                       <div><Field label="الوقت" labelClass="block text-xs font-bold mb-1" labelStyle={{color:B.muted}}>
                              <input className={inp} style={{...ist,direction:"ltr"}} value={s.time} placeholder="22:00" onChange={e=>updStage(s.id,"time",e.target.value)}/>
@@ -1012,7 +1071,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 {activeStages.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ListChecks size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف مراحل بعد</p></div>}
                 {/* Archived stages */}
                 {archivedStages.length>0&&(
-                  <div className="mt-2 rounded-2xl p-4 flex flex-col gap-2" style={{background:B.bg,border:`1px dashed ${B.border}`}}>
+                  <div className="mt-2 rounded-2xl p-4 flex flex-col gap-2" style={{background:B.fill,border:`1px dashed ${B.border}`}}>
                     <div className="flex items-center gap-2 mb-1">
                       <Archive size={13} style={{color:"#8a6a08"}}/>
                       <span className="text-xs font-bold" style={{color:B.text2}}>مراحل مؤرشفة ({archivedStages.length})</span>
@@ -1043,7 +1102,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   {activeStages.map((s,idx)=>(
                     <div key={s.id} className="flex gap-3">
                       <div className="flex flex-col items-center flex-shrink-0">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base" style={{background:B.bg,border:`1.5px solid ${B.border}`}}>{s.icon}</div>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base" style={{background:B.fill,border:`1.5px solid ${B.border}`}}>{s.icon}</div>
                         {idx<activeStages.length-1&&<div className="flex-1 w-0.5 my-1" style={{background:B.border,minHeight:12}}/>}
                       </div>
                       <div className="pb-4 flex-1">
@@ -1062,151 +1121,241 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             </div>
           </motion.div>}
 
-          {tab==="rooms"&&<motion.div role="tabpanel" id="pkg-panel-rooms" aria-labelledby="pkg-tab-rooms" key="rooms" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}}><div style={{maxWidth:800}}>
-            <div className="rounded-2xl p-4 mb-4" style={{background:"#fff",border:`1px solid ${ready.startsFrom>0?B.border:"#F3C9C9"}`}}>
-              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px] gap-4 items-end">
-                <div>
-                  <div className="text-sm font-bold mb-0.5" style={{color:B.black}}>السعر الظاهر للعميل</div>
-                  <p className="text-xs" style={{color:B.muted}}>تحدده أنت يدوياً، ولا يتغير عند تعديل أسعار الغرف أو المواصلات.</p>
+          {tab==="rooms"&&(()=>{
+            /* ── التسعير: نموذج إعداد لا لوحة محاسبة ──
+
+               كان الرقم الواحد موزّعاً على أربعة أماكن: السعر المعلن في
+               بطاقة، ومراجعةٌ تكرّر الفندق والمواصلة، وجدولٌ بثمانية أعمدة
+               يخلط تكلفة المقعد بسعر الغرفة، وصندوق «مواصلات فقط» بينهما.
+               فمن يريد أن يعرف «كم يدفع الفرد؟» يجمع بنفسه من أربع نواحٍ.
+
+               التدفّق الآن من أعلى إلى أسفل — سعرٌ معلن، ثم سكن، ثم نقل —
+               وإلى جانبه بطاقةٌ واحدة تجمع: السكن + النقل = الإجمالي، تتغيّر
+               مع كل ضغطة مفتاح. الأرقام تُدخَل مرّةً وتُقرأ مرّة. */
+            const nights=form.nights;
+            const seatOf=(r:RoomPrice)=>r.seatCost ?? (selTransport?.seatCost ?? 0);
+            const stayOf=(r:RoomPrice)=>(r.perNight||0)*nights;
+            const totalOf=(r:RoomPrice)=>stayOf(r)+seatOf(r);
+            const sellable=form.roomPrices.filter(isSellableTier);
+            const cheapest=sellable.length?Math.min(...sellable.map(totalOf)):0;
+            const announced=form.marketPrice||0;
+            /* فجوةٌ بين المعلن وأرخص إجمالي فعلي ليست خطأً دائماً (سعرٌ
+               ترويجي مقصود)، لكنها لا تُكتشف بالصدفة بعد النشر. */
+            const gap=announced>0&&cheapest>0&&announced!==cheapest;
+            const step=(n:number,Icon:typeof Wallet,title:string,note?:string)=>(
+              <div className="flex items-start gap-2.5 mb-3">
+                <span className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{background:B.primaryDeep,color:B.gold,fontSize:12,fontWeight:900}}>{n}</span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5" style={{color:B.black}}><Icon size={14} style={{color:B.gold}}/>{title}</h3>
+                  {note&&<p className="text-xs mt-0.5 leading-relaxed" style={{color:B.muted}}>{note}</p>}
                 </div>
-                <Field label="السعر يبدأ من (ر.س) *">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1"><NumericInput min={1} value={form.marketPrice || ""} placeholder="50"
-                      normalizeArabicDigits
-                      onValueChange={value=>set("marketPrice",value===""?0:Number(value))}
-                      className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-                      style={{borderColor:ready.startsFrom>0?B.border:"#BE2626",background:"#fff",color:B.black,direction:"ltr",fontFamily:"inherit"}}/></div>
-                    <span className="text-sm font-bold whitespace-nowrap" style={{color:B.text2}}>ر.س</span>
+              </div>
+            );
+            const card:React.CSSProperties={background:"#fff",border:`1px solid ${B.border}`};
+            return (
+          <motion.div role="tabpanel" id="pkg-panel-rooms" aria-labelledby="pkg-tab-rooms" key="rooms" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}}>
+            <div className="pkg-price-grid" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 304px",gap:20,alignItems:"start"}}>
+              <div className="flex flex-col gap-4 min-w-0">
+
+                {/* ① السعر المعلن */}
+                <section className="rounded-2xl p-5" style={{...card,borderColor:announced>0?B.border:"#F3C9C9"}}>
+                  {step(1,Wallet,"السعر المعلن للعميل","الرقم الذي يراه العميل في بطاقة الباقة تحت «يبدأ من». تحدده أنت، ولا يتغيّر تلقائياً مع أسعار الغرف.")}
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div style={{width:190}}>
+                      <Field label="يبدأ من (ر.س)">
+                        <NumericInput min={1} value={form.marketPrice || ""} placeholder="50" normalizeArabicDigits
+                          onValueChange={value=>set("marketPrice",value===""?0:Number(value))}
+                          className="w-full border rounded-xl px-3.5 py-2.5 text-base font-extrabold focus:outline-none"
+                          style={{borderColor:announced>0?B.border:"#BE2626",background:"#fff",color:B.gold,direction:"ltr",textAlign:"right",fontFamily:"var(--font-app)"}}/>
+                      </Field>
+                    </div>
+                    <p className="text-xs leading-relaxed flex-1 min-w-[220px] pb-2.5" style={{color:B.muted}}>
+                      <b style={{color:B.text2}}>الأسعار نهائية شاملة الضريبة والخدمة</b> — لا تُضاف نسبة لاحقاً، وما يظهر للعميل هو ما يدفعه.
+                    </p>
                   </div>
-                </Field>
-              </div>
-              {!ready.startsFrom&&<p className="text-xs font-bold mt-2" style={{color:"#BE2626"}}>أدخل السعر الظاهر للعميل قبل نشر الباقة.</p>}
-            </div>
-            {/* شرح التسعير — قرار الفريق: الأسعار نهائية */}
-            <div className="rounded-xl px-4 py-3 mb-4 flex items-start gap-2.5" style={{background:"#E0F2FB",border:"1px solid #B9DFF0"}}>
-              <Info size={15} style={{color:"#0E7CA8",flexShrink:0,marginTop:1}}/>
-              <p className="text-xs leading-relaxed" style={{color:"#0E7CA8"}}>
-                <b>الأسعار المدخلة نهائية شاملة ضريبة القيمة المضافة ورسوم الخدمة</b> — لا تُضاف أي نسبة عليها لاحقاً،
-                وما يظهر للعميل هو ما يدفعه. أدخل السعر الذي تريد تحصيله فعلاً.
-              </p>
-            </div>
+                  {!announced&&<p className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>أدخل السعر المعلن قبل نشر الباقة.</p>}
+                </section>
 
-            {/* Read-only review: selected transport + hotel rooms */}
-            <div className="rounded-2xl p-4 mb-4" style={{background:B.bg,border:`1px dashed ${B.border}`}}>
-              <div className="text-xs font-bold mb-2.5 flex items-center gap-1.5" style={{color:B.text2}}><ListChecks size={13} style={{color:B.gold}}/>مراجعة سريعة قبل التسعير (عرض فقط)</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Transport */}
-                <div className="rounded-xl p-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                  <div className="text-xs font-bold mb-2" style={{color:B.muted}}>المواصلة المختارة</div>
-                  {selTransport
-                    ? <div className="flex items-center justify-between gap-2 text-sm">
-                        <span className="font-bold" style={{color:B.black}}>{selTransport.mode==="bus"?"🚌":"✈️"} {selTransport.name}</span>
-                        <span className="font-bold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(selTransport.seatCost)}<span className="text-xs font-normal" style={{color:B.muted}}> /مقعد</span></span>
-                      </div>
-                    : <div className="text-xs" style={{color:B.muted}}>لم تُربط مواصلة بعد.</div>}
-                </div>
-                {/* Hotel rooms */}
-                <div className="rounded-xl p-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                  <div className="text-xs font-bold mb-2" style={{color:B.muted}}>غرف الفندق المختار{selHotel?` · ${cleanHotelName(selHotel.name)}`:""}</div>
-                  {selHotel&&selHotel.roomTypes.length>0
-                    ? <div className="flex flex-col gap-1">{selHotel.roomTypes.map(rt=>(
-                        <div key={rt.id} className="flex items-center justify-between gap-2 text-xs">
-                          <span style={{color:B.text2}}>{rt.kind==="shared"?"سكن مشترك":"غرفة خاصة"} · {rt.beds} سرير</span>
-                          <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{sar(rt.pricePerNight)}</span>
+                {/* ② السكن وأسعاره */}
+                <section className="rounded-2xl p-5" style={card}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    {step(2,BedDouble,"السكن وأسعاره",nights>0
+                      ?"سعر الليلة للفرد في كل نوع سكن. الليالي مأخوذة من مدة الباقة."
+                      :"الباقة بلا مبيت (صفر ليالٍ) — السكن اختياري هنا.")}
+                    <button onClick={addRoom} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة نوع سكن</button>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>
+                      × {nights} {nights===1?"ليلة":nights===2?"ليلتان":"ليالٍ"}
+                    </span>
+                    {selHotel&&selHotel.roomTypes.length>0&&(
+                      <span className="text-xs" style={{color:B.muted}}>
+                        للاسترشاد — أسعار {cleanHotelName(selHotel.name)}:{" "}
+                        {selHotel.roomTypes.map(rt=>`${rt.kind==="shared"?"مشترك":"خاصة"} ${sarNumber(rt.pricePerNight)}`).join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                  {/* خمسة أعمدة بعد ثمانية: تكلفة المقعد نزلت إلى قسم النقل،
+                      والليالي صارت شارةً واحدة فوق الجدول بدل رقمٍ مكرّر في
+                      كل صفّ، والأسهم والحذف في خليةٍ واحدة. */}
+                  <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
+                    <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1.5fr .9fr 1fr 1fr 68px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
+                      {["نوع السكن","عدد الأشخاص","سعر الليلة للفرد","إجمالي السكن للفرد",""].map((h,i)=>(
+                        <div key={i} className="px-3 py-2.5 text-center first:text-right">{h}</div>
+                      ))}
+                    </div>
+                    <AnimatePresence>{form.roomPrices.map((r,ri)=>(
+                      <motion.div key={r.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
+                        className="grid items-center" style={{gridTemplateColumns:"1.5fr .9fr 1fr 1fr 68px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
+                        <div className="px-3 py-2">
+                          <select className="w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none cursor-pointer"
+                            style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
+                            value={r.type} onChange={e=>updRoom(r.id,"type",e.target.value)}>
+                            <option>سكن مشترك</option><option>غرفة خاصة</option><option>جناح عائلي</option>
+                          </select>
                         </div>
-                      ))}</div>
-                    : <div className="text-xs" style={{color:B.muted}}>لا فندق مرتبط أو لا توجد غرف.</div>}
+                        <div className="px-3 py-2"><NumericInput min={1} className="w-full border rounded-xl px-2 py-2 text-xs text-center focus:outline-none"
+                          style={{borderColor:B.border,fontFamily:"inherit"}} value={r.persons} onValueChange={v=>updRoom(r.id,"persons",Number(v))}/></div>
+                        <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
+                          style={{borderColor:B.border,color:B.gold,fontFamily:"inherit"}} value={r.perNight} onValueChange={v=>updRoom(r.id,"perNight",Number(v))}/></div>
+                        <div className="px-3 py-2 text-sm font-extrabold text-center" style={{color:B.black,fontFamily:"var(--font-app)"}}>{sar(stayOf(r))}</div>
+                        <div className="px-2 py-2 flex items-center justify-center gap-1">
+                          <div className="flex flex-col gap-0.5">
+                            <button onClick={()=>moveRoom(ri,-1)} disabled={ri===0} className="w-5 h-3.5 flex items-center justify-center rounded cursor-pointer"
+                              style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===0?0.35:1}} aria-label="تقديم نوع السكن" title="تقديم نوع السكن"><ChevronUp size={9}/></button>
+                            <button onClick={()=>moveRoom(ri,1)} disabled={ri===form.roomPrices.length-1} className="w-5 h-3.5 flex items-center justify-center rounded cursor-pointer"
+                              style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===form.roomPrices.length-1?0.35:1}} aria-label="تأخير نوع السكن" title="تأخير نوع السكن"><ChevronDown size={9}/></button>
+                          </div>
+                          <button aria-label="حذف نوع السكن" title="حذف نوع السكن" onClick={()=>delRoom(r.id)} className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
+                            style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={11}/></button>
+                        </div>
+                      </motion.div>
+                    ))}</AnimatePresence>
+                    {form.roomPrices.length===0&&<div className="flex flex-col items-center py-12" style={{color:ready.housing?"#BE2626":B.muted}}>
+                      <Building2 size={26} style={{opacity:0.35,marginBottom:8}}/>
+                      <p className="text-sm font-bold">لم تُضف أنواع سكن بعد</p>
+                      <p className="text-xs mt-1">{ready.housing?"مطلوب نوع واحد على الأقل قبل النشر — الباقة تشمل سكناً.":"الباقة بلا مبيت — السكن اختياري."}</p>
+                    </div>}
+                  </div>
+                </section>
+
+                {/* ③ المواصلات — قسم مستقل لا عمودٌ داخل جدول الغرف */}
+                <section className="rounded-2xl p-5" style={card}>
+                  {step(3,BusIcon,"المواصلات","تكلفة المقعد تُضاف إلى سعر السكن لتكوّن الإجمالي للفرد. اخفضها كلما زاد عدد الأشخاص في الغرفة.")}
+                  {selTransport
+                    ? <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl mb-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                        <span className="text-sm font-bold" style={{color:B.black}}>{selTransport.mode==="bus"?"🚌":"✈️"} {selTransport.name}</span>
+                        <span className="text-sm font-bold" style={{color:B.text2,fontFamily:"var(--font-app)"}}>{sar(selTransport.seatCost)}<span className="text-xs font-normal" style={{color:B.muted}}> /مقعد — القيمة المبدئية</span></span>
+                      </div>
+                    : <div className="rounded-xl px-3.5 py-2.5 mb-3 text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#8A6A08"}}>
+                        لم تُربط مواصلة بعد — تكلفة المقعد المبدئية صفر. اربطها من تبويب «المعلومات».
+                      </div>}
+                  {form.roomPrices.length>0&&(
+                    <div className="rounded-xl overflow-hidden mb-3" style={{border:`1px solid ${B.border}`}}>
+                      <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1fr 140px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
+                        <div className="px-3 py-2.5">تكلفة المقعد لكل نوع سكن</div>
+                        <div className="px-3 py-2.5 text-center">ر.س / فرد</div>
+                      </div>
+                      {form.roomPrices.map(r=>(
+                        <div key={r.id} className="grid items-center" style={{gridTemplateColumns:"1fr 140px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
+                          <div className="px-3 py-2 text-xs font-bold" style={{color:B.text2}}>{r.type} <span style={{color:B.muted,fontWeight:400}}>· {r.persons} أشخاص</span></div>
+                          <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
+                            style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"var(--font-app)"}} value={seatOf(r)}
+                            onValueChange={v=>updRoom(r.id,"seatCost",Number(v))}/></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-xl p-3.5" style={{background:form.transportOnlyEnabled?"#F3FAF5":B.fill,border:`1px solid ${form.transportOnlyEnabled?"#C4E4CE":B.border}`}}>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={!!form.transportOnlyEnabled}
+                        onChange={e=>{saveImmediately();set("transportOnlyEnabled",e.target.checked);}} style={{accentColor:B.primary,width:16,height:16}}/>
+                      <span className="text-sm font-bold" style={{color:B.black}}>السماح بحجز مواصلات فقط (بلا سكن)</span>
+                    </label>
+                    {form.transportOnlyEnabled&&<div className="mt-3" style={{maxWidth:240}}>
+                      <Field label="سعر المواصلات للفرد (ر.س)" hint="سعر البيع للعميل، لا تكلفة المقعد الداخلية.">
+                        <NumericInput min={1} className={inp} style={{...ist,color:B.gold,fontWeight:800,direction:"ltr",textAlign:"right"}}
+                          value={form.transportOnlyPrice ?? ""} placeholder="مثال: 75" onValueChange={v=>set("transportOnlyPrice",v===""?undefined:Number(v))}/>
+                      </Field>
+                    </div>}
+                  </div>
+                </section>
+              </div>
+
+              {/* ④ الملخّص — بطاقةٌ واحدة تتحدّث مع كل ضغطة مفتاح */}
+              <aside className="sticky rounded-2xl p-4 flex flex-col gap-3" style={{...card,top:8}}>
+                <h3 className="text-sm font-bold flex items-center gap-1.5" style={{color:B.black}}><Wallet size={14} style={{color:B.gold}}/>ملخّص السعر</h3>
+
+                <div className="rounded-xl px-3.5 py-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                  <div className="text-xs" style={{color:B.muted}}>المعلن للعميل «يبدأ من»</div>
+                  <div className="text-xl font-extrabold mt-0.5" style={{color:announced>0?B.gold:"#BE2626",fontFamily:"var(--font-app)"}}>
+                    {announced>0?sarNumber(announced):"—"}<span className="text-xs font-bold mr-1">{SAR}</span>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between mb-2">
-              <div><h3 className="text-sm font-bold" style={{color:B.black}}>جدول الغرف والأسعار</h3>
-                <p className="text-xs mt-0.5" style={{color:B.muted}}>كل صف مستقل — عدّل عدد الأشخاص وتكلفة المقعد لكل نوع سكن على حِدة. الإجمالي للفرد = تكلفة المقعد + (سعر الليلة × عدد الليالي)</p></div>
-              <button onClick={addRoom} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:B.primary,border:"none",color:B.cream}}><Plus size={12}/>إضافة نوع</button>
-            </div>
-            <div className="rounded-2xl p-4 mb-4" style={{background:form.transportOnlyEnabled?"#F3FAF5":B.bg,border:`1px solid ${form.transportOnlyEnabled?"#C4E4CE":B.border}`}}>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={!!form.transportOnlyEnabled}
-                  onChange={e=>{saveImmediately();set("transportOnlyEnabled",e.target.checked);}} style={{accentColor:B.primary,width:16,height:16}}/>
-                <span className="text-sm font-bold" style={{color:B.black}}>🚌 السماح بحجز مواصلات فقط</span>
-              </label>
-              {form.transportOnlyEnabled&&<div className="mt-3" style={{maxWidth:260}}>
-                <Field label="سعر المواصلات للفرد (ر.س)" hint="سعر البيع للعميل، وليس تكلفة المقعد الداخلية.">
-                  <NumericInput min={1} className={inp} style={{...ist,color:B.gold,fontWeight:800,direction:"ltr",textAlign:"right"}}
-                    value={form.transportOnlyPrice ?? ""} placeholder="مثال: 75" onValueChange={v=>set("transportOnlyPrice",v===""?undefined:Number(v))}/>
-                </Field>
-              </div>}
-            </div>
-            <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-              <div className="grid text-xs font-bold" style={{gridTemplateColumns:"40px 1.6fr .8fr 1.3fr .65fr 1.1fr 1.2fr 36px",background:B.bg,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
-                {["الترتيب","نوع السكن","عدد الأشخاص","سعر السكن للفرد / الليلة (شامل الضريبة)","عدد الليالي","تكلفة المقعد","الإجمالي للفرد",""].map((h,i)=>(
-                  <div key={i} className="px-3 py-3 text-center first:text-right">{h}</div>
-                ))}
-              </div>
-              <AnimatePresence>{form.roomPrices.map((r,ri)=>{
-                const seatCost = r.seatCost ?? (selTransport?.seatCost ?? 0);
-                const total = r.perNight * form.nights + seatCost;
-                return (
-                  <motion.div key={r.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                    className="grid items-center" style={{gridTemplateColumns:"40px 1.6fr .8fr 1.3fr .65fr 1.1fr 1.2fr 36px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
-                    {/* ترتيب مستقلّ لكل صفّ — هو ترتيب ظهور الخيارات للعميل */}
-                    <div className="px-1 py-2 flex flex-col gap-0.5 items-center">
-                      <button onClick={()=>moveRoom(ri,-1)} disabled={ri===0} className="w-6 h-4 flex items-center justify-center rounded cursor-pointer"
-                        style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===0?0.35:1}} aria-label="تقديم نوع الغرفة" title="تقديم نوع الغرفة"><ChevronUp size={10}/></button>
-                      <button onClick={()=>moveRoom(ri,1)} disabled={ri===form.roomPrices.length-1} className="w-6 h-4 flex items-center justify-center rounded cursor-pointer"
-                        style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===form.roomPrices.length-1?0.35:1}} aria-label="تأخير نوع الغرفة" title="تأخير نوع الغرفة"><ChevronDown size={10}/></button>
+                {sellable.length>0
+                  ? <div className="flex flex-col gap-2.5">
+                      {sellable.map(r=>(
+                        <div key={r.id} className="rounded-xl px-3.5 py-2.5" style={{border:`1px solid ${B.border}`}}>
+                          <div className="text-xs font-bold mb-1.5" style={{color:B.black}}>{r.type}</div>
+                          <div className="flex items-center justify-between text-xs" style={{color:B.text2}}>
+                            <span>السكن <span style={{color:B.muted}}>({nights}×{sarNumber(r.perNight)})</span></span>
+                            <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(stayOf(r))}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs mt-1" style={{color:B.text2}}>
+                            <span>النقل</span>
+                            <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(seatOf(r))}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm font-extrabold mt-2 pt-2" style={{color:B.black,borderTop:`1px solid ${B.border}`}}>
+                            <span>الإجمالي للفرد</span>
+                            <span style={{fontFamily:"var(--font-app)",color:B.gold}}>{sar(totalOf(r))}</span>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between text-xs font-bold px-1" style={{color:B.text2}}>
+                        <span>أرخص إجمالي فعلي</span>
+                        <span style={{fontFamily:"var(--font-app)"}}>{sar(cheapest)}</span>
+                      </div>
+                      {gap&&(
+                        <div className="rounded-xl px-3 py-2.5 flex items-start gap-2 text-xs leading-relaxed"
+                          style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#8A6A08"}}>
+                          <Info size={13} style={{flexShrink:0,marginTop:1}}/>
+                          <span>المعلن {sarNumber(announced)} وأرخص إجمالي {sarNumber(cheapest)} — تأكّد أن الفرق مقصود.</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="px-3 py-2">
-                      <select className="w-full border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none cursor-pointer"
-                        style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
-                        value={r.type} onChange={e=>updRoom(r.id,"type",e.target.value)}>
-                        <option>سكن مشترك</option><option>غرفة خاصة</option><option>جناح عائلي</option>
-                      </select>
-                    </div>
-                    <div className="px-3 py-2"><NumericInput min={1} className="w-full border rounded-xl px-2 py-2 text-xs text-center focus:outline-none"
-                      style={{borderColor:B.border,fontFamily:"inherit"}} value={r.persons} onValueChange={v=>updRoom(r.id,"persons",Number(v))}/></div>
-                    <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
-                      style={{borderColor:B.border,color:B.gold,fontFamily:"inherit"}} value={r.perNight} onValueChange={v=>updRoom(r.id,"perNight",Number(v))}/></div>
-                    <div className="px-3 py-2 text-xs font-bold text-center" style={{color:B.text2}}>{form.nights}</div>
-                    <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
-                      style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"var(--font-app)"}} value={seatCost}
-                      onValueChange={v=>updRoom(r.id,"seatCost",Number(v))}/></div>
-                    <div className="px-3 py-2 text-sm font-extrabold text-center" style={{color:B.black,fontFamily:"var(--font-app)"}}>{sar(total)}</div>
-                    <div className="px-2 py-2"><button aria-label="حذف نوع الغرفة" title="حذف نوع الغرفة" onClick={()=>delRoom(r.id)} className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={11}/></button></div>
-                  </motion.div>
-                );
-              })}</AnimatePresence>
-              {form.roomPrices.length===0&&<div className="flex flex-col items-center py-16" style={{color:ready.housing?"#BE2626":B.muted}}>
-                <Building2 size={28} style={{opacity:0.35,marginBottom:8}}/>
-                <p className="text-sm font-bold">لم تُضف خيارات غرف بعد</p>
-                <p className="text-xs mt-1">{ready.housing?"مطلوب خيار واحد على الأقل قبل نشر الباقة — الباقة تشمل سكناً.":"الباقة بلا مبيت (مواصلات فقط) — الغرف اختيارية."}</p>
-              </div>}
-            </div>
-            <div className="flex items-center gap-2 mt-2 px-1 flex-wrap">
-              <p className="text-xs" style={{color:B.muted}}>
-                💡 أعطِ خصماً على المقعد كلما زاد عدد الأشخاص في الغرفة (مثال: 3 أشخاص = سعر أقل، شخص واحد = سعر أعلى).
-                {selTransport&&<> القيمة المبدئية للمقعد من المواصلة ({selTransport.name}): {sar(selTransport.seatCost)}.</>}
-              </p>
-            </div>
-          </div></motion.div>}
+                  : <p className="text-xs leading-relaxed" style={{color:B.muted}}>
+                      أضف نوع سكن بسعر ليلة أكبر من صفر ليظهر الإجمالي للفرد هنا.
+                    </p>}
 
-          {tab==="features"&&<motion.div role="tabpanel" id="pkg-panel-features" aria-labelledby="pkg-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={{maxWidth:600}} className="flex flex-col gap-3">
+                {form.transportOnlyEnabled&&(
+                  <div className="rounded-xl px-3.5 py-2.5 flex items-center justify-between text-xs font-bold" style={{background:"#F3FAF5",border:"1px solid #C4E4CE",color:"#1E7A44"}}>
+                    <span>مواصلات فقط</span>
+                    <span style={{fontFamily:"var(--font-app)"}}>{form.transportOnlyPrice?sar(form.transportOnlyPrice):"—"}</span>
+                  </div>
+                )}
+              </aside>
+            </div>
+          </motion.div>
+            );
+          })()}
+
+          {tab==="features"&&<motion.div role="tabpanel" id="pkg-panel-features" aria-labelledby="pkg-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={formBox} className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div><h3 className="text-sm font-bold" style={{color:B.black}}>مميزات الرحلة</h3>
-                <p className="text-xs mt-0.5" style={{color:B.muted}}>تظهر للعميل في صفحة الباقة</p></div>
+                <p className="text-xs mt-0.5" style={{color:B.muted}}>نصّ الميزة وأيقونة اختيارية — لا أكثر. تظهر للعميل في صفحة الباقة.</p></div>
               <button onClick={addFeat} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+                style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
             </div>
             <AnimatePresence>{form.features.map((f,fi)=>(
               <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-center">
                 <div className="flex flex-col gap-0.5 flex-shrink-0">
                   <button onClick={()=>moveFeat(fi,-1)} disabled={fi===0} className="w-7 h-4 flex items-center justify-center rounded cursor-pointer"
-                    style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,opacity:fi===0?0.35:1}} aria-label="تقديم الميزة" title="تقديم الميزة"><ChevronUp size={11}/></button>
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:fi===0?0.35:1}} aria-label="تقديم الميزة" title="تقديم الميزة"><ChevronUp size={11}/></button>
                   <button onClick={()=>moveFeat(fi,1)} disabled={fi===form.features.length-1} className="w-7 h-4 flex items-center justify-center rounded cursor-pointer"
-                    style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,opacity:fi===form.features.length-1?0.35:1}} aria-label="تأخير الميزة" title="تأخير الميزة"><ChevronDown size={11}/></button>
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:fi===form.features.length-1?0.35:1}} aria-label="تأخير الميزة" title="تأخير الميزة"><ChevronDown size={11}/></button>
                 </div>
                 <FeatureIconPicker value={f.icon} onChange={k=>updFeat(f.id,"icon",k)}/>
                 <input className={`${inp} flex-1`} style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
@@ -1221,11 +1370,11 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <h4 className="text-xs font-bold mb-3" style={{color:B.muted}}>معاينة — كما يراها العميل</h4>
                 <div className="flex flex-wrap gap-2">
                   {form.features.map(f=>{
-                    const Icon=(PKG_FEATURE_ICONS[f.icon]??PKG_FEATURE_ICONS.check).icon;
+                    const Icon=pkgFeatureIcon(f.icon);
                     return (
                     <span key={f.id} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
-                      style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text3}}>
-                      <Icon size={13} style={{color:B.gold}}/>{f.text}
+                      style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text3}}>
+                      {Icon&&<Icon size={13} style={{color:B.gold}}/>}{f.text||"—"}
                     </span>
                     );
                   })}
@@ -1234,30 +1383,55 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             )}
           </motion.div>}
 
-          {tab==="policies"&&<motion.div role="tabpanel" id="pkg-panel-policies" aria-labelledby="pkg-tab-policies" key="policies" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={{maxWidth:640}} className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div><h3 className="text-sm font-bold" style={{color:B.black}}>سياسات الباقة</h3>
-                <p className="text-xs mt-0.5" style={{color:B.muted}}>كل سياسة في مربع مستقل — أضف واحذف ورتّب الأهمية بالأسهم</p></div>
-              <button onClick={addPolicy} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة سياسة</button>
+          {tab==="policies"&&<motion.div role="tabpanel" id="pkg-panel-policies" aria-labelledby="pkg-tab-policies" key="policies" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={formBox} className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-bold" style={{color:B.black}}>سياسات الباقة</h3>
+              <p className="text-xs mt-0.5" style={{color:B.muted}}>سطرٌ لكل سياسة. كل سطرٍ يصير بنداً مستقلاً عند العميل، بترتيب الأسطر نفسه.</p>
             </div>
-            <AnimatePresence>{form.policies.map((p,i)=>(
-              <motion.div key={i} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-center">
-                <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{background:`linear-gradient(135deg,${B.gold},${B.gold2})`,color:B.black,fontSize:11,fontWeight:900}}>{i+1}</span>
-                <input className="flex-1 border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
-                  value={p} placeholder="مثال: إلغاء مجاني قبل 48 ساعة من موعد الرحلة" onChange={e=>updPolicy(i,e.target.value)}/>
-                <div className="flex flex-col gap-0.5 flex-shrink-0">
-                  <button aria-label="تقديم السياسة في الترتيب" title="تقديم السياسة في الترتيب" onClick={()=>movePolicy(i,-1)} disabled={i===0} className="w-7 h-4 flex items-center justify-center rounded cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:i===0?B.border:B.text2}}><ChevronUp size={11}/></button>
-                  <button aria-label="تأخير السياسة في الترتيب" title="تأخير السياسة في الترتيب" onClick={()=>movePolicy(i,1)} disabled={i===form.policies.length-1} className="w-7 h-4 flex items-center justify-center rounded cursor-pointer" style={{background:B.bg,border:`1px solid ${B.border}`,color:i===form.policies.length-1?B.border:B.text2}}><ChevronDown size={11}/></button>
+            {/* حقلٌ واحد لا حقلٌ لكل بند: «إضافة سياسة» ثم كتابة ثم إضافة
+                ثانية — ضغطتان لكل سطر، وثمانُ سياساتٍ ستّ عشرة ضغطة قبل
+                أول حرف. واللصق من ملف الشروط كان مستحيلاً.
+
+                القيمة تُشتقّ من المصفوفة مباشرةً بلا حالةٍ محلية: split ثم
+                join دورةٌ مطابقة تماماً، فما يكتبه الموظف يعود كما كتبه —
+                بأسطره الفارغة وهو في منتصف الكتابة. والتشذيب عند الخروج من
+                الحقل لا مع كل حرف، وإلّا مُحي السطر الفارغ تحت إصبعه. */}
+            <textarea
+              className="w-full border rounded-2xl px-4 py-3 text-sm focus:outline-none"
+              style={{...ist,minHeight:280,resize:"vertical",lineHeight:2.1}}
+              value={(form.policies??[]).join("\n")}
+              onChange={e=>set("policies",e.target.value.split("\n"))}
+              onBlur={e=>{
+                const clean=e.target.value.split("\n").map(line=>line.trim()).filter(Boolean);
+                const now=form.policies??[];
+                if(clean.length!==now.length||clean.some((line,i)=>line!==now[i])) set("policies",clean);
+              }}
+              placeholder={"إلغاء مجاني قبل 48 ساعة من موعد الرحلة\nالتأخر عن موعد الانطلاق لا يستوجب تعويضاً\nيلزم إحضار الهوية الوطنية أو الإقامة سارية المفعول"}/>
+            {(()=>{ const live=(form.policies??[]).filter(x=>x.trim()); return (
+              <>
+                <div className="flex items-center gap-1.5 text-xs" style={{color:B.muted}}>
+                  <ListChecks size={13} style={{color:live.length?B.gold:B.muted}}/>
+                  {live.length?<><b style={{color:B.text2}}>{live.length}</b> سياسة ستظهر للعميل</>:"لم تُكتب سياسات بعد — الأسطر الفارغة لا تُحسب."}
                 </div>
-                <button aria-label="حذف السياسة" title="حذف السياسة" onClick={()=>delPolicy(i)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-                  style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>
-              </motion.div>
-            ))}</AnimatePresence>
-            {form.policies.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ListChecks size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف سياسات بعد</p></div>}
+                {live.length>0&&(
+                  <div className="mt-1 p-5 rounded-2xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+                    <h4 className="text-xs font-bold mb-3" style={{color:B.muted}}>معاينة — كما يراها العميل</h4>
+                    <div className="flex flex-col gap-2">
+                      {live.map((line,i)=>(
+                        <div key={i} className="flex items-start gap-2.5">
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                            style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontSize:10,fontWeight:900}}>{i+1}</span>
+                          <span className="text-sm leading-relaxed" style={{color:B.text3}}>{line.trim()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ); })()}
           </motion.div>}
 
-          {tab==="reviews"&&<motion.div role="tabpanel" id="pkg-panel-reviews" aria-labelledby="pkg-tab-reviews" key="reviews" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={{maxWidth:620}} className="flex flex-col gap-4">
+          {tab==="reviews"&&<motion.div role="tabpanel" id="pkg-panel-reviews" aria-labelledby="pkg-tab-reviews" key="reviews" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={formBox} className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-bold text-sm" style={{color:B.black}}>آراء المعتمرين</p>
@@ -1270,7 +1444,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   <input type="file" accept=".csv,text/csv" className="hidden" onChange={importReviews}/>
                 </label>
                 <button onClick={addReview} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+                  style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
               </div>
             </div>
             <p className="text-xs -mt-2" style={{color:B.muted}}>CSV: الاسم، التقييم، الرأي. الصور يمكن إضافتها لاحقاً لكل رأي.</p>
@@ -1299,7 +1473,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     </div>
                   )}
                   <label className="flex items-center gap-2 self-start px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                    style={{background:B.bg,color:"#8a6a08",border:`1px solid ${B.border}`}}>
+                    style={{background:B.fill,color:"#8a6a08",border:`1px solid ${B.border}`}}>
                     <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"صور — اختياري"}
                     <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("package-reviews",url=>{saveImmediately();updReview(rv.id,"image",url);})}/>
                   </label>
@@ -1311,7 +1485,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             {form.reviews.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Star size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لا توجد آراء</p></div>}
           </motion.div>}
 
-          {tab==="settings"&&<motion.div role="tabpanel" id="pkg-panel-settings" aria-labelledby="pkg-tab-settings" key="settings" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={{maxWidth:680}} className="flex flex-col gap-4">
+          {tab==="settings"&&<motion.div role="tabpanel" id="pkg-panel-settings" aria-labelledby="pkg-tab-settings" key="settings" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={formBox} className="flex flex-col gap-4">
             <div>
               <h3 className="text-sm font-bold" style={{color:B.black}}>إعدادات الحجز الافتراضية</h3>
               <p className="text-xs mt-0.5" style={{color:B.muted}}>تُطبَّق مبدئياً على كل رحلة تُطلق من هذه الباقة، ويمكن تعديلها لكل رحلة على حدة.</p>
@@ -1336,7 +1510,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     <button key={s.key} onClick={()=>setSetting(s.key,!on as any)}
                       role="switch" aria-checked={on} aria-label={`${s.label}: ${on?"مفعّل":"متوقف"}`}
                       className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl cursor-pointer text-right"
-                      style={{background:on?"rgba(30,122,68,0.06)":B.bg,border:`1px solid ${on?"#C4E4CE":B.border}`}}>
+                      style={{background:on?"rgba(30,122,68,0.06)":B.fill,border:`1px solid ${on?"#C4E4CE":B.border}`}}>
                       <span className="text-sm font-semibold" style={{color:B.black}}>{s.label}</span>
                       <span className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-xs font-extrabold px-2 py-0.5 rounded-md"
@@ -1377,6 +1551,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               onArchive={archivePkg} onPermanentDelete={deletePkg}/>
           </motion.div>}
         </AnimatePresence>
+        </div>
       </div>
       {/* حارس مغادرة التعديلات غير المحفوظة. */}
       <AnimatePresence>
@@ -1437,10 +1612,10 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
     .sort((a,b)=>a.order-b.order);
 
   const stats={total:packages.length,active:packages.filter(p=>p.status==="active").length,mecca:packages.filter(p=>p.destination==="مكة").length,both:packages.filter(p=>p.destination==="مكة والمدينة").length};
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s"});
+  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الباقات" crumb="إدارة الباقات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <div className="px-4 md:px-8 pt-4 md:pt-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1481,7 +1656,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
           </motion.div>
           :<div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
             {/* Table header */}
-            <div className="grid text-xs font-bold" style={{gridTemplateColumns:"60px 1fr 120px 100px 80px 110px 200px",background:B.bg,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
+            <div className="grid text-xs font-bold" style={{gridTemplateColumns:"60px 1fr 120px 100px 80px 110px 200px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
               {["الترتيب","اسم الباقة","الوجهة","النوع","المدة","الحالة","إجراءات"].map((h,i)=>(
                 <div key={i} className="px-4 py-3">{h}</div>
               ))}
@@ -1492,7 +1667,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
                   className="grid items-center group"
                   onClick={()=>setDetailId(p.id)} title="فتح تفاصيل الباقة"
                   style={{gridTemplateColumns:"60px 1fr 120px 100px 80px 110px 200px",borderTop:`1px solid ${B.border}`,background:"#fff",transition:"background 0.12s",cursor:"pointer"}}
-                  onMouseEnter={e=>(e.currentTarget.style.background=B.bg)} onMouseLeave={e=>(e.currentTarget.style.background="#fff")}>
+                  onMouseEnter={e=>(e.currentTarget.style.background=B.fill)} onMouseLeave={e=>(e.currentTarget.style.background="#fff")}>
                   {/* Order */}
                   <div className="px-3 py-3 flex items-center gap-1" onClick={e=>e.stopPropagation()} style={{cursor:"default"}}>
                     <span className="text-xs font-bold w-5 text-center" style={{color:B.muted}}>{p.order}</span>
@@ -1506,7 +1681,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
                   {/* Name */}
                   <div className="px-4 py-3 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0"
-                      style={{background:B.bg,border:`1px solid ${B.border}`}}>
+                      style={{background:B.fill,border:`1px solid ${B.border}`}}>
                       {p.coverImage?<img src={p.coverImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:16}}>🕋</span>}</div>
                     <div className="min-w-0">
                       <div className="font-extrabold text-sm" style={{color:B.black}}>{p.name}</div>
@@ -1535,7 +1710,7 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
                   {/* Actions */}
                   <div className="px-4 py-3 flex gap-2" onClick={e=>e.stopPropagation()} style={{cursor:"default"}}>
                     <button onClick={()=>setDetailId(p.id)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                      style={{background:B.primary,color:B.cream,border:"none"}}>تفاصيل <ArrowRight size={11}/></button>
+                      style={{background:B.gold,color:B.black,border:"none"}}>تفاصيل <ArrowRight size={11}/></button>
                     {/* النسخة تولد مسودة ولو كان الأصل منشوراً: نسخةٌ نشطة
                         تظهر للعملاء فوراً باسم «(نسخة)» وأسعار لم تُراجَع. */}
                     <button onClick={()=>{const dup:Pkg={...p,id:newId("PKG"),name:p.name+" (نسخة)",order:packages.length+1,status:"draft"};setPackages(prev=>[...prev,dup]);}}

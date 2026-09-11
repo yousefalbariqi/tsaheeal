@@ -74,8 +74,8 @@ export function SetPasswordPage() {
           {error && <div className="text-xs font-bold rounded-lg px-3 py-2" style={{ background: "#FBE6E6", color: "#BE2626", border: "1px solid #F3C9C9" }}>{error}</div>}
           <button onClick={submit} disabled={!ready}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-extrabold text-sm"
-            style={{ background: ready ? B.primary : "#EEECEA", color: ready ? B.cream : B.muted, border: "none", cursor: ready ? "pointer" : "not-allowed" }}>
-            {busy ? <><Spinner size={15} track="rgba(255,255,255,0.4)" color="#fff" />جارٍ الحفظ…</> : <><ShieldCheck size={16} />حفظ والدخول</>}
+            style={{ background: ready ? B.gold : "#EEECEA", color: ready ? B.black : B.muted, border: "none", cursor: ready ? "pointer" : "not-allowed" }}>
+            {busy ? <><Spinner size={15} track="rgba(27,23,18,0.15)" color={B.muted} />جارٍ الحفظ…</> : <><ShieldCheck size={16} />حفظ والدخول</>}
           </button>
         </div>
       </motion.div>

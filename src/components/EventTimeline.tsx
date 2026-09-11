@@ -71,7 +71,7 @@ export function EventTimeline({ docType, docId, title = "سجلّ الطلب", o
         </div>
         <button onClick={reload} aria-label="تحديث السجلّ" title="تحديث السجلّ"
           className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-          style={{ background: B.bg, border: `1px solid ${B.border}`, color: B.text2 }}>
+          style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
           <RefreshCw size={13} className={loading ? "animate-spin" : undefined} />
         </button>
       </div>

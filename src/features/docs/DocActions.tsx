@@ -63,6 +63,9 @@ export interface DocActionsProps {
   onCancelDoc?: () => void;
   /** إجراء الاسترجاع. */
   onRefund?: () => void;
+  /** يفتح حوار الطباعة فور ظهور المستند — لمن ضغط «طباعة الفاتورة» من
+      شاشة الطلب: المستند يُعرض والحوار يُفتح، بلا ضغطةٍ ثانية. */
+  autoPrint?: boolean;
   onClose: () => void;
 }
 
@@ -102,6 +105,19 @@ export function DocActions(p: DocActionsProps) {
     window.print();
   }
 
+  /* الطباعة التلقائية بعد رسمة كاملة: window.print يلتقط ما رُسم فعلاً،
+     ونداؤها في نفس دورة التركيب يطبع صفحةً قبل ظهور المستند. */
+  const auto = p.autoPrint;
+  useEffect(() => {
+    if (!auto) return;
+    const t = setTimeout(() => {
+      logDocEvent(p.docType, p.docId, "print").then(reload);
+      window.print();
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
+
   /* التنزيل يستعمل نفس حوار الطباعة، لكنه يُسمّي المستند أولاً:
      المتصفّح يقترح `document.title` اسماً للملفّ عند «حفظ كـPDF»،
      فيخرج «فاتورة-INV-991B6C-أحمد العمري.pdf» لا «تساهيل.pdf». */
@@ -126,7 +142,7 @@ export function DocActions(p: DocActionsProps) {
   return (
     <div className="flex flex-col gap-2" data-print-hide>
       <div className="flex gap-2 flex-wrap justify-end">
-        <button onClick={print} style={btn(B.primary, B.cream)}>
+        <button onClick={print} style={btn(B.gold, B.black)}>
           <Printer size={14} />طباعة
         </button>
         <button onClick={download} style={btn("#fff", B.text2)}
@@ -149,7 +165,7 @@ export function DocActions(p: DocActionsProps) {
             <Ban size={14} />إلغاء
           </button>
         )}
-        <button onClick={p.onClose} style={btn(B.bg, B.text2)}>
+        <button onClick={p.onClose} style={btn(B.fill, B.text2)}>
           <X size={14} />إغلاق
         </button>
       </div>

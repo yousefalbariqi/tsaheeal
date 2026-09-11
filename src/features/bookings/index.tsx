@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useSearchParams } from "react-router";
-import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Plus, Copy as CopyIcon } from "lucide-react";
+import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Plus, ChevronDown, Printer, Mail, Copy as CopyIcon } from "lucide-react";
 import { B } from "@/lib/theme";
-import type { Pkg, Trip, Payment, Pilgrim, BookingStatus, Booking } from "@/types";
-import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph, newId} from "@/lib/utils";
+import type { Pkg, Trip, Payment, Pilgrim, BookingStatus, Booking, TicketEntry } from "@/types";
+import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph, newId, invVerifyUrl } from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { statusChips, statusLabel } from "@/lib/status";
 import { isSellable } from "@/lib/trip";
@@ -19,6 +19,7 @@ import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTy
 import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { useStore, flushSync, clearSyncError } from "@/store/useStore";
 import { PAY_ACCOUNT, InvoiceModal } from "@/features/payments";
+import { TicketCard } from "@/features/tickets";
 import { formatPhone } from "@/lib/phone";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
@@ -26,8 +27,9 @@ import { Pager, type Paged, usePaged } from "@/components/Pager";
 import { sar, sarNumber, SAR } from "@/lib/money";
 import { todayYMD } from "@/lib/utils";
 import { bookingGaps, transitionsFor, waitingFor, isStale, staleDays, type Transition } from "./flow";
+import { verifyState, markVerified, markError, afterEdit, VERIFY_LABEL, verifiedCount as countVerified, allVerified as everyVerified } from "./verification";
 import { ConfirmTransition, type TransitionSubmit } from "./ConfirmTransition";
-import { acceptBooking, rejectBooking, cancelBooking, assignBooking, closeStaleBookings, applyDiscount, searchCustomers, type CustomerHit } from "./ops";
+import { acceptBooking, rejectBooking, cancelBooking, closeStaleBookings, applyDiscount, searchCustomers, type CustomerHit } from "./ops";
 import { EventTimeline } from "@/components/EventTimeline";
 import { logDocEvent, SEND_OUTCOMES } from "@/features/docs/docEvents";
 import { invoicePhase, INVOICE_PHASE_LABEL, INVOICE_PHASE_TONE } from "@/lib/docPhase";
@@ -165,7 +167,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
       style={{background:"rgba(21,76,72,.6)"}} onClick={onClose}>
       <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primary}}>
+        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>إضافة طلب جديد</h3>
           <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
@@ -195,7 +197,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
           </div>
           {/* عميلٌ قائم؟ — يُعرض قبل أن يُنشأ ملفٌ مكرّر. */}
           {(hits.length>0||searching||picked)&&(
-            <div className="col-span-2 rounded-xl overflow-hidden" style={{border:`1px solid ${picked?"#C4E4CE":B.border}`,background:picked?"#F3FAF5":B.bg}}>
+            <div className="col-span-2 rounded-xl overflow-hidden" style={{border:`1px solid ${picked?"#C4E4CE":B.border}`,background:picked?"#F3FAF5":B.fill}}>
               {picked ? (
                 <div className="flex items-center gap-2 px-3.5 py-2.5 text-xs" style={{color:"#1E7A44"}}>
                   <Check size={13}/>عميل قائم — {picked.source==="beneficiary"?"ملف مستفيد":"سبق أن حجز"} · {picked.bookingsCount} طلب
@@ -260,9 +262,9 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
                     return (
                       <button key={sp.key} type="button" onClick={()=>setSplit(sp)}
                         className="text-start rounded-xl px-3.5 py-2.5 cursor-pointer"
-                        style={{background:on?B.primary:"#fff",border:`1px solid ${on?B.gold:B.border}`,color:on?B.cream:B.black}}>
+                        style={{background:on?B.gold:"#fff",border:`1px solid ${on?B.gold:B.border}`,color:B.black}}>
                         <div className="text-sm font-bold">{splitSummary(sp,tAr)}</div>
-                        <div className="text-xs mt-0.5" style={{color:on?"#CDE7E4":B.muted}}>
+                        <div className="text-xs mt-0.5" style={{color:on?B.black:B.muted}}>
                           {sar(sp.perNight)} / الليلة للمجموعة{sp.spare>0?` · ${sp.spare} سرير فائض`:""}
                         </div>
                       </button>
@@ -296,7 +298,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
             {busy&&<Spinner size={14} color={B.black}/>}
             {busy?"جارٍ الحفظ…":"إنشاء طلب"}
           </button>
-          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
         </>
         )}
@@ -341,7 +343,7 @@ function DiscountPanel({booking,onDone}:{booking:Booking;onDone:()=>Promise<void
       </div>
       <div className="flex gap-2">
         <button onClick={save} disabled={busy} className="px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>{busy?"جارٍ الحفظ…":"اعتماد"}</button>
-        <button onClick={()=>setOpen(false)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إغلاق</button>
+        <button onClick={()=>setOpen(false)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إغلاق</button>
       </div>
     </div>
   );
@@ -350,7 +352,7 @@ function DiscountPanel({booking,onDone}:{booking:Booking;onDone:()=>Promise<void
 /* ألوان النقلات — من نغمة الإجراء في flow.ts لا من كل موضع رسم.
    النغمة معنى (خطر · تمام · محايد) واللون ترجمتها، فتُترجم مرّة. */
 const TONE: Record<string,{bg:string;fg:string;br:string}> = {
-  primary: { bg: B.primary, fg: B.cream,  br: B.primary },
+  primary: { bg: B.gold, fg: B.black,  br: B.gold },
   ok:      { bg: "#E3F3E8", fg: "#1E7A44", br: "#C4E4CE" },
   warn:    { bg: "#FBF3D6", fg: "#8A6A08", br: "#EBD9A0" },
   risk:    { bg: "#FBE6E6", fg: "#BE2626", br: "#F3C9C9" },
@@ -359,16 +361,24 @@ const TONE: Record<string,{bg:string;fg:string;br:string}> = {
 
 /* نقلاتٌ لا تمضي بضغطةٍ واحدة: لها أثرٌ على المقعد أو المال أو التذكرة،
    فتُعرَض آثارها أوّلاً. وإرسال رابط الدفع ليس منها — لا يُتلف شيئاً. */
-const NEEDS_DIALOG: BookingStatus[] = ["paid","confirmed","cancelled","rejected"];
+/* النافذة للسبب لا للتأكيد: الرفض والإلغاء يحتاجان سبباً مكتوباً ورسالةً
+   للعميل. أمّا الدفع والتأكيد فقرارٌ اتّخذه الموظف حين فعّل «تم استلام
+   الدفع» — وسؤاله «هل أنت متأكد؟» بعده خطوةٌ ثالثة لقرارٍ واحد
+   (قرار ٢٠٢٦-٠٩-١١). */
+const NEEDS_DIALOG: BookingStatus[] = ["cancelled","rejected"];
 
-const BOOKING_TIMELINE: {status:BookingStatus;label:string}[] = [
+/* خمس محطّات لا ست: الدفع والتأكيد صارا ضغطةً واحدة، فمحطّتاهما واحدة.
+   `alt` تضمّ الحالات التي تقف عند نفس المحطّة — طلباتٌ قديمة في «تم
+   الدفع» أو «قيد التحقق» تُرسم في آخر المسار لا خارجه. */
+const BOOKING_TIMELINE: {status:BookingStatus;label:string;alt?:BookingStatus[]}[] = [
   {status:"new",label:"جديد"},{status:"reviewing",label:"قيد المراجعة"},{status:"accepted",label:"مقبول"},
-  {status:"awaiting_payment",label:"بانتظار الدفع"},{status:"paid",label:"تم الدفع"},{status:"confirmed",label:"مؤكد"},
+  {status:"awaiting_payment",label:"بانتظار الدفع"},
+  {status:"confirmed",label:"مؤكد",alt:["paid","verifying","verified"]},
 ];
 
 function BookingTimeline({status}:{status:BookingStatus}) {
   const cancelled = status==="cancelled"||status==="rejected";
-  const activeIdx = BOOKING_TIMELINE.findIndex(s=>s.status===status);
+  const activeIdx = BOOKING_TIMELINE.findIndex(s=>s.status===status||s.alt?.includes(status));
   return (
     <div className="flex items-center gap-0 overflow-x-auto" style={{scrollbarWidth:"none"}}>
       {BOOKING_TIMELINE.map((s,i)=>{
@@ -445,20 +455,20 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
       style={{background:"rgba(21,76,72,0.55)",backdropFilter:"blur(4px)"}} onClick={onClose}>
       <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} exit={{opacity:0,y:30}} transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:480,background:"#fff",maxHeight:"92vh"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primary}}>
+        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>{(booking.status==="new"||booking.status==="reviewing")?"اختيار المقاعد قبل القبول":"تعديل المقاعد"}</h2>
-              <div className="text-xs mt-1" style={{color:"#CDE7E4"}}>{booking.clientName} · رحلة {trip?.departureDate??"—"} — اختر {need} مقعد</div>
+              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>{(booking.status==="new"||booking.status==="reviewing")?"تأكيد المقاعد قبل القبول":"تعديل المقاعد"}</h2>
+              <div className="text-xs mt-1" style={{color:"#CDE7E4"}}>{booking.clientName} · رحلة {trip?.departureDate??"—"} — {need} مقعد{booking.seats.length>0?" · راجعها وأكّدها":""}</div>
             </div>
             <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3.5" style={{scrollbarWidth:"none"}}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold" style={{color:B.black}}>المقاعد المختارة</span>
-            <span className="px-2.5 py-1 rounded-full text-xs font-bold" style={{background:sel.length===need?"#E3F3E8":B.bg,color:sel.length===need?"#1E7A44":B.muted,border:`1px solid ${sel.length===need?"#C4E4CE":B.border}`}}>{sel.length} / {need}</span>
+            <span className="text-sm font-bold" style={{color:B.black}}>المقاعد المخصّصة</span>
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold" style={{background:sel.length===need?"#E3F3E8":B.fill,color:sel.length===need?"#1E7A44":B.muted,border:`1px solid ${sel.length===need?"#C4E4CE":B.border}`}}>{sel.length} / {need}</span>
           </div>
           {/* Numbered label list: seat → first+second name */}
           <div className="flex flex-col gap-1.5">
@@ -467,8 +477,8 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
               const gCol=pg.gender==="female"?"#B4266E":"#1E52C7";
               const gBg=pg.gender==="female"?"#FBE9F1":"#EAF1FE";
               return (
-                <div key={idx} className="flex items-center gap-2.5 rounded-xl px-3 py-2" style={{background:B.bg,border:`1px solid ${B.border}`}}>
-                  <span className="w-6 h-6 rounded-lg flex items-center justify-center font-extrabold flex-shrink-0" style={{background:B.primary,color:B.cream,fontSize:11}}>{idx+1}</span>
+                <div key={idx} className="flex items-center gap-2.5 rounded-xl px-3 py-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                  <span className="w-6 h-6 rounded-lg flex items-center justify-center font-extrabold flex-shrink-0" style={{background:B.gold,color:B.black,fontSize:11}}>{idx+1}</span>
                   <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{firstTwo(pg.name)}</span>
                   <span className="flex items-center justify-center rounded-md flex-shrink-0" style={{width:22,height:22,background:gBg,color:gCol,fontSize:12,fontWeight:800}} title={pg.gender==="female"?"أنثى":"ذكر"}>{genderGlyph(pg.gender)}</span>
                   {seatNum!=null
@@ -480,7 +490,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
           </div>
           <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold leading-relaxed" style={{background:"#EAF1FE",border:"1px solid #CBDBFB",color:"#1E52C7"}}>
             <span className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center" style={{background:"#1E52C7",color:"#fff"}}>💺</span>
-            <span>اضغط على أي مقعد متاح لحجزه للمعتمر. اضغط على المقعد المختار (الذهبي) مرة أخرى لإلغائه واختيار غيره.</span>
+            <span>{booking.seats.length>0?"المقاعد الذهبية هي المخصّصة للطلب — راجعها. اضغط عليها لتحريرها، وعلى أي مقعد متاح لنقل المعتمر إليه، ثم أكّد.":"اضغط على أي مقعد متاح لتخصيصه للمعتمر. اضغط على المقعد الذهبي مرة أخرى لتحريره واختيار غيره، ثم أكّد."}</span>
           </div>
           <BusSeatGrid capacity={capacity} occupied={occupiedSet} selected={sel} need={need} onToggle={toggle}
             occGender={(n)=>occupied.get(n)??null} selGender={(n)=>booking.pilgrims[sel.indexOf(n)]?.gender??null} showLegend={false}/>
@@ -498,12 +508,78 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
         <div className="flex gap-3 p-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
           <button onClick={()=>onConfirm(sel)} disabled={sel.length!==need}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{background:sel.length===need?B.primary:"#EEECEA",color:sel.length===need?B.cream:B.muted,border:"none",cursor:sel.length===need?"pointer":"not-allowed"}}>
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{background:sel.length===need?B.gold:"#EEECEA",color:sel.length===need?B.black:B.muted,border:"none",cursor:sel.length===need?"pointer":"not-allowed"}}>
             <Check size={14}/>تم تأكيد المقاعد
           </button>
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+/* ─── إجراءات ما بعد الحجز ───
+   الطلب المؤكد انتهى تدبيره: لا مراجعة ولا دفع ولا نقلة حالة. عملُه
+   مستنداتٌ تُطبع وتُرسل — وهذه هي الأربعة التي طلبها الفريق. والإلغاء
+   يبقى ممكناً لكنه ليس الإجراء الذي يُفتح عليه الطلب المؤكد. */
+function PostBookingActions({booking,invoice,ticket,onPrint,onOpenInvoice,onOpenTicket,onLogged}:{
+  booking:Booking; invoice?:Payment; ticket?:TicketEntry;
+  onPrint:(d:"invoice"|"ticket")=>void;
+  onOpenInvoice:()=>void; onOpenTicket:()=>void; onLogged:()=>void;
+}) {
+  const email=(booking.customer?.email??"").trim();
+  const ticketText = ticket
+    ? `مرحباً ${ticket.clientName}،\nتذكرة تساهيل العمرة رقم ${ticket.ticketNo}\nالرحلة: ${ticket.tripDate} · ${ticket.tripTime}\nنقطة الانطلاق: ${ticket.departurePoint}\nرابط التحقق: ${invVerifyUrl(ticket.ticketNo)}`
+    : "";
+
+  const sendWhatsApp=()=>{
+    if(!ticket) return;
+    openWhatsApp(ticket.clientPhone,ticketText);
+    void logDocEvent("ticket",ticket.ticketNo,"whatsapp",{note:"من شاشة الطلب"}).then(onLogged);
+  };
+  /* البريد يفتح برنامج الموظف لا يرسل من الخادم — نفس قرار واتساب
+     (٢٠٢٦-٠٩-٠٦): لا واجهة برمجية، فادّعاء الإرسال كذب. ويُسجَّل الحدث
+     «تواصل» لأن سجلّ القاعدة لا يعرف نوعاً اسمه «بريد». */
+  const sendEmail=()=>{
+    if(!ticket||!email) return;
+    const subject=`تذكرة تساهيل العمرة — ${ticket.ticketNo}`;
+    window.location.href=`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(ticketText)}`;
+    void logDocEvent("ticket",ticket.ticketNo,"contact",{note:`بريد إلكتروني: ${email}`}).then(onLogged);
+  };
+
+  const act=(bg:string,fg:string,on:boolean):React.CSSProperties=>({
+    display:"inline-flex",alignItems:"center",gap:7,padding:"11px 18px",borderRadius:12,
+    fontSize:14,fontWeight:700,background:on?bg:"#EEECEA",color:on?fg:B.muted,border:"none",
+    cursor:on?"pointer":"not-allowed",opacity:on?1:.75,
+  });
+
+  return (
+    <div className="rounded-2xl px-5 py-4 flex flex-col gap-3" style={{background:B.cream,border:"1px solid #EDE4CF"}}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs font-bold" style={{color:B.text2}}>إجراءات ما بعد الحجز</div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold"
+          style={{background:"#1E7A44",color:"#fff"}}><Check size={12}/>{invoice&&ticket?"مؤكد — صدرت الفاتورة والتذكرة":"مؤكد"}</span>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <button onClick={()=>{ if(invoice) onPrint("invoice"); }} disabled={!invoice}
+          title={invoice?"يفتح الفاتورة ويبدأ الطباعة":"لم تصدر فاتورة لهذا الطلب بعد"}
+          style={act(B.gold,B.black,!!invoice)}><Printer size={15}/>طباعة الفاتورة</button>
+        <button onClick={()=>{ if(ticket) onPrint("ticket"); }} disabled={!ticket}
+          title={ticket?"يفتح التذكرة ويبدأ الطباعة":"لم تصدر تذكرة لهذا الطلب بعد"}
+          style={act(B.gold,B.black,!!ticket)}><Printer size={15}/>طباعة التذكرة</button>
+        <button onClick={sendWhatsApp} disabled={!ticket}
+          title={ticket?"يفتح واتساب برسالة التذكرة":"لم تصدر تذكرة بعد"}
+          style={act("#25D366","#fff",!!ticket)}><Phone size={15}/>إرسال التذكرة واتساب</button>
+        <button onClick={sendEmail} disabled={!ticket||!email}
+          title={!ticket?"لم تصدر تذكرة بعد":email?`إلى ${email}`:"لا بريد إلكتروني في ملف العميل"}
+          style={act("#EAF1FE","#1E52C7",!!ticket&&!!email)}><Mail size={15}/>إرسال التذكرة بالبريد</button>
+      </div>
+      <div className="flex flex-wrap items-center gap-4 text-xs" style={{color:B.muted}}>
+        {invoice&&<button onClick={onOpenInvoice} className="font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2,padding:0,textDecoration:"underline"}}>عرض الفاتورة {invoice.id}</button>}
+        {ticket&&<button onClick={onOpenTicket} className="font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2,padding:0,textDecoration:"underline"}}>عرض التذكرة {ticket.ticketNo}</button>}
+        {!email&&<span>لا بريد إلكتروني في ملف العميل — الإرسال بالبريد معطَّل.</span>}
+        {(!invoice||!ticket)&&<span style={{color:"#B4530C"}}>المستند الناقص يصدر من القاعدة لحظة التأكيد — حدِّث الصفحة إن لم يظهر.</span>}
+      </div>
+    </div>
   );
 }
 
@@ -522,7 +598,7 @@ function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|
   const waMsg=`مرحباً ${booking.clientName}،\nرابط دفع باقة (${pkg?.name??"العمرة"}):\n${link}\nالمبلغ المطلوب: ${amount}\nالرابط صالح لمدة ${hours} ساعة.`;
   const copy=()=>{ copyText(link); setCopied(true); setTimeout(()=>setCopied(false),1500); };
   return (
-    <div className="rounded-2xl p-5 mb-5 flex flex-col gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+    <div className="rounded-2xl p-5 flex flex-col gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="font-bold flex items-center gap-2" style={{color:B.black,fontSize:15}}><Link2 size={15} style={{color:B.gold}}/>رابط الدفع</div>
@@ -533,7 +609,7 @@ function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|
         </span>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+        <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{background:B.fill,border:`1px solid ${B.border}`}}>
           <Link2 size={13} style={{color:B.muted,flexShrink:0}}/>
           <span className="text-sm font-bold truncate" style={{color:B.black,direction:"ltr",fontFamily:"var(--font-app)"}}>{link}</span>
         </div>
@@ -546,7 +622,7 @@ function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|
             في سجلّ الطلب — قرار ٢: لا واجهة برمجية لواتساب، فالنتيجة يدوية. */}
         <button onClick={()=>{ openWhatsApp(booking.clientPhone,waMsg); void logDocEvent("booking",booking.id,"whatsapp",{note:"قالب: رابط الدفع"}).then(()=>onLogged?.()); }}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:"#25D366",color:"#fff",border:"none"}}><Phone size={14}/>إرسال عبر واتساب</button>
-        <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none",textDecoration:"none"}}><Link2 size={14}/>فتح صفحة الدفع (تجربة العميل)</a>
+        <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",textDecoration:"none"}}><Link2 size={14}/>فتح صفحة الدفع (تجربة العميل)</a>
         <span className="text-xs" style={{color:B.muted}}>ينتهي الرابط خلال <b style={{color:B.text2}}>{hours} ساعة</b> من الإرسال</span>
       </div>
       {/* Payment methods */}
@@ -567,7 +643,7 @@ function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|
             <div className="text-xs mb-2.5" style={{color:B.text2}}>عند فتح العميل للرابط تُفتح بوابة دفع آمنة تقبل:</div>
             <div className="flex flex-wrap gap-2">
               {["مدى","Apple Pay","Visa / Mastercard","STC Pay"].map(m=>(
-                <span key={m} className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.black}}>{m}</span>
+                <span key={m} className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.black}}>{m}</span>
               ))}
             </div>
           </div>
@@ -610,11 +686,9 @@ function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|
   );
 }
 
-function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange,onPilgrimsChange,onSeatsChange,onRefresh}:{booking:Booking;trips:Trip[];packages:Pkg[];allBookings:Booking[];onBack:()=>void;onStatusChange:(id:string,s:BookingStatus,patch?:Partial<Booking>)=>void;onPilgrimsChange:(id:string,pilgrims:Pilgrim[])=>void;onSeatsChange:(id:string,seats:number[])=>void;onRefresh:()=>Promise<void>}) {
+function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange,onPilgrimsChange,onClientChange,onSeatsChange,onRefresh}:{booking:Booking;trips:Trip[];packages:Pkg[];allBookings:Booking[];onBack:()=>void;onStatusChange:(id:string,s:BookingStatus,patch?:Partial<Booking>)=>void;onPilgrimsChange:(id:string,pilgrims:Pilgrim[])=>void;onClientChange:(id:string,patch:{clientName:string;clientPhone:string})=>void;onSeatsChange:(id:string,seats:number[])=>void;onRefresh:()=>Promise<void>}) {
   const trip  = trips.find(t=>t.id===booking.tripId);
   const pkg   = packages.find(p=>p.id===trip?.packageId);
-  const users=useStore(s=>s.users);
-  const currentUser=useStore(s=>s.currentUser);
   const { isAdmin } = useRole();
   /* إجراءٌ جارٍ في القاعدة — يمنع النقر المزدوج على نقلةٍ ذات أثر. */
   const [busy,setBusy]=useState(false);
@@ -629,21 +703,67 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
   const tickets=useStore(s=>s.tickets);
   const beneficiaries=useStore(s=>s.beneficiaries);
 
-  type VerifStatus = "pending"|"verified"|"error";
-  const [verif,setVerif]=useState<Record<number,VerifStatus>>(()=>Object.fromEntries(booking.pilgrims.map((_,i)=>[i,"pending"])));
+  /* التحقق لا يُبنى هنا: يُقرأ من المعتمر نفسه (verification.ts). كان
+     `useState` يبدأ كل معتمرٍ «بانتظار التحقق» عند كل فتحٍ للصفحة، فيُسأل
+     الموظف عمّا أجابه صباحاً — والانتقال بين المراحل يسأله من جديد. */
+  const staffName = useStore(s=>s.currentUser?.name) ?? booking.staff ?? "";
+  const setPilgrim=(i:number,fn:(p:Pilgrim)=>Pilgrim,note:string)=>{
+    onPilgrimsChange(booking.id,booking.pilgrims.map((p,idx)=>idx===i?fn(p):p));
+    void logDocEvent("booking",booking.id,"note",{note}).then(bump);
+  };
+  const pgName=(p:Pilgrim,i:number)=>p.name?.trim()||`معتمر ${i+1}`;
   const [editIdx,setEditIdx]=useState<number|null>(null);
   const [draft,setDraft]=useState<Pilgrim|null>(null);
-  const startEdit=(i:number)=>{setEditIdx(i);setDraft({...booking.pilgrims[i]});};
+  /* المعتمر المتحقَّق منه يُطوى: حالةٌ واحدة واضحة تكفي الموظف، والتفاصيل
+     تُفتح عند الطلب («يكفي إظهار ✓ تم التحقق بدون تفاصيل إضافية»). */
+  const [openRows,setOpenRows]=useState<Record<number,boolean>>({});
+  const toggleRow=(i:number)=>setOpenRows(o=>({...o,[i]:!o[i]}));
+  const startEdit=(i:number)=>{setEditIdx(i);setDraft({...booking.pilgrims[i]});setOpenRows(o=>({...o,[i]:true}));};
   const cancelEdit=()=>{setEditIdx(null);setDraft(null);};
-  const saveEdit=()=>{ if(editIdx===null||!draft) return; onPilgrimsChange(booking.id,booking.pilgrims.map((p,idx)=>idx===editIdx?draft:p)); setEditIdx(null); setDraft(null); };
+  /* التعديل بعد التحقق يُسقطه ويطلب تحقّقاً جديداً — وحفظٌ لم يغيّر حرفاً
+     لا يُسقط مراجعةً تمّت (afterEdit يقارن قبل أن يُبطل). */
+  const saveEdit=()=>{ if(editIdx===null||!draft) return;
+    const prev=booking.pilgrims[editIdx], next=afterEdit(prev,draft);
+    onPilgrimsChange(booking.id,booking.pilgrims.map((p,idx)=>idx===editIdx?next:p));
+    if(verifyState(next)==="stale") void logDocEvent("booking",booking.id,"note",
+      {note:`عُدِّلت بيانات ${pgName(next,editIdx)} بعد التحقق — يلزم تحقّقٌ جديد`}).then(bump);
+    setEditIdx(null); setDraft(null); };
   const setD=<K extends keyof Pilgrim>(k:K,v:Pilgrim[K])=>setDraft(d=>d?{...d,[k]:v}:d);
   const einp="w-full border rounded-lg px-2.5 py-2 text-sm focus:outline-none";
   const eist={borderColor:B.gold,background:"#fff",color:B.black,fontFamily:"inherit"};
+  /* تعديل بيانات العميل — الاسم والجوال. الموظف يكتشف الخطأ أثناء
+     المراجعة فيصحّحه في مكانه بدل أن يعيد الطلب للعميل. الباقة والرحلة
+     وعدد المعتمرين ليست تصحيحاً: تغييرها يغيّر السعر والمقاعد، ولها
+     مسارها (تحويل الطلب) لا حقلُ نصّ. */
+  const [clientEdit,setClientEdit]=useState(false);
+  const [cName,setCName]=useState(booking.clientName);
+  const [cPhone,setCPhone]=useState(booking.clientPhone);
+  const [cErr,setCErr]=useState<string|null>(null);
+  const startClientEdit=()=>{ setCName(booking.clientName); setCPhone(booking.clientPhone); setCErr(null); setClientEdit(true); };
+  const saveClient=()=>{
+    const name=cName.trim(), phone=cPhone.trim();
+    if(name.length<3){ setCErr("اكتب اسم العميل كاملاً."); return; }
+    /* الرقم المخزَّن لا يُعاد التحقق منه: طلبٌ قديمٌ بصيغةٍ أخرى كان
+       يمنع تصحيح الاسم وحده. الجديد وحده يُفحص. */
+    if(phone!==booking.clientPhone&&!validPhone(phone)){ setCErr("رقم جوال غير صحيح — 05xxxxxxxx."); return; }
+    if(name===booking.clientName&&phone===booking.clientPhone){ setClientEdit(false); return; }
+    onClientChange(booking.id,{clientName:name,clientPhone:phone});
+    void logDocEvent("booking",booking.id,"note",{note:`تصحيح بيانات العميل: ${name} · ${phone}`}).then(bump);
+    setClientEdit(false);
+  };
+
   const [seatOpen,setSeatOpen]=useState(false);
+  const [ticketOpen,setTicketOpen]=useState(false);
+  /* الطباعة تفتح المستند ثم تطبعه: window.print تطبع ما رُسم على الشاشة،
+     وقاعدة @media print في كل نافذة تُخفي ما عداها. فلا سبيل لطباعة
+     فاتورةٍ لم تُفتح. */
+  const [printDoc,setPrintDoc]=useState<"invoice"|"ticket"|null>(null);
+  const openPrint=(d:"invoice"|"ticket")=>{ setPrintDoc(d); if(d==="invoice") setInvoiceOpen(true); else setTicketOpen(true); };
+  const closeDoc=()=>{ setPrintDoc(null); setInvoiceOpen(false); setTicketOpen(false); };
   const [payReceived,setPayReceived]=useState(false);
   const [payMethodSel,setPayMethodSel]=useState(booking.payMethod&&booking.payMethod!=="—"?booking.payMethod:"تحويل بنكي");
-  const verifiedCount = Object.values(verif).filter(v=>v==="verified").length;
-  const allVerified   = verifiedCount===booking.pilgrims.length;
+  const verifiedCount = countVerified(booking.pilgrims);
+  const allVerified   = everyVerified(booking.pilgrims);
 
   const needsVerif = booking.status==="new"||booking.status==="reviewing";
 
@@ -652,14 +772,12 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
   /* التوقيت المحلي لا UTC: toISOString تُقدّم اليوم أو تُؤخّره ثلاث
      ساعات عن الرياض، فيُسجَّل الدفع بتاريخ أمس أو غد. */
   const today = todayYMD();
-  const CASH_AT_BRANCH = "كاش في الفرع";
 
   /* الإجراءات تُقرأ من جدول المسار (flow.ts) لا تُكتب هنا: الشرط والأثر
      والتسمية في وحدةٍ واحدة تقرؤها الشاشة والنافذة، وستقرؤها دوالّ
      القاعدة في الموجة القادمة. */
   const flowCtx = {
     booking, trip, pkg,
-    allVerified,
     payReceived,
     hasInvoice: payments.some(x=>x.bookingId===booking.id),
     hasTicket: tickets.some(x=>x.bookingId===booking.id),
@@ -670,28 +788,19 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
   const actions = transitionsFor(flowCtx);
   const [pending,setPending]=useState<Transition|null>(null);
   const invoice = payments.find(x=>x.bookingId===booking.id);
-  const assignee = users.find(u=>u.id===booking.assignedTo);
-  const activeUsers = users.filter(u=>u.status==="active");
-
-  /* التعيين يمرّ من القاعدة (assign_booking): يُثبَّت ويُنبَّه المعيَّن.
-     قاعدةٌ بلا الترحيل تُقال لها الحال بدل تعديلٍ صامتٍ لا يُحفظ. */
-  async function assign(uid:string|null){
-    if(busy) return;
-    setBusy(true);
-    const r=await assignBooking(booking.id,uid);
-    setBusy(false);
-    if(r.unsupported){ toast.info("التعيين يحتاج ترحيل 20260910 على قاعدة البيانات."); return; }
-    if(r.error){ toast.error(r.error); return; }
-    await onRefresh(); bump();
-  }
+  const ticket  = tickets.find(x=>x.bookingId===booking.id);
 
   /* طرق الدفع تُحفظ مع النقلة: patch القادم من الجدول لا يحمل الطريقة
-     المختارة في الشاشة ولا تاريخ اليوم — فيُكمَلان هنا. */
+     المختارة في الشاشة ولا تاريخ اليوم — فيُكمَلان هنا.
+
+     الشرط على أثر النقلة لا على اسم حالتها: بعد دمج الدفع والتأكيد صارت
+     النقلة تنتهي عند «مؤكد»، وشرطُ `to === "paid"` كان سيُسقط الطريقة
+     والتاريخ فيصير الطلب مدفوعاً بلا طريقةٍ ولا يوم. */
   const patchFor = (t:Transition):Partial<Booking>|undefined => {
-    if(t.to!=="paid") return t.patch;
+    if(t.patch?.paymentStatus!=="verified") return t.patch;
     return {
       ...t.patch,
-      payMethod: booking.status==="accepted" ? CASH_AT_BRANCH : payMethodSel,
+      payMethod: t.patch.payMethod ?? payMethodSel,
       payDate: today,
     };
   };
@@ -714,10 +823,20 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
     if(handled){
       await onRefresh();
     } else {
+      clearSyncError();
       onStatusChange(booking.id,t.to,patchFor(t));
       void logDocEvent("booking",booking.id,
         t.to==="rejected"?"reject":t.to==="cancelled"?"cancel":"status",
         {note:`→ ${statusLabel(t.to,"booking")}${v?.internalReason?` — ${v.internalReason}`:""}`});
+      /* التأكيد يُنشئ الفاتورة والتذكرة في القاعدة (حارس
+         trg_booking_confirm_docs)، فتُنتظر الكتابة ثم يُعاد الجلب — وإلا
+         بقيت الشاشة تقول «لم تصدر تذكرة» وهي صادرة. */
+      if(t.to==="confirmed"){
+        const err=await flushSync();
+        if(err){ toast.error(err); setBusy(false); return; }
+        await onRefresh();
+        toast.success("تم تأكيد الطلب");
+      }
     }
     if(v?.notify && v.customerMessage){
       openWhatsApp(booking.clientPhone, v.customerMessage);
@@ -726,13 +845,28 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
     setBusy(false); setPending(null); bump();
   };
 
+  /* ── تخطيط الصفحة ──
+     كانت الصفحة عموداً واحداً بعرض max-w-4xl: محتوًى محشورٌ في يمين
+     الشاشة وفراغٌ ضخمٌ في يسارها، وطولٌ يُمرَّر طويلاً قبل أن يصل
+     الموظف إلى الإجراء. صارت صفوفاً تملأ العرض: العميل مع المسار
+     والمبلغ في الأعلى، ثم الإجراءات والمقاعد، ثم المعتمرون بجانب
+     الدفع والفاتورة والسجل. */
+  const cardBase = {background:"#fff",border:`1px solid ${B.border}`} as const;
+  /* الثانوي لا يُزاحم الرئيسي: إلغاء الطلب المؤكد إجراءٌ قائم، لكنه ليس
+     ما يُفتح عليه الطلب المؤكد — فيُذكر سطراً أسفل الصفحة لا زرّاً. */
+  const primaryActions   = actions.filter(a=>!a.secondary);
+  const secondaryActions = actions.filter(a=>a.secondary);
+  const hasSideCard      = booking.status==="confirmed"||primaryActions.length>0;
+  const hasAlerts = isStale(booking,trip,today)||gaps.length>0;
+  const verifiedAll = booking.pilgrims.length>0&&allVerified;
+
   return (
-    <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="flex-1 px-4 md:px-8 pb-12 pt-5 max-w-4xl">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold mb-5 cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>
+    <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="flex-1 w-full min-w-0 px-4 md:px-8 pb-12 pt-5">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold mb-4 cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>
         <ArrowRight size={14}/>عودة للطلبات
       </button>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <div className="font-extrabold mb-0.5" style={{fontFamily:"var(--font-app)",fontSize:22,color:B.black}}>{booking.id}</div>
           <div className="text-xs" style={{color:B.muted}}>
@@ -747,151 +881,99 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
         </div>
       </div>
 
-      {/* المسؤول عن الطلب — تعيينٌ صريح، وتنبيهٌ لمن يفتح طلباً ليس له
-          («منع معالجة نفس الطلب بالتوازي دون تنبيه»). */}
-      <div className="rounded-2xl px-5 py-3 mb-5 flex flex-wrap items-center gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-        <span className="text-xs font-bold" style={{color:B.text3}}>الموظف المسؤول</span>
-        <div style={{minWidth:220}}>
-          <AppSelect value={booking.assignedTo??""} placeholder="غير معيَّن" onChange={v=>assign(v||null)}
-            options={[{value:"",label:"— بلا مسؤول —"},...activeUsers.map(u=>({value:u.id,label:u.name}))]}/>
-        </div>
-        {booking.assignedAt&&<span className="text-xs" style={{color:B.muted,fontFamily:"var(--font-app)"}}>منذ {booking.assignedAt.slice(0,10)}</span>}
-        {booking.assignedTo&&currentUser&&booking.assignedTo!==currentUser.id&&(
-          <span className="text-xs font-bold px-3 py-1 rounded-full" style={{background:"#FBF3D6",color:"#8A6A08"}}>
-            مُسنَد إلى {assignee?.name??"موظف آخر"} — نبّهه قبل أن تُعدّل
-          </span>
-        )}
-        {currentUser&&booking.assignedTo!==currentUser.id&&(
-          <button onClick={()=>assign(currentUser.id)} disabled={busy} className="text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer"
-            style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2}}>أسنده إليّ</button>
-        )}
-      </div>
-
-      {/* طلبٌ انتهت رحلته وما زال مفتوحاً — يُوسَم ولا يُغلق من تلقائه. */}
-      {isStale(booking,trip,today)&&(
-        <div className="rounded-2xl px-5 py-3.5 mb-5 flex items-start gap-3"
-          style={{background:"#FCEBDD",border:"1px solid #F3D2B4"}}>
-          <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 font-bold"
-            style={{background:"#B4530C",color:"#fff",fontSize:12}}>!</span>
-          <div className="text-sm leading-relaxed" style={{color:"#8A3F09"}}>
-            <b>مضت رحلة هذا الطلب قبل {staleDays(trip,today)} يوماً</b> وهو ما زال «{waitingFor(booking.status)}».
-            أغلقه بالرفض أو الإلغاء، أو انقله إلى رحلةٍ قادمة.
-          </div>
-        </div>
-      )}
-
-      {/* البيانات الناقصة أعلى الطلب — نصّ الملاحظة حرفياً: المستفيد،
-          الهوية، الغرفة، الدفع، المقاعد. */}
-      {gaps.length>0&&(
-        <div className="rounded-2xl px-5 py-4 mb-5"
-          style={{background:gaps.some(g=>g.blocking)?"#FBE6E6":"#FBF3D6",
-                  border:`1px solid ${gaps.some(g=>g.blocking)?"#F3C9C9":"#EBD9A0"}`}}>
-          <div className="text-xs font-bold mb-2" style={{color:gaps.some(g=>g.blocking)?"#BE2626":"#8A6A08"}}>
-            بيانات ناقصة ({gaps.length})
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {gaps.map(g=>(
-              <div key={g.key} className="flex items-center gap-2 text-xs font-semibold" style={{color:g.blocking?"#8A2020":"#6b5a2a"}}>
-                <span className="w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0"
-                  style={{background:"#fff",border:`1px solid ${g.blocking?"#F3C9C9":B.border}`,fontSize:9,color:g.blocking?"#BE2626":B.muted}}>
-                  {g.blocking?"!":"·"}
-                </span>
-                {g.label}
-                <span style={{fontWeight:400,color:B.muted}}>— {g.blocking?"يمنع القبول والتأكيد":"تنبيه"}</span>
+      {/* التنبيهات صفٌّ واحد يملأ العرض بدل بطاقتين متتاليتين تُطيلان الصفحة. */}
+      {hasAlerts&&(
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4 items-start">
+          {/* طلبٌ انتهت رحلته وما زال مفتوحاً — يُوسَم ولا يُغلق من تلقائه. */}
+          {isStale(booking,trip,today)&&(
+            <div className="rounded-2xl px-5 py-3.5 flex items-start gap-3"
+              style={{background:"#FCEBDD",border:"1px solid #F3D2B4"}}>
+              <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 font-bold"
+                style={{background:"#B4530C",color:"#fff",fontSize:12}}>!</span>
+              <div className="text-sm leading-relaxed" style={{color:"#8A3F09"}}>
+                <b>مضت رحلة هذا الطلب قبل {staleDays(trip,today)} يوماً</b> وهو ما زال «{waitingFor(booking.status)}».
+                أغلقه بالرفض أو الإلغاء، أو انقله إلى رحلةٍ قادمة.
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Timeline */}
-      <div className="rounded-2xl p-5 mb-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-        <div className="text-sm font-bold mb-4" style={{color:B.text2}}>مسار الطلب</div>
-        <BookingTimeline status={booking.status}/>
-      </div>
-
-      {/* Actions */}
-      {actions.length>0&&(
-        <div className="rounded-2xl px-5 py-4 mb-5" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
-          <div className="text-xs font-bold mb-3" style={{color:B.text2}}>الإجراءات</div>
-          {needsVerif&&!allVerified&&(
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl mb-3 text-sm font-semibold"
-              style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
-              تم التحقق من {verifiedCount} من {booking.pilgrims.length} — لا يمكن قبول الطلب حتى يُتحقق من جميع المعتمرين.
             </div>
           )}
-          {/* Payment gate before manual confirm */}
-          {booking.status==="awaiting_payment"&&(
-            <div className="rounded-xl p-4 mb-3 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Field label="طريقة الدفع">
-                    <AppSelect value={payMethodSel} onChange={setPayMethodSel}
-                      options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
-                  </Field>
+
+          {/* البيانات الناقصة أعلى الطلب — نصّ الملاحظة حرفياً: المستفيد،
+              الهوية، الغرفة، الدفع، المقاعد. */}
+          {gaps.length>0&&(
+            <div className="rounded-2xl px-5 py-4"
+              style={{background:gaps.some(g=>g.blocking)?"#FBE6E6":"#FBF3D6",
+                      border:`1px solid ${gaps.some(g=>g.blocking)?"#F3C9C9":"#EBD9A0"}`}}>
+              <div className="text-xs font-bold mb-2" style={{color:gaps.some(g=>g.blocking)?"#BE2626":"#8A6A08"}}>
+                بيانات ناقصة ({gaps.length})
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {gaps.map(g=>(
+                  <div key={g.key} className="flex items-center gap-2 text-xs font-semibold" style={{color:g.blocking?"#8A2020":"#6b5a2a"}}>
+                    <span className="w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0"
+                      style={{background:"#fff",border:`1px solid ${g.blocking?"#F3C9C9":B.border}`,fontSize:9,color:g.blocking?"#BE2626":B.muted}}>
+                      {g.blocking?"!":"·"}
+                    </span>
+                    {g.label}
+                    <span style={{fontWeight:400,color:B.muted}}>— {g.blocking?"يمنع القبول والتأكيد":"تنبيه"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── الصفّ الأول: بيانات العميل · بجانبها المسار والمبلغ ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-start">
+        <div className="xl:col-span-7 rounded-2xl p-5" style={cardBase}>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="font-bold" style={{color:B.black,fontSize:15}}>بيانات العميل</div>
+            {!clientEdit&&(
+              <button onClick={startClientEdit} title="تصحيح اسم العميل أو جوّاله"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل</button>
+            )}
+          </div>
+          {clientEdit
+            ? <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم</div>
+                    <input className={einp} style={eist} value={cName} onChange={e=>{setCName(e.target.value);setCErr(null);}}/>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
+                    <input className={einp} style={{...eist,direction:"ltr"}} value={cPhone} placeholder="05xxxxxxxx"
+                      onChange={e=>{setCPhone(e.target.value);setCErr(null);}}/>
+                  </div>
                 </div>
-                <label className="flex items-end gap-2.5 cursor-pointer pb-1.5">
-                  <span onClick={()=>setPayReceived(v=>!v)} className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:payReceived?"#1E7A44":"#fff",border:`1.5px solid ${payReceived?"#1E7A44":B.border}`}}>
-                    {payReceived&&<Check size={14} style={{color:"#fff"}}/>}
-                  </span>
-                  <span className="text-sm font-bold" style={{color:B.black}} onClick={()=>setPayReceived(v=>!v)}>تم استلام الدفع فعلياً</span>
-                </label>
-              </div>
-              {!payReceived&&<div className="text-xs" style={{color:"#B4530C"}}>فعّل «تم استلام الدفع» لتتمكن من تأكيد الدفع يدوياً.</div>}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            {actions.map(a=>{
-              const disabled=a.blockers.length>0;
-              const tone=TONE[a.tone];
-              return (
-              <button key={a.label} disabled={disabled}
-                title={disabled?a.blockers.join(" · "):a.effects.join(" · ")}
-                /* لا window.confirm: النقلة ذات الأثر تفتح نافذةً تقول
-                   الأثر وتطلب السبب. وما لا أثر له (إرسال الرابط) يمضي. */
-                onClick={()=>{ if(disabled) return;
-                  if(a.opensSeatMap){setSeatOpen(true);return;}
-                  if(NEEDS_DIALOG.includes(a.to)||a.reason){setPending(a);return;}
-                  runTransition(a); }}
-                className="px-5 py-2.5 rounded-xl font-bold text-sm"
-                style={{background:disabled?"#EEECEA":tone.bg,color:disabled?B.muted:tone.fg,border:`1px solid ${disabled?B.border:tone.br}`,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.7:1}}>
-                {a.label}
-              </button>
-              );
-            })}
-          </div>
-          {/* لماذا الزرّ معطَّل — بنصّه لا بتلميحٍ يُكتشف بالمرور. */}
-          {actions.some(a=>a.blockers.length>0)&&(
-            <div className="mt-3 flex flex-col gap-1.5">
-              {actions.filter(a=>a.blockers.length>0).map(a=>(
-                <div key={a.label} className="text-xs leading-relaxed" style={{color:"#B4530C"}}>
-                  <b style={{color:"#8A6A08"}}>{a.label}:</b> {a.blockers.join(" · ")}
+                {cErr&&<div className="text-xs font-bold" style={{color:"#BE2626"}}>{cErr}</div>}
+                <div className="text-xs" style={{color:B.muted}}>
+                  الباقة وتاريخ الرحلة وعدد المعتمرين لا تُصحَّح هنا — تغييرها يغيّر السعر والمقاعد.
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Client + Total side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-        <div className="md:col-span-2 rounded-2xl p-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="font-bold mb-4" style={{color:B.black,fontSize:15}}>بيانات العميل</div>
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              {l:"الاسم",v:booking.clientName},
-              {l:"الجوال",v:booking.clientPhone},
-              {l:"الباقة",v:pkg?.name??"—"},
-              {l:"تاريخ الرحلة",v:trip?.departureDate??"—"},
-              {l:"نوع الغرفة",v:booking.roomType},
-              {l:"عدد المعتمرين",v:booking.persons},
-            ].map(f=>(
-              <div key={f.l}>
-                <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                <div className="font-bold text-sm" style={{color:B.black}}>{f.v}</div>
+                <div className="grid grid-cols-2 gap-3 max-w-sm">
+                  <button onClick={()=>setClientEdit(false)} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                    style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
+                  <button onClick={saveClient} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                    style={{background:B.gold,color:B.black,border:"none"}}>حفظ التعديلات</button>
+                </div>
               </div>
-            ))}
-          </div>
+            : <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                {[
+                  {l:"الاسم",v:booking.clientName},
+                  {l:"الجوال",v:booking.clientPhone,mono:true},
+                  {l:"الباقة",v:pkg?.name??"—"},
+                  {l:"تاريخ الرحلة",v:trip?.departureDate??"—",mono:true},
+                  {l:"نوع الغرفة",v:booking.roomType},
+                  {l:"عدد المعتمرين",v:booking.persons},
+                ].map(f=>(
+                  <div key={f.l}>
+                    <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
+                    <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit",direction:f.l==="الجوال"?"ltr":undefined,textAlign:f.l==="الجوال"?"right":undefined}}>{f.v}</div>
+                  </div>
+                ))}
+              </div>
+          }
 
           {/* توزيع الغرف مفصّلاً — ما يحتاجه التسكين فعلاً: «غرفة ثلاثية
               وغرفة ثنائية» لا جملة واحدة. يظهر للحجوزات العامة الجديدة
@@ -913,182 +995,310 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
             </div>
           )}
         </div>
-        <div className="rounded-2xl p-5 flex flex-col justify-center" style={{background:B.primary}}>
-          <div className="text-xs font-semibold mb-1" style={{color:"#9DBAB6"}}>المبلغ الإجمالي</div>
-          <div className="font-extrabold" style={{color:B.gold,fontSize:32,fontFamily:"var(--font-app)",lineHeight:1.2}}>{sarNumber(booking.total)}</div>
-          <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>{SAR}</div>
-          {booking.paymentStatus!=="none"&&(
-            <div className="mt-3 pt-3" style={{borderTop:"1px solid rgba(255,255,255,0.14)"}}>
-              <div className="text-xs font-semibold mb-1" style={{color:"#9DBAB6"}}>طريقة الدفع</div>
-              <div className="text-sm font-bold" style={{color:B.cream}}>{booking.payMethod||"—"}</div>
-              {booking.txnNo&&booking.txnNo!=="—"&&<div className="text-xs font-mono mt-0.5" style={{color:B.muted}}>{booking.txnNo}</div>}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Seats */}
-      <div className="rounded-2xl p-5 mb-5 flex items-center justify-between gap-3 flex-wrap" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-        <div>
-          <div className="font-bold mb-1" style={{color:B.black,fontSize:15}}>المقاعد المخصّصة</div>
-          {booking.seats.length>0
-            ? <div className="flex items-center gap-1.5 flex-wrap">{booking.seats.map(s=>(
-                <span key={s} className="inline-flex items-center justify-center rounded-lg text-sm font-extrabold" style={{minWidth:34,height:34,padding:"0 8px",background:"#FFF7EA",border:`1px solid ${B.gold}`,color:"#8a6a08"}}>{s}</span>
-              ))}</div>
-            : <div className="text-sm" style={{color:B.muted}}>لم تُختَر مقاعد بعد — تُختار عند قبول الطلب.</div>}
-        </div>
-        <button onClick={()=>setSeatOpen(true)} disabled={booking.status==="new"||booking.status==="reviewing"?!allVerified:false}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold"
-          style={{background:B.primary,color:B.cream,border:"none",opacity:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?0.5:1,cursor:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?"not-allowed":"pointer"}}>
-          <Armchair size={14}/>{booking.seats.length>0?"تعديل المقاعد":"اختيار المقاعد"}
-        </button>
-      </div>
-
-      {/* Payment link (after acceptance) */}
-      {(booking.status==="accepted"||booking.status==="awaiting_payment")&&(
-        <PaymentLinkCard booking={booking} trip={trip} pkg={pkg} onLogged={bump}/>
-      )}
-
-      {/* الفاتورة داخل الطلب — حالتها والمدفوع والمتبقي ورابطٌ مباشر
-          («أظهر داخل الطلب الفاتورة وحالة الدفع والمبلغ المدفوع والمتبقي»). */}
-      {invoice&&(()=>{
-        const ph=invoicePhase(invoice); const tone=INVOICE_PHASE_TONE[ph];
-        const paid=invoice.payStatus==="verified"?invoice.total:0;
-        return (
-          <div className="rounded-2xl p-5 mb-5 flex flex-wrap items-center gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="flex-1 min-w-0">
-              <div className="font-bold mb-1.5 flex items-center gap-2 flex-wrap" style={{color:B.black,fontSize:15}}>
-                الفاتورة <span style={{fontFamily:"var(--font-app)",color:B.text3,fontSize:13}}>{invoice.id}</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{background:tone.bg,color:tone.fg}}>{INVOICE_PHASE_LABEL[ph]}</span>
-              </div>
-              <div className="flex flex-wrap gap-4 text-xs" style={{color:B.text2}}>
-                <span>الإجمالي <b style={{fontFamily:"var(--font-app)",color:B.black}}>{sar(invoice.total)}</b></span>
-                <span>المدفوع <b style={{fontFamily:"var(--font-app)",color:"#1E7A44"}}>{sar(paid)}</b></span>
-                <span>المتبقي <b style={{fontFamily:"var(--font-app)",color:paid>=invoice.total?B.muted:"#BE2626"}}>{sar(Math.max(0,invoice.total-paid))}</b></span>
-                {invoice.dueAt&&ph!=="paid"&&<span>ينتهي الرابط <span style={{fontFamily:"var(--font-app)"}}>{new Date(invoice.dueAt).toLocaleString("ar-SA-u-nu-latn",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Riyadh"})}</span></span>}
-              </div>
-            </div>
-            <button onClick={()=>setInvoiceOpen(true)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>فتح الفاتورة</button>
+        <div className="xl:col-span-5 flex flex-col gap-4">
+          {/* مسار الطلب */}
+          <div className="rounded-2xl p-5" style={cardBase}>
+            <div className="text-sm font-bold mb-4" style={{color:B.text2}}>مسار الطلب</div>
+            <BookingTimeline status={booking.status}/>
           </div>
-        );
-      })()}
-
-      {/* الخصم — المدير يعتمده، والموظف يراه. لا خصم بعد التحصيل: ذاك استرجاع. */}
-      {booking.discountPercent?(
-        <div className="rounded-xl px-4 py-2.5 mb-3 text-xs" style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#6b5a2a"}}>
-          خصم معتمد <b>{booking.discountPercent}%</b> — {booking.discountReason}{booking.discountAt?<span style={{fontFamily:"var(--font-app)"}}> · {booking.discountAt.slice(0,10)}</span>:null}
+          {/* المبلغ الإجمالي */}
+          <div className="rounded-2xl p-5 flex flex-wrap items-end justify-between gap-4" style={{background:B.surface,border:`1px solid ${B.border}`}}>
+            <div>
+              <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>المبلغ الإجمالي</div>
+              <div className="font-extrabold" style={{color:B.gold,fontSize:32,fontFamily:"var(--font-app)",lineHeight:1.2}}>{sarNumber(booking.total)}</div>
+              <div className="text-xs mt-1" style={{color:B.muted}}>{SAR}</div>
+            </div>
+            {booking.paymentStatus!=="none"&&(
+              <div className="pr-4" style={{borderRight:`1px solid ${B.border}`}}>
+                <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>طريقة الدفع</div>
+                <div className="text-sm font-bold" style={{color:B.black}}>{booking.payMethod||"—"}</div>
+                {booking.txnNo&&booking.txnNo!=="—"&&<div className="text-xs font-mono mt-0.5" style={{color:B.muted}}>{booking.txnNo}</div>}
+              </div>
+            )}
+          </div>
         </div>
-      ):null}
-      {isAdmin&&booking.paymentStatus!=="verified"&&!["cancelled","rejected"].includes(booking.status)&&(
-        <div className="mb-5"><DiscountPanel booking={booking} onDone={async()=>{ await onRefresh(); bump(); }}/></div>
-      )}
+      </div>
 
-      {/* Pilgrims */}
-      <div className="rounded-2xl p-5 mb-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-        <div className="font-bold mb-4" style={{color:B.black,fontSize:15}}>بيانات المعتمرين ({booking.persons})</div>
-        <div className="flex flex-col gap-3">
-          {booking.pilgrims.map((pg,i)=>{
-            const vs=verif[i]??"pending";
-            const verifBg=vs==="verified"?"#E3F3E8":vs==="error"?"#FBE6E6":"#F0EAE0";
-            const verifFg=vs==="verified"?"#1E7A44":vs==="error"?"#BE2626":"#8A6A08";
-            const verifLabel=vs==="verified"?"تم التحقق":vs==="error"?"يوجد خطأ":"بانتظار التحقق";
-            return (
-              <div key={i} className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${vs==="verified"?"#C4E4CE":vs==="error"?"#F3C9C9":B.border}`}}>
-                <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{background:B.cream,borderBottom:`1px solid ${B.border}`}}>
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
-                    {i+1}
+      {/* ── الصفّ الثاني: الإجراءات · المقاعد ──
+          الطلب المؤكد تتحوّل واجهته من إدارة الطلب إلى إدارة مستنداته،
+          فتحلّ الطباعة والإرسال محلّ نقلات الحالة. */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-start">
+        {booking.status==="confirmed"
+          ? <div className="xl:col-span-8">
+              <PostBookingActions booking={booking} invoice={invoice} ticket={ticket}
+                onPrint={openPrint} onOpenInvoice={()=>setInvoiceOpen(true)} onOpenTicket={()=>setTicketOpen(true)} onLogged={bump}/>
+            </div>
+          : primaryActions.length>0&&(
+          <div className="xl:col-span-8 rounded-2xl px-5 py-4" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
+            <div className="text-xs font-bold mb-3" style={{color:B.text2}}>الإجراءات</div>
+            {needsVerif&&!allVerified&&(
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl mb-3 text-sm font-semibold"
+                style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
+                تم التحقق من {verifiedCount} من {booking.pilgrims.length} — لا يمكن قبول الطلب حتى يُتحقق من جميع المعتمرين.
+              </div>
+            )}
+            {/* Payment gate before manual confirm */}
+            {booking.status==="awaiting_payment"&&(
+              <div className="rounded-xl p-4 mb-3 flex flex-col gap-3" style={cardBase}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Field label="طريقة الدفع">
+                      <AppSelect value={payMethodSel} onChange={setPayMethodSel}
+                        options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
+                    </Field>
                   </div>
-                  <span className="font-extrabold text-sm" style={{color:B.black}}>{pg.name||`معتمر ${i+1}`}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                    style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
-                    {pg.gender==="male"?"ذكر":"أنثى"}
-                  </span>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-bold"
-                    style={{background:verifBg,color:verifFg}}>{verifLabel}</span>
-                  <div className="flex items-center gap-2 mr-auto">
-                    <span className="text-xs" style={{color:B.muted}}>{pg.nationality}</span>
-                    {editIdx!==i&&<button onClick={()=>startEdit(i)} title="تعديل بيانات المعتمر"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer"
-                      style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل</button>}
-                  </div>
+                  <label className="flex items-end gap-2.5 cursor-pointer pb-1.5">
+                    <span onClick={()=>setPayReceived(v=>!v)} className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:payReceived?"#1E7A44":"#fff",border:`1.5px solid ${payReceived?"#1E7A44":B.border}`}}>
+                      {payReceived&&<Check size={14} style={{color:"#fff"}}/>}
+                    </span>
+                    <span className="text-sm font-bold" style={{color:B.black}} onClick={()=>setPayReceived(v=>!v)}>تم استلام الدفع فعلياً</span>
+                  </label>
                 </div>
-                {editIdx===i&&draft
-                  ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
-                      <div className="col-span-2 sm:col-span-2"><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم الكامل</div>
-                        <input className={einp} style={eist} value={draft.name} onChange={e=>setD("name",e.target.value)}/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>نوع الوثيقة</div>
-                        <AppSelect value={draft.docType??guessDocType(draft.idNumber)} onChange={v=>setD("docType",v as Pilgrim["docType"])}
-                          options={DOC_TYPES.map(d=>({value:d.value,label:`${d.icon} ${d.label.ar}`}))} placeholder="اختر النوع"/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>{numberLabelOf(draft.docType,draft.idNumber)}</div>
-                        <input className={einp} style={{...eist,direction:"ltr"}} value={draft.idNumber}
-                          placeholder={docTypeDef(draft.docType).placeholder} onChange={e=>setD("idNumber",e.target.value)}/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنسية</div>
-                        <NationalitySelect value={draft.nationality} onChange={v=>setD("nationality",v)} subInTrigger={false} compact/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنس</div>
-                        <AppSelect value={draft.gender} onChange={v=>setD("gender",v as Pilgrim["gender"])}
-                          options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>تاريخ الميلاد</div>
-                        <input type="date" className={einp} style={{...eist,direction:"ltr"}} value={draft.birthDate} onChange={e=>setD("birthDate",e.target.value)}/></div>
-                      <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
-                        <input className={einp} style={{...eist,direction:"ltr"}} value={draft.phone} onChange={e=>setD("phone",e.target.value)}/></div>
+                {!payReceived&&<div className="text-xs" style={{color:"#B4530C"}}>فعّل «تم استلام الدفع فعلياً» ليعمل زرّ «تأكيد الدفع».</div>}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              {primaryActions.map(a=>{
+                const disabled=a.blockers.length>0;
+                const tone=TONE[a.tone];
+                return (
+                <button key={a.label} disabled={disabled}
+                  title={disabled?a.blockers.join(" · "):a.effects.join(" · ")}
+                  /* لا window.confirm: النقلة ذات الأثر تفتح نافذةً تقول
+                     الأثر وتطلب السبب. وما لا أثر له (إرسال الرابط) يمضي. */
+                  onClick={()=>{ if(disabled) return;
+                    if(a.opensSeatMap){setSeatOpen(true);return;}
+                    if(NEEDS_DIALOG.includes(a.to)||a.reason){setPending(a);return;}
+                    runTransition(a); }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm"
+                  style={{background:disabled?"#EEECEA":tone.bg,color:disabled?B.muted:tone.fg,border:`1px solid ${disabled?B.border:tone.br}`,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.7:1}}>
+                  {a.label}
+                </button>
+                );
+              })}
+            </div>
+            {/* لماذا الزرّ معطَّل — بنصّه لا بتلميحٍ يُكتشف بالمرور. */}
+            {primaryActions.some(a=>a.blockers.length>0)&&(
+              <div className="mt-3 flex flex-col gap-1.5">
+                {primaryActions.filter(a=>a.blockers.length>0).map(a=>(
+                  <div key={a.label} className="text-xs leading-relaxed" style={{color:"#B4530C"}}>
+                    <b style={{color:"#8A6A08"}}>{a.label}:</b> {a.blockers.join(" · ")}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* المقاعد المخصّصة — الموظف يراجعها ويؤكدها، لا يبدأها من الصفر. */}
+        <div className={`${hasSideCard?"xl:col-span-4":"xl:col-span-12"} rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3`} style={cardBase}>
+          <div className="min-w-0">
+            <div className="font-bold mb-1" style={{color:B.black,fontSize:15}}>المقاعد المخصّصة</div>
+            {booking.seats.length>0
+              ? <div className="flex items-center gap-1.5 flex-wrap">{booking.seats.map(s=>(
+                  <span key={s} className="inline-flex items-center justify-center rounded-lg text-sm font-extrabold" style={{minWidth:34,height:34,padding:"0 8px",background:"#FFF7EA",border:`1px solid ${B.gold}`,color:"#8a6a08"}}>{s}</span>
+                ))}</div>
+              : <div className="text-sm" style={{color:B.muted}}>لم تُخصَّص مقاعد بعد — تُؤكَّد عند قبول الطلب.</div>}
+          </div>
+          <button onClick={()=>setSeatOpen(true)} disabled={booking.status==="new"||booking.status==="reviewing"?!allVerified:false}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold"
+            style={{background:B.gold,color:B.black,border:"none",opacity:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?0.5:1,cursor:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?"not-allowed":"pointer"}}>
+            <Armchair size={14}/>{booking.seats.length>0?"مراجعة المقاعد وتعديلها":"تأكيد المقاعد"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── الصفّ الثالث: المعتمرون · الدفع والفاتورة والسجل ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+        {/* Pilgrims */}
+        <div className="xl:col-span-7 rounded-2xl p-5" style={cardBase}>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div className="font-bold" style={{color:B.black,fontSize:15}}>بيانات المعتمرين ({booking.persons})</div>
+            <span className="px-3 py-1 rounded-full text-xs font-extrabold"
+              style={{background:verifiedAll?"#E3F3E8":B.fill,color:verifiedAll?"#1E7A44":B.text2,border:`1px solid ${verifiedAll?"#C4E4CE":B.border}`}}>
+              {verifiedAll?"✓ تم التحقق من الجميع":`تم التحقق من ${verifiedCount} من ${booking.pilgrims.length}`}
+            </span>
+          </div>
+          <div className="flex flex-col gap-3">
+            {booking.pilgrims.map((pg,i)=>{
+              const vs=verifyState(pg);
+              const editing = editIdx===i;
+              /* المتحقَّق منه يُطوى إلى سطرٍ واحد: الحالة وحدها تكفي. */
+              const collapsed = vs==="verified"&&!editing&&!openRows[i];
+              /* «عُدِّلت بعد التحقق» تنبيهٌ لا خطأ: كهرماء لا حمراء. */
+              const bd = vs==="verified"?"#C4E4CE":vs==="error"?"#F3C9C9":vs==="stale"?"#F0DCA8":B.border;
+              const headBg = vs==="verified"?"#F4FBF6":vs==="error"?"#FDF5F5":vs==="stale"?"#FFFBF0":B.cream;
+              return (
+                <div key={i} className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${bd}`}}>
+                  <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{background:headBg,borderBottom:collapsed?"none":`1px solid ${B.border}`}}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                      style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
+                      {i+1}
                     </div>
-                  : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4">
-                      {[
-                        {l:numberLabelOf(pg.docType,pg.idNumber),v:pg.idNumber||"—",mono:true},
-                        {l:"الجنسية",v:pg.nationality||"—"},
-                        {l:"تاريخ الميلاد",v:pg.birthDate||"—",mono:true},
-                        {l:"الجوال",v:pg.phone||"—",mono:true},
-                      ].map(f=>(
-                        <div key={f.l}>
-                          <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                          <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit"}}>{f.v}</div>
-                        </div>
-                      ))}
+                    <span className="font-extrabold text-sm" style={{color:B.black}}>{pg.name||`معتمر ${i+1}`}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                      style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
+                      {pg.gender==="male"?"ذكر":"أنثى"}
+                    </span>
+                    {/* الحالة واضحةٌ جداً: خضراء مصمتة للمتحقَّق، حمراء للخطأ،
+                        كهرمانية لمن عُدِّلت بياناته بعد تحقّقٍ تمّ. ومن تحقّق
+                        ومتى في الـtitle لا في السطر: «يكفي ✓ تم التحقق». */}
+                    {vs==="pending"
+                      ? <span className="text-xs px-2.5 py-0.5 rounded-full font-bold" style={{background:"#F0EAE0",color:"#8A6A08"}}>بانتظار التحقق</span>
+                      : <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold"
+                          title={pg.verifiedBy||pg.verifiedAt?`${vs==="stale"?"كان تحقّق":"تحقّق"} ${pg.verifiedBy||"—"}${pg.verifiedAt?` · ${pg.verifiedAt.slice(0,10)}`:""}`:undefined}
+                          style={{background:vs==="verified"?"#1E7A44":vs==="stale"?"#B4530C":"#BE2626",color:"#fff"}}>
+                          {vs==="verified"?<Check size={12}/>:vs==="stale"?<Repeat size={12}/>:<X size={12}/>}{VERIFY_LABEL[vs]}
+                        </span>}
+                    <div className="flex items-center gap-2 mr-auto">
+                      {!collapsed&&<span className="text-xs" style={{color:B.muted}}>{pg.nationality}</span>}
+                      {!editing&&vs!=="verified"&&<button onClick={()=>startEdit(i)} title="تعديل بيانات المعتمر"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                        style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل</button>}
+                      {vs==="verified"&&!editing&&(
+                        <button onClick={()=>toggleRow(i)} title={collapsed?"عرض البيانات":"إخفاء البيانات"}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                          style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
+                          <ChevronDown size={12} style={{transform:collapsed?"none":"rotate(180deg)",transition:"transform .15s"}}/>البيانات
+                        </button>
+                      )}
                     </div>
-                }
-                <div className="px-4 pb-4">
-                  {editIdx===i
-                    ? <div className="grid grid-cols-2 gap-3">
-                        <button onClick={cancelEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                          style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
-                        <button onClick={saveEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                          style={{background:B.primary,color:B.cream,border:"none"}}>حفظ التعديلات</button>
+                  </div>
+                  {!collapsed&&(editing&&draft
+                    ? <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                        <div className="col-span-2"><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم الكامل</div>
+                          <input className={einp} style={eist} value={draft.name} onChange={e=>setD("name",e.target.value)}/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>نوع الوثيقة</div>
+                          <AppSelect value={draft.docType??guessDocType(draft.idNumber)} onChange={v=>setD("docType",v as Pilgrim["docType"])}
+                            options={DOC_TYPES.map(d=>({value:d.value,label:`${d.icon} ${d.label.ar}`}))} placeholder="اختر النوع"/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>{numberLabelOf(draft.docType,draft.idNumber)}</div>
+                          <input className={einp} style={{...eist,direction:"ltr"}} value={draft.idNumber}
+                            placeholder={docTypeDef(draft.docType).placeholder} onChange={e=>setD("idNumber",e.target.value)}/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنسية</div>
+                          <NationalitySelect value={draft.nationality} onChange={v=>setD("nationality",v)} subInTrigger={false} compact/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنس</div>
+                          <AppSelect value={draft.gender} onChange={v=>setD("gender",v as Pilgrim["gender"])}
+                            options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>تاريخ الميلاد</div>
+                          <input type="date" className={einp} style={{...eist,direction:"ltr"}} value={draft.birthDate} onChange={e=>setD("birthDate",e.target.value)}/></div>
+                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
+                          <input className={einp} style={{...eist,direction:"ltr"}} value={draft.phone} onChange={e=>setD("phone",e.target.value)}/></div>
                       </div>
-                    : vs==="pending"
-                      ? <div className="grid grid-cols-2 gap-3">
-                          <button onClick={()=>setVerif(v=>({...v,[i]:"error"}))}
-                            className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                            style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>
-                            يوجد خطأ
-                          </button>
-                          <button onClick={()=>setVerif(v=>({...v,[i]:"verified"}))}
-                            className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                            style={{background:"#E3F3E8",color:"#1E7A44",border:"1px solid #C4E4CE"}}>
-                            تم التحقق
-                          </button>
-                        </div>
-                      : <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl" style={{background:verifBg,border:`1px solid ${vs==="verified"?"#C4E4CE":"#F3C9C9"}`}}>
-                          <span className="flex items-center gap-2 text-sm font-bold" style={{color:verifFg}}>
-                            {vs==="verified"?<Check size={14}/>:<X size={14}/>}{vs==="verified"?"تم التحقق من هذا المعتمر":"تم وضع علامة خطأ على البيانات"}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {vs==="error"&&<button onClick={()=>startEdit(i)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                              style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل البيانات</button>}
-                            <button onClick={()=>setVerif(v=>({...v,[i]:"pending"}))} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                              style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Repeat size={11}/>تغيير الحالة</button>
+                    : <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+                        {[
+                          {l:numberLabelOf(pg.docType,pg.idNumber),v:pg.idNumber||"—",mono:true},
+                          {l:"الجنسية",v:pg.nationality||"—"},
+                          {l:"تاريخ الميلاد",v:pg.birthDate||"—",mono:true},
+                          {l:"الجوال",v:pg.phone||"—",mono:true},
+                        ].map(f=>(
+                          <div key={f.l}>
+                            <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
+                            <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit"}}>{f.v}</div>
                           </div>
-                        </div>
-                  }
+                        ))}
+                      </div>
+                  )}
+                  {!collapsed&&(
+                    <div className="px-4 pb-4">
+                      {editing
+                        ? <div className="grid grid-cols-2 gap-3">
+                            <button onClick={cancelEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                              style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
+                            <button onClick={saveEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                              style={{background:B.gold,color:B.black,border:"none"}}>حفظ التعديلات</button>
+                          </div>
+                        : vs!=="verified"
+                          ? <div className="flex flex-col gap-2.5">
+                              {vs==="stale"&&(
+                                <div className="text-xs leading-relaxed" style={{color:"#B4530C"}}>
+                                  عُدِّلت البيانات بعد تحقّق {pg.verifiedBy||"الموظف"}{pg.verifiedAt?` (${pg.verifiedAt.slice(0,10)})`:""} — راجعها وأكّد التحقق من جديد.
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-3">
+                                <button onClick={()=>setPilgrim(i,markError,`وُسمت بيانات ${pgName(pg,i)} بخطأ`)}
+                                  className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                                  style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>
+                                  يوجد خطأ
+                                </button>
+                                <button onClick={()=>setPilgrim(i,p=>markVerified(p,staffName),`تم التحقق من بيانات ${pgName(pg,i)}`)}
+                                  className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+                                  style={{background:"#E3F3E8",color:"#1E7A44",border:"1px solid #C4E4CE"}}>
+                                  تم التحقق
+                                </button>
+                              </div>
+                            </div>
+                          /* لا زرّ «تغيير الحالة» بعد التحقق: التحقق يتمّ مرّةً،
+                             ولا يُلغيه إلا تعديلٌ حقيقيٌّ في البيانات. */
+                          : <div className="flex items-center justify-end gap-2 flex-wrap">
+                              <button onClick={()=>startEdit(i)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                                style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل البيانات</button>
+                            </div>
+                      }
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="xl:col-span-5 flex flex-col gap-4">
+          {/* Payment link (after acceptance) */}
+          {(booking.status==="accepted"||booking.status==="awaiting_payment")&&(
+            <PaymentLinkCard booking={booking} trip={trip} pkg={pkg} onLogged={bump}/>
+          )}
+
+          {/* الفاتورة داخل الطلب — حالتها والمدفوع والمتبقي ورابطٌ مباشر
+              («أظهر داخل الطلب الفاتورة وحالة الدفع والمبلغ المدفوع والمتبقي»). */}
+          {invoice&&(()=>{
+            const ph=invoicePhase(invoice); const tone=INVOICE_PHASE_TONE[ph];
+            const paid=invoice.payStatus==="verified"?invoice.total:0;
+            return (
+              <div className="rounded-2xl p-5 flex flex-wrap items-center gap-4" style={cardBase}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold mb-1.5 flex items-center gap-2 flex-wrap" style={{color:B.black,fontSize:15}}>
+                    الفاتورة <span style={{fontFamily:"var(--font-app)",color:B.text3,fontSize:13}}>{invoice.id}</span>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{background:tone.bg,color:tone.fg}}>{INVOICE_PHASE_LABEL[ph]}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-xs" style={{color:B.text2}}>
+                    <span>الإجمالي <b style={{fontFamily:"var(--font-app)",color:B.black}}>{sar(invoice.total)}</b></span>
+                    <span>المدفوع <b style={{fontFamily:"var(--font-app)",color:"#1E7A44"}}>{sar(paid)}</b></span>
+                    <span>المتبقي <b style={{fontFamily:"var(--font-app)",color:paid>=invoice.total?B.muted:"#BE2626"}}>{sar(Math.max(0,invoice.total-paid))}</b></span>
+                    {invoice.dueAt&&ph!=="paid"&&<span>ينتهي الرابط <span style={{fontFamily:"var(--font-app)"}}>{new Date(invoice.dueAt).toLocaleString("ar-SA-u-nu-latn",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Riyadh"})}</span></span>}
+                  </div>
+                </div>
+                <button onClick={()=>setInvoiceOpen(true)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>فتح الفاتورة</button>
               </div>
             );
-          })}
+          })()}
+
+          {/* الخصم — المدير يعتمده، والموظف يراه. لا خصم بعد التحصيل: ذاك استرجاع. */}
+          {booking.discountPercent?(
+            <div className="rounded-xl px-4 py-2.5 text-xs" style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#6b5a2a"}}>
+              خصم معتمد <b>{booking.discountPercent}%</b> — {booking.discountReason}{booking.discountAt?<span style={{fontFamily:"var(--font-app)"}}> · {booking.discountAt.slice(0,10)}</span>:null}
+            </div>
+          ):null}
+          {isAdmin&&booking.paymentStatus!=="verified"&&!["cancelled","rejected"].includes(booking.status)&&(
+            <div><DiscountPanel booking={booking} onDone={async()=>{ await onRefresh(); bump(); }}/></div>
+          )}
+
+          {/* سجلّ الطلب — كل انتقالٍ وإرسالٍ بصاحبه ووقته. */}
+          <EventTimeline docType="booking" docId={booking.id} title="سجلّ الطلب" outcomes={SEND_OUTCOMES} reloadKey={evKey}/>
         </div>
       </div>
 
-      {/* سجلّ الطلب — كل انتقالٍ وإرسالٍ وتعيينٍ بصاحبه ووقته. */}
-      <EventTimeline docType="booking" docId={booking.id} title="سجلّ الطلب" outcomes={SEND_OUTCOMES} reloadKey={evKey}/>
+      {secondaryActions.length>0&&(
+        <div className="mt-5 pt-4 flex flex-wrap items-center gap-3" style={{borderTop:`1px solid ${B.border}`}}>
+          <span className="text-xs" style={{color:B.muted}}>إجراءات أخرى</span>
+          {secondaryActions.map(a=>(
+            <button key={a.label} title={a.effects.join(" · ")}
+              onClick={()=>{ if(NEEDS_DIALOG.includes(a.to)||a.reason){setPending(a);return;} runTransition(a); }}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer"
+              style={{background:"#fff",border:`1px solid ${B.border}`,color:"#BE2626"}}>{a.label}</button>
+          ))}
+        </div>
+      )}
 
       <AnimatePresence>
         {seatOpen&&(
@@ -1121,7 +1331,8 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
             onCancel={()=>setPending(null)}
             onConfirm={v=>{ void runTransition(pending,v); }}/>
         )}
-        {invoiceOpen&&invoice&&<InvoiceModal pay={invoice} onClose={()=>setInvoiceOpen(false)}/>}
+        {invoiceOpen&&invoice&&<InvoiceModal pay={invoice} autoPrint={printDoc==="invoice"} onClose={closeDoc}/>}
+        {ticketOpen&&ticket&&<TicketCard ticket={ticket} autoPrint={printDoc==="ticket"} onClose={closeDoc}/>}
       </AnimatePresence>
     </motion.div>
   );
@@ -1133,8 +1344,6 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   const refreshBookings=useStore(s=>s.refreshBookings);
   const currentUser=useStore(s=>s.currentUser);
   const beneficiaries=useStore(s=>s.beneficiaries);
-  const users=useStore(s=>s.users);
-  const nameOf=(uid?:string)=>uid?users.find(u=>u.id===uid)?.name:undefined;
   const [searchParams,setSearchParams]=useSearchParams();
   /* اليوم بالتوقيت المحلي — للطلبات التي مضت رحلتها. لا toISOString:
      هي UTC فتُقدّم اليوم أو تُؤخّره ثلاث ساعات عن الرياض. */
@@ -1222,6 +1431,9 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     return null;
   }
   function updatePilgrims(id:string,pilgrims:Pilgrim[]){setBookings(p=>p.map(b=>b.id===id?{...b,pilgrims}:b));}
+  /* تصحيح اسم العميل أو جوّاله من شاشة المراجعة — يمرّ بنفس مسار الحفظ
+     (upsert_booking يكتب client_name و client_phone)، فلا حاجة لدالّة جديدة. */
+  function updateClient(id:string,patch:{clientName:string;clientPhone:string}){setBookings(p=>p.map(b=>b.id===id?{...b,...patch}:b));}
   function updateSeats(id:string,seats:number[]){setBookings(p=>p.map(b=>b.id===id?{...b,seats}:b));}
 
   const curBooking = detailId ? bookings.find(b=>b.id===detailId) : null;
@@ -1279,16 +1491,16 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     ["new","reviewing","accepted","awaiting_payment","confirmed","cancelled"] as const, "booking",
   );
 
-  const fb=(on:boolean)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s",whiteSpace:"nowrap" as const});
+  const fb=(on:boolean)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s",whiteSpace:"nowrap" as const});
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الطلبات" crumb="إدارة الطلبات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
 
       {curBooking ? (
         <BookingDetail booking={curBooking} trips={trips} packages={packages} allBookings={bookings}
           onBack={()=>{ setDetailId(null); if(searchParams.get("open")){ const n=new URLSearchParams(searchParams); n.delete("open"); setSearchParams(n,{replace:true}); } }}
-          onStatusChange={changeStatus} onPilgrimsChange={updatePilgrims} onSeatsChange={updateSeats} onRefresh={refreshBookings}/>
+          onStatusChange={changeStatus} onPilgrimsChange={updatePilgrims} onClientChange={updateClient} onSeatsChange={updateSeats} onRefresh={refreshBookings}/>
       ) : (
         <>
           {/* Stats */}
@@ -1337,8 +1549,9 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                   <thead>
                     <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
                       {/* أُضيفت ثلاثة أعمدة بطلب الفريق: تاريخ الإنشاء
-                          وتاريخ الرحلة والموظف المسؤول. الثلاثة موجودةٌ في
-                          البيانات أصلاً ولم تكن معروضة. */}
+                          وتاريخ الرحلة والموظف. الثلاثة موجودةٌ في البيانات
+                          أصلاً ولم تكن معروضة. و«الموظف» هو مُنشئ الطلب أو
+                          مصدره: لا مسؤول معيَّن للطلب بعد قرار ٢٠٢٦-٠٩-١١. */}
                       {["رقم الطلب","العميل","الباقة","تاريخ الطلب","تاريخ الرحلة","المعتمرون","المبلغ","الموظف","الحالة","إجراء"].map(h=>(
                         <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
                       ))}
@@ -1366,14 +1579,12 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                           <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{b.persons}</td>
                           <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{sar(b.total)}</td>
                           <td style={{padding:"14px 16px",color:B.text2,fontSize:12,whiteSpace:"nowrap"}}>
-                            {nameOf(b.assignedTo)
-                              ? <span className="font-bold" style={{color:B.black}}>{nameOf(b.assignedTo)}</span>
-                              : (b.staff||(b.source==="public"?"من التطبيق":"—"))}
+                            {b.staff||(b.source==="public"?"من التطبيق":"—")}
                           </td>
                           <td style={{padding:"14px 16px"}}><StatusBadge status={b.status} entity="booking"/></td>
                           <td className="col-action" style={{padding:"14px 16px"}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>setDetailId(b.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                              style={{background:B.primary,color:B.cream,border:"none"}}>فتح الطلب</button>
+                              style={{background:B.gold,color:B.black,border:"none"}}>فتح الطلب</button>
                           </td>
                         </tr>
                       );
@@ -1411,7 +1622,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                     <div className="flex items-center justify-between">
                       <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(b.total)}</div>
                       <button onClick={e=>{e.stopPropagation();setDetailId(b.id);}} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                        style={{background:B.primary,color:B.cream,border:"none"}}>فتح الطلب</button>
+                        style={{background:B.gold,color:B.black,border:"none"}}>فتح الطلب</button>
                     </div>
                   </motion.div>
                 );
@@ -1456,7 +1667,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                   {bulkBusy&&<Spinner size={13} color="#fff" track="rgba(255,255,255,0.3)"/>}
                   {bulkBusy?"جارٍ الإغلاق…":`إغلاق ${stats.stale} طلباً`}
                 </button>
-                <button onClick={()=>!bulkBusy&&setBulkOpen(false)} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>تراجع</button>
+                <button onClick={()=>!bulkBusy&&setBulkOpen(false)} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>تراجع</button>
               </div>
             </motion.div>
           </motion.div>

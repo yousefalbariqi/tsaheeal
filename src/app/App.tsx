@@ -92,7 +92,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               {pay.paymentStatus==="verified" ? "سُدّد هذا الطلب" : "رابط الدفع مغلق"}
             </div>
             <div className="text-sm mt-1" style={{color:B.muted}}>{pay.closedReason ?? "انتهت صلاحية هذا الرابط."}</div>
-            <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+            <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
               {[["رقم الطلب",pay.id],["الباقة",pay.packageName]].map(([l,v])=>(
                 <div key={l} className="flex items-center justify-between gap-2">
                   <span style={{color:B.muted}}>{l}</span>
@@ -118,7 +118,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               </motion.div>
               <div className="font-extrabold text-xl" style={{color:B.black}}>تم الدفع بنجاح</div>
               <div className="text-sm mt-1.5" style={{color:B.text2}}>شكراً لك، {pay.clientName}. تم استلام دفعتك.</div>
-              <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+              <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
                 {[["رقم الطلب",pay.id],["الباقة",pay.packageName],["طريقة الدفع",sel?.label??"—"],["المبلغ المدفوع",amount]].map(([l,v])=>(
                   <div key={l} className="flex items-center justify-between gap-2">
                     <span style={{color:B.muted}}>{l}</span>
@@ -140,7 +140,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
                 </div>
                 <div className="text-left">
                   <div className="text-xs" style={{color:B.muted}}>المبلغ المطلوب</div>
-                  <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:B.primary}}>{amount}</div>
+                  <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:B.gold}}>{amount}</div>
                 </div>
               </div>
             </div>
@@ -306,7 +306,7 @@ function VerifyPage({docId}:{docId:string}) {
                   : "الرقم المقروء من الرمز صحيح، لكن خدمة التحقّق غير متاحة الآن — راجع موظف الرحلة."}
               </div>
               <div className="inline-block mt-4 px-4 py-2 rounded-xl text-sm font-bold"
-                style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>
+                style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>
                 {docId}
               </div>
             </div>

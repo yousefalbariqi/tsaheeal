@@ -24,7 +24,7 @@ export function DeleteDialog({onConfirm,onCancel}:{onConfirm:(reason:string)=>vo
           <button onClick={()=>onConfirm(reason.trim())} disabled={!reason.trim()} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:"#8A6A08",color:"#fff",border:"none",opacity:reason.trim()?1:.45,cursor:reason.trim()?"pointer":"not-allowed"}}>أرشفة</button>
           <button onClick={onCancel} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+            style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>
     </motion.div>

@@ -27,6 +27,7 @@ import {
 import { availSeats } from "../data";
 import { durationLabel } from "../plural";
 import { ReviewsSection } from "../ui/ReviewsSection";
+import { transportFeatureIcon } from "../../transport/featureIcons";
 
 /* المستفيد يحتاج إشارة وفرة لا جرداً: «متبقٍ 99 مقعداً» رقم لا يقرّر به
    شيئاً (وفي وضع التجربة هو 99 ثابتاً). فوق العتبة نعرض «+6 متاح»، وتحتها
@@ -537,17 +538,20 @@ export function Listing(p: ListingProps) {
           <div style={{ ...T.h3, color: C.ink }}>{transport.name}</div>
           <div style={{ ...T.meta, color: C.ink2, marginTop: 4 }}>
             {transport.vehicleType}
-            {transport.model && <> · {transport.model}</>}
-            {transport.year && <> · <span style={LTR}>{transport.year}</span></>}
+            {transport.mode === "bus" && transport.model && <> · {transport.model}</>}
+            {transport.mode === "bus" && transport.year && <> · <span style={LTR}>{transport.year}</span></>}
           </div>
           {transport.features?.length > 0 && (
             <div className="flex flex-wrap gap-2" style={{ marginTop: 12 }}>
-              {transport.features.map(f => <Chip key={f.id}>{f.text}</Chip>)}
+              {transport.features.map(f => {
+                const Icon = transportFeatureIcon(f.icon);
+                return <Chip key={f.id}><Icon size={13} />{f.text}</Chip>;
+              })}
             </div>
           )}
           {transport.reviews?.filter(r => r.consent).map(rv => (
             <div key={rv.id} style={{ ...T.meta, color: C.ink2, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
-              «{rv.text}» — {rv.name}
+              «{rv.text}» — {rv.name}{typeof rv.rating === "number" && <> · {rv.rating}/5 ★</>}
             </div>
           ))}
         </div>

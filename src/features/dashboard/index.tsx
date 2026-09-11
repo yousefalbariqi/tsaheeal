@@ -73,32 +73,37 @@ function oldestNote(o: Oldest): string | null {
 /** بطاقة «يحتاج إجراءً» — الرقم، وأقدم انتظار، والنقل إلى شاشته. */
 function ActionRow({ icon: Icon, label, count, note, tone, onGo, oldest }: {
   icon: typeof BookOpen; label: string; count: number; note: string;
-  tone: { bg: string; br: string; fg: string }; onGo: () => void; oldest?: Oldest;
+  tone: { fg: string }; onGo: () => void; oldest?: Oldest;
 }) {
   if (!count) return null;
   const wait = oldestNote(oldest ?? null);
   return (
     <button onClick={onGo}
-      className="w-full flex items-center gap-3 px-4 py-3.5 text-start cursor-pointer rounded-xl"
-      style={{ background: tone.bg, border: `1px solid ${tone.br}` }}>
+      className="relative overflow-hidden w-full flex items-center gap-3 px-4 py-3.5 text-start cursor-pointer rounded-xl"
+      style={{ background: B.surface, border: `1px solid ${B.border}` }}>
+      {/* شريطٌ على الحافة يحمل لون الحالة. كانت الحالة تصبغ خلفية الصفّ
+          كلَّه، فتصطفّ أربعةُ أسطحٍ ملوّنة في قائمةٍ واحدة داخل بطاقةٍ
+          بيضاء. اللون باقٍ لأنه يفرّق «متأخّر» عن «قيد المراجعة»، لكنه
+          انتقل إلى ٣ بكسل وأيقونة — إشارةٌ لا سطح. */}
+      <span aria-hidden className="absolute inset-y-0" style={{ insetInlineStart: 0, width: 3, background: tone.fg }} />
       <Icon size={17} style={{ color: tone.fg, flexShrink: 0 }} />
       <span className="flex-1 min-w-0">
-        <span className="block font-bold text-sm" style={{ color: tone.fg }}>
-          {label} · <span style={{ fontFamily: "var(--font-app)" }}>{count}</span>
+        <span className="block font-bold text-sm" style={{ color: B.black }}>
+          {label} · <span style={{ fontFamily: "var(--font-app)", color: B.gold }}>{count}</span>
         </span>
-        <span className="block text-xs mt-0.5" style={{ color: tone.fg, opacity: 0.8 }}>{note}</span>
+        <span className="block text-xs mt-0.5" style={{ color: B.muted }}>{note}</span>
         {wait && <span className="block text-xs mt-1 font-bold" style={{ color: tone.fg }}>{wait}</span>}
       </span>
-      <ArrowLeft size={15} style={{ color: tone.fg, flexShrink: 0, opacity: 0.7 }} />
+      <ArrowLeft size={15} style={{ color: B.muted, flexShrink: 0 }} />
     </button>
   );
 }
 
 const TONE = {
-  red: { bg: "#FBE6E6", br: "#F3C9C9", fg: "#BE2626" },
-  amber: { bg: "#FBF3D6", br: "#E8D9A8", fg: "#8A6A08" },
-  violet: { bg: "#F1E9FA", br: "#D8BBFA", fg: "#7226BE" },
-  blue: { bg: "#EAF1FE", br: "#C9DBFB", fg: "#1E52C7" },
+  red: { fg: "#BE2626" },
+  amber: { fg: "#8A6A08" },
+  violet: { fg: "#7226BE" },
+  blue: { fg: "#1E52C7" },
 };
 
 export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; onNav: (v: string) => void }) {
@@ -220,7 +225,7 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
         {/* ── يحتاج إجراءً ── */}
         <section className="rounded-2xl p-5" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="font-extrabold text-base" style={{ color: B.black, margin: 0 }}>يحتاج إجراءً</h2>
+            <h2 className="font-extrabold text-base" style={{ color: B.primaryDeep, margin: 0 }}>يحتاج إجراءً</h2>
             <span className="text-xs" style={{ color: B.muted }}>اضغط البند لتفتح شاشته</span>
           </div>
           <div className="flex flex-col gap-2.5">
@@ -247,9 +252,10 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
             {/* لا شيء معلّق: يُقال صريحاً بدل قسمٍ فارغ يُقرأ عطلاً. */}
             {!m.late.length && m.pending.length === 0 && !m.awaitingPay.length
               && !m.failedPay.length && !m.newRequests.length && (
-              <div className="flex items-center gap-2.5 px-4 py-4 rounded-xl"
-                style={{ background: "#E3F3E8", border: "1px solid #C4E4CE", color: "#1E7A44" }}>
-                <TrendingUp size={16} />
+              <div className="relative overflow-hidden flex items-center gap-2.5 px-4 py-4 rounded-xl"
+                style={{ background: B.surface, border: `1px solid ${B.border}`, color: B.black }}>
+                <span aria-hidden className="absolute inset-y-0" style={{ insetInlineStart: 0, width: 3, background: "#1E7A44" }} />
+                <TrendingUp size={16} style={{ color: "#1E7A44" }} />
                 <span className="text-sm font-bold">لا شيء معلّق — كل الطلبات متابَعة.</span>
               </div>
             )}
@@ -261,7 +267,7 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
           <section className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
             <div className="flex items-center gap-2 px-5 py-4" style={{ borderBottom: `1px solid ${B.border}` }}>
               <CalendarClock size={16} style={{ color: B.gold }} />
-              <h2 className="font-extrabold text-base flex-1" style={{ color: B.black, margin: 0 }}>رحلات الأسبوع</h2>
+              <h2 className="font-extrabold text-base flex-1" style={{ color: B.primaryDeep, margin: 0 }}>رحلات الأسبوع</h2>
               <button onClick={() => onNav("trips")} className="text-xs font-bold cursor-pointer"
                 style={{ background: "none", border: "none", color: B.text2 }}>كل الرحلات</button>
             </div>
@@ -294,7 +300,7 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
           <section className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
             <div className="flex items-center gap-2 px-5 py-4" style={{ borderBottom: `1px solid ${B.border}` }}>
               <BookOpen size={16} style={{ color: B.gold }} />
-              <h2 className="font-extrabold text-base flex-1" style={{ color: B.black, margin: 0 }}>آخر الطلبات</h2>
+              <h2 className="font-extrabold text-base flex-1" style={{ color: B.primaryDeep, margin: 0 }}>آخر الطلبات</h2>
               <button onClick={() => onNav("bookings")} className="text-xs font-bold cursor-pointer"
                 style={{ background: "none", border: "none", color: B.text2 }}>كل الطلبات</button>
             </div>
@@ -322,8 +328,9 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
         </div>
 
         {metrics.unlinkedBookings > 0 && <button onClick={()=>goBookings({beneficiary:"unlinked"})}
-          className="flex items-center gap-3 px-4 py-3.5 rounded-xl text-right cursor-pointer" style={{background:"#FBE6E6",border:"1px solid #F3C9C9"}}>
-          <AlertTriangle size={18} style={{color:"#BE2626"}}/><span><strong className="text-sm" style={{color:"#BE2626"}}>{metrics.unlinkedBookings} طلبات غير مربوطة بمستفيد</strong><span className="block text-xs mt-0.5" style={{color:"#8D3838"}}>تحتاج ربطًا قبل المتابعة.</span></span>
+          className="relative overflow-hidden flex items-center gap-3 px-4 py-3.5 rounded-xl text-right cursor-pointer" style={{background:B.surface,border:`1px solid ${B.border}`}}>
+          <span aria-hidden className="absolute inset-y-0" style={{insetInlineStart:0,width:3,background:"#BE2626"}}/>
+          <AlertTriangle size={18} style={{color:"#BE2626"}}/><span><strong className="text-sm" style={{color:B.black}}><span style={{color:B.gold,fontFamily:"var(--font-app)"}}>{metrics.unlinkedBookings}</span> طلبات غير مربوطة بمستفيد</strong><span className="block text-xs mt-0.5" style={{color:B.muted}}>تحتاج ربطًا قبل المتابعة.</span></span>
         </button>}
 
         {/* ── سطر ختامي: أرقام السجل ── */}
@@ -341,7 +348,7 @@ export function DashboardPage({ onMenuOpen, onNav }: { onMenuOpen?: () => void; 
               <Users size={15} style={{ color: B.muted, flexShrink: 0 }} />
               <span className="flex-1 min-w-0">
                 <span className="block text-xs" style={{ color: B.muted }}>{label}</span>
-                <span className="block font-extrabold" style={{ color: B.black, fontFamily: "var(--font-app)" }}>
+                <span className="block font-extrabold" style={{ color: B.gold, fontFamily: "var(--font-app)" }}>
                   {value} <span className="text-xs font-normal" style={{ color: B.muted }}>{sub}</span>
                 </span>
               </span>

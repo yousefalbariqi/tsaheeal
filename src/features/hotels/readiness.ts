@@ -12,7 +12,6 @@
    نموذج الباقة قبل ربط فندقٍ غير منشور. */
 import type { Hotel, HotelStatus, RoomType } from "@/types";
 import { cleanHotelName } from "@/lib/hotelName";
-import { isValidPhone } from "@/lib/phone";
 
 /** التبويب الذي يُصلَح فيه النقص — قائمة النواقص تقفز إليه. */
 export type HotelTab = "info" | "features" | "rooms" | "media" | "reviews";
@@ -79,12 +78,8 @@ export function hotelChecks(h: Hotel): Check[] {
        غرفتين بسعرٍ وسعة، وكلتاهما بلا صورة» أنفع من «لا غرفة صالحة». */
     { key: "roomPhotos", label: roomsMissingPhotos > 0 ? `صور الغرف (${roomsMissingPhotos} بلا صورة)` : "صور الغرف",
                                                                   ok: roomsMissingPhotos === 0,        tab: "rooms", blocking: true },
-    { key: "distance", label: "المسافة من الحرم بالكيلومتر",       ok: (h.distanceM ?? 0) > 0,          tab: "info",  blocking: true },
-    /* المسافة رقمٌ يكتبه الموظف بيده ولا يتحقّق منه شيء، فالرابط هو
-       المرجع لا هي: «٥٠٠ متر» قد تكون خطأ مطبعياً، والخريطة لا تكذب. */
     { key: "map",      label: "رابط الموقع في خرائط Google",       ok: isMapUrl(h.mapUrl),              tab: "info",  blocking: true },
     { key: "city",     label: "الحي",                             ok: !!(h.district ?? "").trim(),     tab: "info",  blocking: false },
-    { key: "phone",    label: "رقم تواصل صحيح",                    ok: isValidPhone(h.phone),           tab: "info",  blocking: false },
     { key: "features", label: "مرفق واحد على الأقل",               ok: (h.features ?? []).length > 0,   tab: "features", blocking: false },
     { key: "note",     label: "رأي تساهيل (يظهر للعميل)",          ok: !!(h.tasaheelNote ?? "").trim(), tab: "info",  blocking: false },
   ];
@@ -118,14 +113,11 @@ export function hotelReadiness(h: Hotel): Readiness {
   };
 }
 
-/** الحالة التي يراها العميل — النشر بمعناه الفعلي.
-    «مسودة» و«متوقف» كلتاهما محجوبتان، والفرق بينهما نيّةٌ لا أثر:
-    المسودة لم تُعتمد بعد، والمتوقف اعتُمد ثم أُوقف. */
+/** الحالة التي يراها العميل — المتوقف محجوب حتى يُفعّل. */
 export const isPublished = (s: HotelStatus): boolean => s === "active";
 
 /** فنادق تصلح للربط بباقةٍ منشورة — يقرؤها نموذج الباقة.
 
     نموذج الباقة يسرد اليوم كل الفنادق بلا تصفية، فباقةٌ نشطة يمكن أن
-    تُربط بفندقٍ مسودةٍ أو متوقّف ويراه العميل. جعلُ الفندق يبدأ مسودةً
-    بلا هذه الدالّة ينقل العلّة ولا يحلّها. */
+    تُربط بفندقٍ متوقّف ويراه العميل. هذه الدالّة تمنع ذلك. */
 export const linkableHotels = (hotels: Hotel[]): Hotel[] => hotels.filter(h => isPublished(h.status));

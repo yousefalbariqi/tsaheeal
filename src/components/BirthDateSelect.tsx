@@ -66,7 +66,7 @@ function NativeSelect({ label, value, onChange, options, placeholder, disabled, 
           className="w-full border rounded-xl text-sm focus:outline-none"
           style={{
             borderColor: invalid ? "#E1A3A3" : B.border,
-            background: disabled ? B.bg : "#fff",
+            background: disabled ? B.fill : "#fff",
             color: value ? B.black : B.placeholder,
             fontFamily: "inherit", fontWeight: value ? 700 : 400,
             padding: "9px 10px", paddingInlineEnd: 26, height: 40,
@@ -214,15 +214,15 @@ export function BirthDateSelect({
   return (
     <div {...aria} className="flex flex-col gap-2">
       {/* ميلادي | هجري */}
-      {!hideCalendarSwitch && <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+      {!hideCalendarSwitch && <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
           {(["greg", "hijri"] as Cal[]).map(c => (
             <button
               key={c} type="button" disabled={disabled} onClick={() => switchCal(c)}
               aria-pressed={cal === c}
               style={{
                 ...pillBase,
-                background: cal === c ? "#fff" : "transparent",
-                color: cal === c ? B.primary : B.muted,
+                background: cal === c ? B.gold : "transparent",
+                color: cal === c ? B.black : B.muted,
                 boxShadow: cal === c ? "0 1px 3px rgba(0,0,0,.08)" : "none",
               }}
             >

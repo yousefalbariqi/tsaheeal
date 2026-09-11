@@ -120,7 +120,7 @@ function Entry({ row, actorName }: { row: AuditRow; actorName: string }) {
             ? <p className="text-xs" style={{ color: B.muted }}>لا تفاصيل حقول لهذه العملية.</p>
             : diff.map(c => (
               <div key={c.key} className="flex items-center gap-2 flex-wrap text-xs rounded-xl px-3 py-2"
-                style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+                style={{ background: B.fill, border: `1px solid ${B.border}` }}>
                 <strong style={{ color: B.text3 }}>{fieldName(c.key)}</strong>
                 <span style={{ color: "#BE2626", textDecoration: "line-through" }}>{show(c.from)}</span>
                 <span aria-hidden style={{ color: B.muted }}>←</span>
@@ -195,7 +195,7 @@ export function AuditLog() {
         <div className="px-4 md:px-5 py-3" style={{ borderTop: `1px solid ${B.border}` }}>
           <button onClick={() => { const n = page + 1; setPage(n); void load(n); }} disabled={state === "loading"}
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.bg, border: `1px solid ${B.border}`, color: B.text2 }}>
+            style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
             {state === "loading" ? <Spinner size={13} /> : null}
             {state === "loading" ? "جارٍ الجلب…" : "عرض عمليات أقدم"}
           </button>

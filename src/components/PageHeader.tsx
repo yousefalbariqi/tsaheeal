@@ -27,7 +27,7 @@ export function PageHeader({title,crumb,search,onSearch,searchPlaceholder,onMenu
               <ChevronRight size={12} className="hidden sm:inline"/>
               <span style={{color:B.text2,fontWeight:600}}>{crumb}</span>
             </div>
-            <h1 style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:B.black,margin:0}}>{title}</h1>
+            <h1 style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color: B.primaryDeep,margin:0}}>{title}</h1>
           </div>
         </div>
         <div className="hidden sm:flex flex-1 justify-center px-2">

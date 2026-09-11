@@ -42,7 +42,7 @@ export function ArabicDatePicker({
       arrow={false}
       inputClass="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
       containerStyle={{ width: "100%" }}
-      style={{ width: "100%", boxSizing: "border-box", borderColor: invalid ? "#E1A3A3" : B.border, background: disabled ? B.bg : "#fff", color: B.black, fontFamily: "inherit", height: 42 }}
+      style={{ width: "100%", boxSizing: "border-box", borderColor: invalid ? "#E1A3A3" : B.border, background: disabled ? B.fill : "#fff", color: B.black, fontFamily: "inherit", height: 42 }}
       placeholder={placeholder}
       /* المعرّف يُمرَّر عبر عنصر الإدخال لا كخاصّية على DatePicker:
          المكتبة لا تنقل id إلى الحقل، فكان عنوان «تاريخ الذهاب»

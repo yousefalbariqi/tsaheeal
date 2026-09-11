@@ -31,7 +31,7 @@ import { Spinner } from "@/components/Spinner";
 function ComingSoonPage({view}:{view:string}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5" style={{color:B.muted}}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primary,border:`1px solid ${B.border2}`}}>
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primaryDeep,border:`1px solid ${B.border2}`}}>
         <Package size={32} style={{color:B.gold,opacity:0.5}}/>
       </div>
       <div className="text-center">
@@ -48,7 +48,7 @@ function ComingSoonPage({view}:{view:string}) {
 function NoAccessPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5 px-6 text-center" style={{color:B.muted}}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primary,border:`1px solid ${B.border2}`}}>
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primaryDeep,border:`1px solid ${B.border2}`}}>
         <Lock size={30} style={{color:B.gold,opacity:0.55}}/>
       </div>
       <div>
@@ -56,7 +56,7 @@ function NoAccessPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
         <p className="text-sm" style={{color:B.muted}}>راجع مدير النظام إن كنت تحتاج الوصول إليها.</p>
       </div>
       {onMenuOpen&&<button onClick={onMenuOpen} className="md:hidden text-sm font-bold px-5 py-2 rounded-xl cursor-pointer"
-        style={{background:B.primary,color:B.gold,border:`1px solid ${B.border2}`}}>القائمة</button>}
+        style={{background:B.primaryDeep,color:B.gold,border:`1px solid ${B.border2}`}}>القائمة</button>}
     </div>
   );
 }

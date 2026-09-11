@@ -55,9 +55,9 @@ export const rejectBooking = (id: string, reason: string, message: string) =>
 export const cancelBooking = (id: string, reason: string) =>
   call("cancel_booking", { p_id: id, p_reason: reason });
 
-/** تعيين الطلب لموظف (null يلغي التعيين). */
-export const assignBooking = (id: string, userId: string | null) =>
-  call("assign_booking", { p_id: id, p_user: userId });
+/* لا تعيين للطلب: أي موظف استقبال يتعامل معه مباشرةً (قرار ٢٠٢٦-٠٩-١١)،
+   فحُذف نداء assign_booking من الواجهة. دالّة القاعدة والعمودان
+   (assigned_to · assigned_at) باقيان ولا يكتب فيهما شيء. */
 
 /** تعيين الطلب المخصّص وموعد الردّ الأقصى. */
 export const assignCustomRequest = (id: string, userId: string | null, dueAt: string | null) =>

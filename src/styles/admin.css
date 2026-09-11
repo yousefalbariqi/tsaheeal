@@ -64,3 +64,15 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 @media (max-width: 767px) {
   .tbl-hint { display: flex; }
 }
+
+/* ── ألواح الباقة ذات العمودين ──
+   العمودان قسمةٌ مفيدة على شاشة العمل، وعصرٌ بلا فائدة تحتها: بطاقة
+   الملخّص في تبويب الأسعار تصير عند ٩٠٠ بكسل شريطاً لا يُقرأ رقمه.
+   فتنزل تحت التدفّق وتفقد لصوقها — المعلومة كاملة، والترتيب محفوظ. */
+@media (max-width: 1100px) {
+  .pkg-price-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .pkg-price-grid > aside { position: static !important; }
+}
+@media (max-width: 900px) {
+  .pkg-two-col { grid-template-columns: minmax(0, 1fr) !important; }
+}

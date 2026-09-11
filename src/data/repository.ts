@@ -126,7 +126,11 @@ const mReview = (r: any) => ({
   rating: r.rating ?? undefined, addedBy: r.added_by ?? undefined, bookingId: r.booking_id ?? undefined,
 });
 const mIconFeat = (r: any) => ({ id: r.item_id, icon: r.icon, text: r.text });
-const mPilgrim = (r: any) => ({ name: r.name, docType: r.doc_type ?? undefined, idNumber: r.id_number, nationality: r.nationality, gender: r.gender, ageGroup: r.age_group ?? undefined, birthDate: r.birth_date, phone: r.phone, seat: r.seat_no ?? undefined });
+/* التحقق يُقرأ إن وُجد عموده: قاعدةٌ لم يُنفَّذ عليها ترحيل 20260924 تعيد
+   صفوفاً بلا الأعمدة الثلاثة، فيصير كل معتمر «بانتظار التحقق» — وهو
+   سلوك الشاشة قبل الترحيل بالضبط. ومعتمرو الفواتير والتذاكر لا أعمدة
+   تحقّقٍ لهم أصلاً: نسخةٌ من البيانات وقت الإصدار لا موضع مراجعة. */
+const mPilgrim = (r: any) => ({ name: r.name, docType: r.doc_type ?? undefined, idNumber: r.id_number, nationality: r.nationality, gender: r.gender, ageGroup: r.age_group ?? undefined, birthDate: r.birth_date, phone: r.phone, seat: r.seat_no ?? undefined, verify: r.verify ?? undefined, verifiedAt: r.verified_at ?? undefined, verifiedBy: r.verified_by ?? undefined });
 const tripSettings = (r: any) => ({
   allowOnlineBooking: !!r.set_allow_online_booking, manualConfirm: !!r.set_manual_confirm,
   waitlistEnabled: !!r.set_waitlist_enabled, requirePaymentFirst: !!r.set_require_payment_first,
@@ -137,7 +141,7 @@ const tripSettings = (r: any) => ({
 /* ─── fromRow لكل كيان ─── */
 const hotelFrom = (r: any): Hotel => ({
   id: r.id, name: r.name, city: r.city, stars: r.stars, distanceM: r.distance_m, district: r.district,
-  phone: r.phone, mapUrl: r.map_url, status: r.status, notes: r.notes, tasaheelNote: r.tasaheel_note,
+  phone: r.phone, mapUrl: r.map_url, status: r.status === "active" ? "active" : "inactive", notes: r.notes, tasaheelNote: r.tasaheel_note,
   contactPerson: r.contact_person ?? undefined, contactPhone: r.contact_phone ?? undefined,
   contractNo: r.contract_no ?? undefined, contractFrom: r.contract_from ?? undefined, contractTo: r.contract_to ?? undefined,
   cancelPolicyInternal: r.cancel_policy_internal ?? undefined,
@@ -151,7 +155,8 @@ const hotelFrom = (r: any): Hotel => ({
 });
 const transportFrom = (r: any): Transport => ({
   id: r.id, name: r.name, mode: r.mode, vehicleType: r.vehicle_type, seats: r.seats, seatCost: r.seat_cost,
-  model: r.model, year: r.year, plate: r.plate, driver: r.driver, supervisor: r.supervisor, status: r.status, notes: r.notes,
+  model: r.model, year: r.year, plate: r.plate, driver: r.driver, supervisor: r.supervisor,
+  status: r.status === "active" ? "active" : "inactive", notes: r.notes,
   /* undefined لا "" عند الغياب: الحقل الغائب يختلف عن الحقل المُفرَّغ
      عمداً، وreadiness تقرأ الاثنين ناقصَين فلا فرق عندها — لكن upsert
      يكتب ما يصله، ومصفوفةٌ من "" تدهس قيماً موجودة في القاعدة. */

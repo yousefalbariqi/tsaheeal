@@ -91,7 +91,7 @@ function PermanentDeleteDialog({ row, entityLabel, onConfirm, onCancel }: {
             {busy && <Spinner size={13} color="#fff" track="rgba(255,255,255,.3)" />}حذف نهائي
           </button>
           <button onClick={onCancel} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.bg, color: B.text2, border: "none" }}>إلغاء</button>
+            style={{ background: B.fill, color: B.text2, border: "none" }}>إلغاء</button>
         </div>
       </div>
     </div>
@@ -157,9 +157,9 @@ export function ArchivePanel() {
           <button key={e.key} onClick={() => setEntity(e.key)} aria-pressed={e.key === entity}
             className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
             style={{
-              background: e.key === entity ? B.primary : "#fff",
-              color: e.key === entity ? B.cream : B.text2,
-              border: `1px solid ${e.key === entity ? B.primary : B.border}`,
+              background: e.key === entity ? B.gold : "#fff",
+              color: e.key === entity ? B.black : B.text2,
+              border: `1px solid ${e.key === entity ? B.gold : B.border}`,
             }}>{e.label}</button>
         ))}
       </div>
@@ -190,7 +190,7 @@ export function ArchivePanel() {
                     {" · "}{when(r.archived_at)}{" · "}{r.archived_by_name ?? "غير معروف"}
                   </span>
                   {r.archive_reason && (
-                    <span className="block text-xs mt-1 rounded-lg px-2.5 py-1" style={{ background: B.bg, color: B.text2 }}>
+                    <span className="block text-xs mt-1 rounded-lg px-2.5 py-1" style={{ background: B.fill, color: B.text2 }}>
                       السبب: {r.archive_reason}
                     </span>
                   )}

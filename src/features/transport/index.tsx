@@ -1,31 +1,31 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Armchair, Car, Pencil, Trash2, Archive, X, Plus, Wrench, AlertTriangle,
-  ImagePlus, Film, Star, ChevronUp, ChevronDown, Check, Bus,
+  Armchair, Car, Pencil, Trash2, X, Plus, Wrench, AlertTriangle,
+  ImagePlus, Film, Star, ChevronUp, ChevronDown, Check, Bus, Download, FileUp,
 } from "lucide-react";
 import { B } from "@/lib/theme";
 import { SAR, sarNumber } from "@/lib/money";
 import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate } from "@/components/States";
 import { TabStrip } from "@/components/Tabs";
-import type { VehicleMode, VehicleStatus, MediaKind, HotelMedia, TransportFeature, TransportReview, Transport } from "@/types";
+import type { VehicleMode, VehicleStatus, MediaKind, HotelMedia, TransportReview, Transport } from "@/types";
 import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
-import { DeleteDialog } from "@/components/DeleteDialog";
 import { EntityActions } from "@/components/EntityActions";
 import { useStore, writeLocalOnly } from "@/store/useStore";
-import { transportReadiness, gapsByTab, notExpired, isOperational, type TrTab } from "./readiness";
+import { transportReadiness, gapsByTab, isOperational, type TrTab } from "./readiness";
 import { isLive } from "@/lib/trip";
-import { setArchiveReason, permanentlyDelete } from "@/data/repository";
+import { permanentlyDelete } from "@/data/repository";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { onPickMedia } from "@/lib/mediaUpload";
+import { TRANSPORT_FEATURE_CATALOG, transportFeatureIcon } from "./featureIcons";
 
 /* ─── Transport Card Hero ─── */
 function TransportHero({mode,vehicleType,status,seats,cover}:{mode:VehicleMode;vehicleType:string;status:VehicleStatus;seats:number;cover?:string}) {
@@ -64,8 +64,8 @@ function TransportHero({mode,vehicleType,status,seats,cover}:{mode:VehicleMode;v
       {/* Seats count at bottom */}
       <div className="absolute bottom-0 inset-x-0 flex items-end justify-between px-4 pb-3">
         <div className="flex items-center gap-1.5">
-          <Armchair size={13} style={{color:B.gold}}/>
-          <span className="text-xs font-bold" style={{color:"rgba(192,134,44,0.9)"}}>{seats} مقعد</span>
+          {isBus&&<><Armchair size={13} style={{color:B.gold}}/>
+            <span className="text-xs font-bold" style={{color:"rgba(192,134,44,0.9)"}}>{seats} مقعد</span></>}
         </div>
         <span className="text-xs font-semibold" style={{color:"rgba(240,230,204,0.45)"}}>
           {isBus?"حافلة":"طيران"}
@@ -76,12 +76,10 @@ function TransportHero({mode,vehicleType,status,seats,cover}:{mode:VehicleMode;v
 }
 
 /* ─── Transport Card ─── */
-/* «بطاقة المواصلة فيها تعديل فقط» — ملاحظة الفريق. والإجراءات الأربعة
-   موجودة في EntityActions منذ بُنيت للفنادق، وحرّاسها في القاعدة أقدم.
-   الناقص كان استدعاءها هنا. */
-function TransportCard({tr,onEdit,canWrite,isAdmin,onToggleActive,onArchive,onDelete,deleteBlockers}:{
+/* بطاقة المواصلة تعرض الإجراءين التشغيليين فقط: إيقاف/تفعيل أو حذف نهائي. */
+function TransportCard({tr,onEdit,canWrite,isAdmin,onToggleActive,onDelete,deleteBlockers}:{
   tr:Transport;onEdit:()=>void;canWrite:boolean;isAdmin:boolean;
-  onToggleActive:(next:boolean)=>void;onArchive:(reason:string)=>void;
+  onToggleActive:(next:boolean)=>void;
   onDelete:(reason:string)=>Promise<void>|void;deleteBlockers:string[];
 }) {
   const isVIP = tr.vehicleType.includes("VIP");
@@ -99,90 +97,182 @@ function TransportCard({tr,onEdit,canWrite,isAdmin,onToggleActive,onArchive,onDe
             <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{tr.name}</h3>
             <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
               <Car size={11} style={{color:B.gold}}/>
-              <span>{tr.model}</span>
-              <span style={{color:B.border}}>·</span>
-              <span>{tr.year}</span>
+              <span>{tr.vehicleType}</span>
             </div>
           </div>
           <span className="text-xs font-mono flex-shrink-0 px-2 py-0.5 rounded-lg mt-0.5"
-            style={{background:B.bg,color:B.muted,border:`1px solid ${B.border}`,fontSize:10}}>{tr.id}</span>
+            style={{background:B.fill,color:B.muted,border:`1px solid ${B.border}`,fontSize:10}}>{tr.id}</span>
         </div>
 
         {/* Features */}
         {tr.features.length>0 && (
           <div className="flex flex-wrap gap-1.5">
-            {tr.features.slice(0,3).map(f=>(
-              <span key={f.id} className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{background:B.bg,border:`1px solid ${B.border}`,color:B.text3}}>✓ {f.text}</span>
-            ))}
-            {tr.features.length>3&&<span className="text-xs px-2.5 py-1 rounded-full" style={{background:B.bg,border:`1px solid ${B.border}`,color:B.muted}}>+{tr.features.length-3}</span>}
+            {tr.features.slice(0,3).map(f=>{
+              const Icon=transportFeatureIcon(f.icon);
+              return <span key={f.id} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text3}}><Icon size={11} style={{color:B.gold}}/>{f.text}</span>;
+            })}
+            {tr.features.length>3&&<span className="text-xs px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>+{tr.features.length-3}</span>}
           </div>
         )}
 
         {/* Actions */}
-        <div className="mt-auto">
+        <div className="mt-auto pt-3" style={{borderTop:`1px solid ${B.border}`}}>
           <EntityActions
             name={tr.name} label="المواصلة" canWrite={canWrite} isAdmin={isAdmin}
             onEdit={onEdit}
-            active={tr.status==="active"} onToggleActive={onToggleActive} disableLabel="إيقاف مؤقت"
-            onArchive={onArchive} onPermanentDelete={onDelete} deleteBlockers={deleteBlockers}/>
+            active={tr.status==="active"} onToggleActive={onToggleActive} toggleAsLabel safeAlternative="الإيقاف"
+            onPermanentDelete={onDelete} deleteBlockers={deleteBlockers}/>
         </div>
       </div>
     </motion.div>
   );
 }
 
-/* اقتراحات صياغة المميزات — الميزة يقرؤها العميل قبل أن يدفع.
-
-   «اكل» كلمةٌ لا تَعِد بشيء: هل وجبة أم وجبتان؟ لكل رحلة أم لكل يوم؟
-   يقرؤها كلٌّ على هواه، ثم يُطالب بما فهمه. والخلاف ليس على الوجبة بل
-   على عبارةٍ لم تُحدَّد.
-
-   ولذلك تحمل الاقتراحات تكرارها في نصّها. البديل كان حقلاً ثانياً
-   للتكرار — وهو عمودٌ جديد في القاعدة ونافذةٌ أعرض، مقابل ما تقوله
-   العبارة نفسها بلا كلفة. */
-const FEATURE_PRESETS: Record<string,string[]> = {
-  ac:      ["مكيّف هواء مركزي"],
-  wifi:    ["واي فاي مجاني طوال الرحلة","واي فاي عالي السرعة"],
-  screen:  ["شاشات ترفيه فردية","شاشة مركزية"],
-  meal:    ["وجبة مشمولة لكل رحلة","وجبتان يومياً","إفطار يومي مشمول","وجبات غير مشمولة"],
-  drink:   ["مشروبات ساخنة وباردة مجانية","ماء مجاني طوال الرحلة"],
-  wc:      ["دورة مياه على متن الحافلة"],
-  seat:    ["مقاعد مريحة قابلة للاستلقاء","مقاعد جلد فاخرة"],
-  charge:  ["منفذ شحن USB لكل مقعد"],
-  luggage: ["حقيبة واحدة ٢٣ كجم لكل مسافر","حقيبة يد ٧ كجم"],
-  other:   [],
-};
-
-/* ميزةٌ من كلمةٍ واحدة قصيرة أو من قائمة المبهمات المعروفة. الفحص
-   تنبيهٌ لا منع: قد تكون كلمةٌ واحدة كافيةً أحياناً، والحكم للموظف. */
-const VAGUE_WORDS = new Set(["اكل","أكل","طعام","وجبات","مشروبات","شاي","قهوة","نت","انترنت","إنترنت","واي فاي","شنطة","حقيبة","امتعة","أمتعة"]);
-function isVagueFeature(text: string): boolean {
-  const t = (text||"").trim();
-  if (!t) return false;
-  return VAGUE_WORDS.has(t) || (t.length <= 4 && !t.includes(" "));
-}
-
 /* ─── Transport Modal ─── */
 const TRANSPORT_MEDIA_MAX = 8;
 const TRANSPORT_MEDIA_CATS = ["المظهر الخارجي","المقاعد الداخلية","لوحة القيادة","وسائل الراحة","الأمتعة","أخرى"];
-function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
-  initial:Transport|null;onSave:(t:Transport)=>void;onClose:()=>void;onDelete?:()=>void;
+type ImportedTransportReview = Pick<TransportReview, "name" | "text" | "consent" | "rating">;
+
+function csvCells(line:string, delimiter:string): string[] {
+  const cells:string[]=[]; let cell=""; let quoted=false;
+  for(let i=0;i<line.length;i++) {
+    const char=line[i];
+    if(char==='"') { if(quoted&&line[i+1]==='"') { cell+='"'; i++; } else quoted=!quoted; }
+    else if(char===delimiter&&!quoted) { cells.push(cell.trim()); cell=""; }
+    else cell+=char;
+  }
+  cells.push(cell.trim()); return cells;
+}
+function parsePublished(raw:string): boolean | null {
+  const value=raw.trim().toLowerCase().replace(/\s/g,"");
+  if(["منشور","نعم","نشر","published","publish","true","1","yes"].includes(value)) return true;
+  if(["غيرمنشور","لا","مسودة","unpublished","draft","false","0","no"].includes(value)) return false;
+  return null;
+}
+function parseTransportReviewsCsv(source:string): ImportedTransportReview[] {
+  const lines=source.replace(/^\uFEFF/,"").split(/\r?\n/).filter(line=>line.trim());
+  if(lines.length<2) throw new Error("الملف يحتاج صف العناوين ورأياً واحداً على الأقل.");
+  const delimiter=(lines[0].match(/;/g)?.length??0)>(lines[0].match(/,/g)?.length??0)?";":",";
+  const headers=csvCells(lines[0],delimiter).map(value=>value.replace(/\s/g,"").toLowerCase());
+  const find=(names:string[])=>headers.findIndex(value=>names.includes(value));
+  const nameAt=find(["اسمالعميل","اسم","الاسم","customername","name"]);
+  const textAt=find(["نصالرأي","الرأي","راي","review","text","comment"]);
+  const ratingAt=find(["التقييم","rating"]);
+  const publishedAt=find(["حالةالنشر","حالة","النشر","published","publishstatus","status"]);
+  if(nameAt<0||textAt<0||ratingAt<0||publishedAt<0) throw new Error("الأعمدة المطلوبة: اسم العميل، نص الرأي، التقييم، حالة النشر.");
+  return lines.slice(1).map((line,index)=>{
+    const cells=csvCells(line,delimiter);
+    const name=(cells[nameAt]??"").trim(), text=(cells[textAt]??"").trim();
+    const rating=Number((cells[ratingAt]??"").trim());
+    const consent=parsePublished(cells[publishedAt]??"");
+    if(!name||!text||!Number.isFinite(rating)||rating<1||rating>5||consent===null) {
+      throw new Error(`تحقق من الصف ${index+2}: الاسم والرأي وتقييم من 1 إلى 5 وحالة نشر صحيحة مطلوبة.`);
+    }
+    return {name,text,rating,consent};
+  });
+}
+function downloadTransportReviewTemplate() {
+  const content="\uFEFFاسم العميل,نص الرأي,التقييم,حالة النشر\nأحمد محمد,رحلة مريحة والتنظيم ممتاز,5,منشور\n";
+  const url=URL.createObjectURL(new Blob([content],{type:"text/csv;charset=utf-8"}));
+  const link=document.createElement("a");
+  link.href=url; link.download="نموذج-آراء-المواصلات.csv"; link.click();
+  URL.revokeObjectURL(url);
+}
+type TransportEditorDraft = {
+  form: Transport;
+  baseline: Transport;
+  editId: string | null;
+  tab: TrTab;
+  scrollByTab: Partial<Record<TrTab, number>>;
+};
+
+const TRANSPORT_DRAFT_KEY = "tsaheel.transport-editor-draft.v1";
+const copyDraftValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const newTransport = (): Transport => ({ id:newId("TRN"),name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,model:"",year:"",plate:"",driver:"",supervisor:"",status:"inactive",notes:"",features:[],reviews:[],media:[] });
+const normalizeTransportStatus = (transport: Transport): Transport =>
+  (transport.status as string) === "draft" ? { ...transport, status: "inactive" } : transport;
+const createTransportDraft = (transport: Transport | null): TransportEditorDraft => {
+  const form = copyDraftValue(normalizeTransportStatus(transport ?? newTransport()));
+  return { form, baseline: copyDraftValue(form), editId: transport?.id ?? null, tab: "info", scrollByTab: {} };
+};
+function readTransportDraft(): TransportEditorDraft | null {
+  try {
+    const raw = sessionStorage.getItem(TRANSPORT_DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as Partial<TransportEditorDraft>;
+    return draft.form && draft.baseline && typeof draft.editId !== "undefined" && draft.tab
+      ? { form:normalizeTransportStatus(draft.form as Transport), baseline:normalizeTransportStatus(draft.baseline as Transport), editId:draft.editId ?? null, tab:draft.tab as TrTab, scrollByTab:draft.scrollByTab ?? {} }
+      : null;
+  } catch { return null; }
+}
+
+function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
+  draft:TransportEditorDraft; onSave:(t:Transport)=>void; onCancel:()=>void;
+  onDraftChange:(next:TransportEditorDraft)=>void;
   /* ٢٥) أكبر عدد مقاعد محجوز في رحلةٍ مرتبطة بهذه المركبة. تخفيض السعة
      تحته يترك معتمرين بمقاعدَ لا وجود لها — والحجز موجودٌ ومدفوع.
      التخفيض يُمنع؛ الزيادة حرّة. */
   seatFloor:number;
 }) {
-  const isEdit=initial!==null;
-  const [tab,setTab]=useState<TrTab>("info");
-  const [form,setForm]=useState<Transport>(initial?{...initial,media:initial.media??[]}:{id:newId("TRN"),name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,model:"",year:"",plate:"",driver:"",supervisor:"",status:"draft",notes:"",features:[],reviews:[],media:[]});
-  const set=<K extends keyof Transport>(k:K,v:Transport[K])=>setForm(f=>({...f,[k]:v}));
-  const addFeat=()=>set("features",[...form.features,{id:uid(),text:"",icon:"ac"}]);
-  const delFeat=(id:string)=>set("features",form.features.filter(f=>f.id!==id));
-  const updFeat=(id:string,field:keyof TransportFeature,val:string)=>set("features",form.features.map(f=>f.id===id?{...f,[field]:val}:f));
-  const addReview=()=>set("reviews",[...form.reviews,{id:uid(),name:"",text:"",consent:false}]);
+  const isEdit=draft.editId!==null;
+  const [tab,setTab]=useState<TrTab>(draft.tab);
+  const [form,setForm]=useState<Transport>(()=>copyDraftValue(draft.form));
+  const formRef=useRef(form);
+  const [reviewImport,setReviewImport]=useState<ImportedTransportReview[]|null>(null);
+  const bodyRef=useRef<HTMLDivElement>(null);
+  const scrollByTabRef=useRef<Partial<Record<TrTab,number>>>(draft.scrollByTab);
+  const snapshot = (nextForm:Transport, nextTab=tab, scrollByTab=scrollByTabRef.current) =>
+    onDraftChange({ ...draft, form:copyDraftValue(nextForm), tab:nextTab, scrollByTab:{...scrollByTab} });
+  const set=<K extends keyof Transport>(k:K,v:Transport[K])=>{
+    const next={...formRef.current,[k]:v};
+    formRef.current=next;
+    setForm(next);
+    snapshot(next);
+  };
+  const selectTab=(next:TrTab)=>{
+    setTab(next);
+    snapshot(form,next);
+  };
+  const saveScroll=()=>{
+    if (!bodyRef.current) return;
+    scrollByTabRef.current={...scrollByTabRef.current,[tab]:bodyRef.current.scrollTop};
+    snapshot(form,tab,scrollByTabRef.current);
+  };
+  useEffect(()=>{
+    const frame=requestAnimationFrame(()=>{ if(bodyRef.current) bodyRef.current.scrollTop=scrollByTabRef.current[tab]??0; });
+    return ()=>cancelAnimationFrame(frame);
+  },[tab]);
+  const toggleFeature=(id:string,label:string)=>{
+    const exists=form.features.some(feature=>feature.icon===id);
+    set("features",exists
+      ? form.features.filter(feature=>feature.icon!==id)
+      : [...form.features,{id:uid(),icon:id,text:label}]);
+  };
+  const addReview=()=>set("reviews",[...form.reviews,{id:uid(),name:"",text:"",consent:false,rating:5}]);
   const delReview=(id:string)=>set("reviews",form.reviews.filter(r=>r.id!==id));
   const updReview=(id:string,field:keyof TransportReview,val:any)=>set("reviews",form.reviews.map(r=>r.id===id?{...r,[field]:val}:r));
+  const readReviewImport=(file?:File)=>{
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onerror=()=>toast.error("تعذّرت قراءة ملف الآراء");
+    reader.onload=()=>{
+      try {
+        const rows=parseTransportReviewsCsv(String(reader.result??""));
+        setReviewImport(rows);
+      } catch(error) {
+        setReviewImport(null);
+        toast.error("ملف الآراء غير صالح",{description:error instanceof Error?error.message:"تحقق من الملف."});
+      }
+    };
+    reader.readAsText(file,"UTF-8");
+  };
+  const confirmReviewImport=()=>{
+    if(!reviewImport?.length) return;
+    set("reviews",[...form.reviews,...reviewImport.map(review=>({...review,id:uid()}))]);
+    toast.success(`تم استيراد ${reviewImport.length} رأي`);
+    setReviewImport(null);
+  };
   const media=form.media??[];
   const addMedia=(kind:MediaKind)=>{ if(media.length>=TRANSPORT_MEDIA_MAX) return; set("media",[...media,{id:uid(),kind,url:"",primary:kind==="image"&&!media.some(m=>m.primary&&m.kind==="image"),category:kind==="image"?TRANSPORT_MEDIA_CATS[0]:""}]); };
   const delMedia=(id:string)=>set("media",media.filter(m=>m.id!==id));
@@ -195,7 +285,7 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
   const ready=transportReadiness(form);
   /* الحفظ يُمنع لسببين فقط — اسمٌ فارغ، وسعةٌ تحت المحجوز. الباقي يُمنع
      التفعيلَ لا الحفظ: الموظف يدّخر عملاً نصف مكتمل ويعود إليه. */
-  const seatsTooLow=form.seats<seatFloor;
+  const seatsTooLow=form.mode==="bus"&&form.seats<seatFloor;
   const saveBlock=!form.name.trim() ? "الاسم مطلوب" : seatsTooLow ? `السعة لا تنزل تحت ${seatFloor}` : "";
   const canSave=!saveBlock;
 
@@ -203,17 +293,17 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
 
      المركبات العاملة اليوم أُدخلت قبل هذه الحقول، فكلها ناقصة الوثائق
      بحكم تاريخها. لو حرس الشرطُ البقاءَ أيضاً لكان أوّل تعديلٍ على حافلةٍ
-     تعمل — تصحيح اسمٍ، إضافة صورة — يُنزلها مسودةً فتختفي من الباقات
+     تعمل — تصحيح اسمٍ، إضافة صورة — يُوقفها فتختفي من الباقات
      ومن إطلاق الرحلات، والموظف لم يطلب ذلك ولم يُخبَر به.
 
      فالنقص يُعرض على المركبة القائمة ولا يُوقفها؛ ويمنع تفعيل ما لم
      يُفعَّل بعد. والقاعدة تُبلّغ عن القائمات الناقصات في تقرير الترحيل
      ليُصلَحن بقرارٍ لا بمفاجأة. */
-  const wasActive=initial?.status==="active";
+  const wasActive=draft.baseline.status==="active";
   const activateBlocked=!ready.canActivate&&!wasActive;
   function handleSave(){
     if(!canSave) return;
-    onSave(form.status==="active"&&activateBlocked?{...form,status:"draft"}:form);
+    onSave(form.status==="active"&&activateBlocked?{...form,status:"inactive"}:form);
   }
   const gaps=gapsByTab(form);
   /* ٢٧) العدد داخل اسم التبويب لا في مكانٍ آخر: «المواصفات ٣» يقول ما
@@ -233,7 +323,7 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onCancel}>
       <motion.div initial={{opacity:0,y:40}} animate={{opacity:1,y:0}} exit={{opacity:0,y:40}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full sm:rounded-2xl overflow-hidden flex flex-col"
@@ -248,20 +338,18 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
               </div>
               <div>
                 <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"var(--font-app)"}}>{isEdit?"تعديل المواصلة":"إضافة مواصلة جديدة"}</h2>
-                <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"}</div>
+                <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"} · التعديلات غير المحفوظة تُحفظ تلقائياً</div>
               </div>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              {isEdit&&onDelete&&<button onClick={onDelete} title="أرشفة المواصلة" aria-label="أرشفة المواصلة" className="flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:"rgba(138,106,8,0.2)",border:"1px solid rgba(232,217,168,.55)",color:"#F7E9AE"}}><Archive size={13}/>أرشفة</button>}
-              <button onClick={onClose} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
+              <button onClick={onCancel} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
                 style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={15}/></button>
             </div>
           </div>
-          <TabStrip tabs={TABS} active={tab} onChange={t=>setTab(t)} tone="onDark" idPrefix="trn"/>
+          <TabStrip tabs={TABS} active={tab} onChange={selectTab} tone="onDark" idPrefix="trn"/>
         </div>
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:"none"}}>
+        <div ref={bodyRef} onScroll={saveScroll} className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:"none"}}>
           <AnimatePresence mode="wait">
             {tab==="info"&&<motion.div role="tabpanel" id="trn-panel-info" aria-labelledby="trn-tab-info" key="info" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               {/* Mode toggle */}
@@ -269,18 +357,29 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                 <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>وسيلة النقل <span style={{color:B.gold}}>*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["bus","flight"] as const).map(m=>(
-                    <button key={m} onClick={()=>{set("mode",m);set("vehicleType",m==="bus"?"حافلة عادية":"طيران داخلي");}}
+                    <button key={m} onClick={()=>{
+                      set("mode",m);
+                      if(m==="flight") {
+                        set("vehicleType","طيران"); set("seats",0); set("seatCost",0);
+                        set("model",""); set("year",""); set("status","inactive");
+                      } else {
+                        set("vehicleType","حافلة عادية");
+                        if(formRef.current.seats<=0) set("seats",49);
+                        set("status","inactive");
+                      }
+                    }}
                       className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                      style={{background:form.mode===m?B.primary:B.bg,color:form.mode===m?B.gold:B.muted,border:`2px solid ${form.mode===m?B.gold:B.border}`}}>
+                      style={{background:form.mode===m?B.gold:B.fill,color:form.mode===m?B.black:B.muted,border:`2px solid ${form.mode===m?B.gold:B.border}`}}>
                       <span className="text-lg">{m==="bus"?"🚌":"✈️"}</span>
                       {m==="bus"?"حافلة":"طيران"}
                     </button>
                   ))}
                 </div>
               </div>
-              <div><Field label={<>الاسم <span style={{color:B.gold}}>*</span></>}>
-                     <input className={inp} style={ist} value={form.name} placeholder="مثال: حافلة الحرمين 1" onChange={e=>set("name",e.target.value)}/>
+              <div><Field label={<>{form.mode==="flight"?"اسم المواصلة / الطيران":"الاسم"} <span style={{color:B.gold}}>*</span></>}>
+                     <input className={inp} style={ist} value={form.name} placeholder={form.mode==="flight"?"مثال: طيران الرياض إلى جدة":"مثال: حافلة الحرمين 1"} onChange={e=>set("name",e.target.value)}/>
                    </Field></div>
+              {form.mode==="bus"&&<>
               <div className="grid grid-cols-2 gap-3">
                 <div><Field label="النوع">
                        <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
@@ -304,95 +403,23 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                          value={form.seatCost} onValueChange={v=>set("seatCost",Number(v))}/>
                      </Field>
                      {form.seatCost<=0&&<div className="text-xs font-bold mt-1" style={{color:"#8A6A08"}}>صفرٌ ليس سعراً — تدخل هذه القيمة تسعير كل باقة مرتبطة.</div>}</div>
-                <div><Field label={<>{form.mode==="bus"?"الشركة / الموديل":"شركة الطيران"}</>}>
-                       <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"طيران ناس"} onChange={e=>set("model",e.target.value)}/>
+                <div><Field label="الشركة / الموديل">
+                       <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"شركة الطيران"} onChange={e=>set("model",e.target.value)}/>
                      </Field></div>
               </div>
-              {form.mode==="bus" ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Field label="سنة التصنيع">
-                           <NumericInput min={1990} max={2030} className={inp} style={ist} value={form.year} placeholder="2024" onValueChange={v=>set("year",v)}/>
-                         </Field></div>
-                    <div><Field label={<>رقم اللوحة {req}</>}>
-                           <input className={inp} style={ist} value={form.plate} placeholder="أ ب ج 1234" onChange={e=>set("plate",e.target.value)}/>
-                         </Field></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Field label={<>الرقم التسلسلي / التعريفي {req}</>}>
-                           <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.serialNo??""} placeholder="VIN أو رقم داخلي" onChange={e=>set("serialNo",e.target.value)}/>
-                         </Field></div>
-                    <div><Field label={<>شركة التشغيل {req}</>}>
-                           <input className={inp} style={ist} value={form.operator??""} placeholder="مؤسسة النقل المتعاقدة" onChange={e=>set("operator",e.target.value)}/>
-                         </Field></div>
-                  </div>
-                  <div><Field label="رقم تواصل المشغّل">
-                         <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.operatorPhone??""} placeholder="+966 5x xxx xxxx" onChange={e=>set("operatorPhone",e.target.value)}/>
-                       </Field></div>
-                  {/* الوثائق الأربع: تاريخُ انتهاءٍ يمرّ يجعل التشغيل مخالفةً
-                      نظامية، فيُعرض الانتهاء لا الإصدار — هو ما يُراقَب. */}
-                  <div>
-                    <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الوثائق النظامية {req}</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {([["insuranceExpiry","انتهاء التأمين"],["inspectionExpiry","انتهاء الفحص الدوري"],
-                         ["registrationExpiry","انتهاء الاستمارة"],["transportLicenseExpiry","انتهاء رخصة النقل"]] as const).map(([k,lbl])=>{
-                        const v=(form[k]??"") as string;
-                        const bad=!!v&&!notExpired(v);
-                        return (
-                          <div key={k}>
-                            <Field label={lbl}>
-                              <input type="date" className={inp} style={{...ist,direction:"ltr",textAlign:"right",borderColor:bad?"#E1A3A3":B.border}}
-                                value={v} onChange={e=>set(k,e.target.value)}/>
-                            </Field>
-                            {bad&&<div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>منتهية</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* ٢٦) الطيران: حقوله لا حقول الحافلة. كان رقم الرحلة يُكتب
-                      في خانة «اللوحة» واسم الكابتن في خانة «السائق». */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Field label={<>رقم الرحلة {req}</>}>
-                           <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.flightNo??""} placeholder="XY-521" onChange={e=>set("flightNo",e.target.value)}/>
-                         </Field></div>
-                    <div><Field label="درجة المقصورة">
-                           <AppSelect value={form.cabinClass||"اقتصادية"} onChange={v=>set("cabinClass",v)}
-                             options={["اقتصادية","اقتصادية مميزة","درجة رجال الأعمال","الدرجة الأولى"].map(o=>({value:o,label:o}))}/>
-                         </Field></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Field label={<>مطار المغادرة {req}</>}>
-                           <input className={inp} style={ist} value={form.fromAirport??""} placeholder="الرياض — الملك خالد (RUH)" onChange={e=>set("fromAirport",e.target.value)}/>
-                         </Field></div>
-                    <div><Field label={<>مطار الوصول {req}</>}>
-                           <input className={inp} style={ist} value={form.toAirport??""} placeholder="جدة — الملك عبدالعزيز (JED)" onChange={e=>set("toAirport",e.target.value)}/>
-                         </Field></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Field label={<>موعد الإقلاع {req}</>}>
-                           <input type="time" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.departTime??""} onChange={e=>set("departTime",e.target.value)}/>
-                         </Field></div>
-                    <div><Field label={<>موعد الوصول {req}</>}>
-                           <input type="time" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.arriveTime??""} onChange={e=>set("arriveTime",e.target.value)}/>
-                         </Field></div>
-                  </div>
-                  <div><Field label="حدّ الأمتعة">
-                         <input className={inp} style={ist} value={form.baggage??""} placeholder="حقيبة 23 كجم + يد 7 كجم" onChange={e=>set("baggage",e.target.value)}/>
-                       </Field></div>
-                </>
-              )}
-              {/* ٢٢) ثلاث حالات لا اثنتان، و«نشطة» وحدها محروسة بالجاهزية:
-                  المسودة والمتوقفة تُحفظان ناقصتين لأنهما لا تدخلان تسعيراً
-                  ولا رحلة. منعُ الحفظ كلّه كان سيمنع الموظف من ادّخار عملٍ
-                  نصف مكتمل. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div><Field label="سنة التصنيع">
+                       <NumericInput min={1990} max={new Date().getFullYear()+1} className={inp} style={ist} value={form.year} placeholder="2024" onValueChange={v=>set("year",v)}/>
+                     </Field></div>
+                <div className="rounded-xl px-3.5 py-3 text-xs leading-relaxed flex items-center" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>
+                  بيانات المركبة النظامية مثل اللوحة والتأمين تُدار خارج تساهيل.
+                </div>
+              </div>
+              {/* الحالة تشغيلية فقط: نشطة أو متوقفة. يمكن حفظ المتوقفة
+                  ناقصة لأنها لا تدخل التسعير ولا الرحلات. */}
               <div><label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الحالة</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {([["draft","مسودة","#FBF3D6","#8A6A08","#F0E3AE"],
-                     ["active","نشطة ومتاحة","#E3F3E8","#1E7A44","#C4E4CE"],
+                <div className="grid grid-cols-2 gap-2">
+                  {([["active","نشطة ومتاحة","#E3F3E8","#1E7A44","#C4E4CE"],
                      ["inactive","متوقفة","#FBE6E6","#BE2626","#F3C9C9"]] as const).map(([v,lbl,bg,fg,bd])=>{
                     const on=form.status===v;
                     const blocked=v==="active"&&activateBlocked;
@@ -401,7 +428,7 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                         title={blocked?`ينقصها ${ready.blockers.length}: ${ready.blockers.map(b=>b.label).join(" · ")}`:undefined}
                         onClick={()=>{ if(blocked){ setTab("info"); return; } set("status",v); }}
                         className="flex items-center justify-center gap-2 py-3 px-3 rounded-xl font-bold text-sm"
-                        style={{background:on?bg:B.bg,color:on?fg:B.muted,border:`1.5px solid ${on?bd:B.border}`,
+                        style={{background:on?bg:B.fill,color:on?fg:B.muted,border:`1.5px solid ${on?bd:B.border}`,
                                 opacity:blocked?.5:1,cursor:blocked?"not-allowed":"pointer"}}>
                         <span className="w-2 h-2 rounded-full" style={{background:on?fg:B.border}}/>{lbl}
                       </button>
@@ -416,82 +443,56 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                   </div>
                 )}
               </div>
-              {/* وثائق توشك أن تنتهي: تحذيرٌ قبل أن يصير مانعاً — الحافلة
-                  تُسحب من الخدمة يوم الانتهاء لا يوم اكتشافه. */}
-              {ready.expiring.length>0&&(
-                <div className="px-4 py-2.5 rounded-xl text-xs font-bold flex items-start gap-2" style={{background:"#FCEBDD",border:"1px solid #F2D3B8",color:"#B4530C"}}>
-                  <AlertTriangle size={13} style={{flexShrink:0,marginTop:1}}/>
-                  <span>تنتهي خلال ٣٠ يوماً: {ready.expiring.map(x=>`${x.label} (${x.date})`).join(" · ")}</span>
-                </div>
-              )}
               {/* Live preview */}
-              <div className="rounded-xl p-4" style={{background:`linear-gradient(135deg,${B.primary} 0%,${B.primaryDeep} 100%)`,border:"1px solid rgba(192,134,44,0.25)"}}>
-                <div className="text-xs font-bold mb-3" style={{color:B.muted}}>معاينة سريعة</div>
+              <div className="rounded-xl p-4" style={{background:B.surface,border:`1px solid ${B.border}`}}>
+                <div className="text-xs font-bold mb-3" style={{color:B.primaryDeep}}>معاينة سريعة</div>
                 <div className="grid grid-cols-3 gap-3">
-                  <div><div className="text-xs" style={{color:B.muted}}>المقاعد</div><div className="text-lg font-bold" style={{color:B.cream}}>{form.seats||"—"}</div></div>
+                  <div><div className="text-xs" style={{color:B.muted}}>المقاعد</div><div className="text-lg font-bold" style={{color:B.gold}}>{form.seats||"—"}</div></div>
                   {/* الرقم والوحدة منفصلان في الرسم، فالوحدة من الثابت والرقم من sarNumber — لا لصقٌ يدوي. */}
-                  <div><div className="text-xs" style={{color:B.muted}}>تكلفة المقعد</div><div className="text-lg font-bold" style={{color:B.gold}}>{form.seatCost?sarNumber(form.seatCost):"—"} <span className="text-xs" style={{color:B.gold2}}>{SAR}</span></div></div>
-                  <div><div className="text-xs" style={{color:B.muted}}>الطاقة الكاملة</div><div className="text-lg font-bold" style={{color:B.cream}}>{sarNumber((form.seats||0)*(form.seatCost||0))} <span className="text-xs" style={{color:B.muted}}>{SAR}</span></div></div>
+                  <div><div className="text-xs" style={{color:B.muted}}>تكلفة المقعد</div><div className="text-lg font-bold" style={{color:B.gold}}>{form.seatCost?sarNumber(form.seatCost):"—"} <span className="text-xs" style={{color:B.muted}}>{SAR}</span></div></div>
+                  <div><div className="text-xs" style={{color:B.muted}}>الطاقة الكاملة</div><div className="text-lg font-bold" style={{color:B.gold}}>{sarNumber((form.seats||0)*(form.seatCost||0))} <span className="text-xs" style={{color:B.muted}}>{SAR}</span></div></div>
                 </div>
               </div>
+              </>}
             </motion.div>}
-            {tab==="features"&&<motion.div role="tabpanel" id="trn-panel-features" aria-labelledby="trn-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div><p className="font-bold text-sm" style={{color:B.black}}>مواصفات المركبة</p>
-                  <p className="text-xs mt-0.5" style={{color:B.muted}}>ما يميزها — تُعرض للعميل</p></div>
-                <button onClick={addFeat} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+            {tab==="features"&&<motion.div role="tabpanel" id="trn-panel-features" aria-labelledby="trn-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
+              <div className="flex items-end justify-between gap-3">
+                <div><p className="font-bold text-sm" style={{color:B.black}}>تجهيزات الحافلة</p>
+                  <p className="text-xs mt-0.5" style={{color:B.muted}}>اختر الرموز المتوفرة — يمكن اختيار أكثر من خدمة.</p></div>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>{form.features.length}</span>
               </div>
-              <AnimatePresence>{form.features.map(f=>(
-                <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-start">
-                  <select aria-label="نوع الميزة" className="border rounded-xl px-2.5 py-2.5 text-sm cursor-pointer flex-shrink-0"
-                    style={{borderColor:B.border,background:"#fff",color:B.black,width:160,fontFamily:"inherit"}}
-                    value={f.icon||"ac"} onChange={e=>updFeat(f.id,"icon",e.target.value)}>
-                    <option value="ac">❄️ تكييف</option><option value="wifi">📶 واي فاي</option>
-                    <option value="screen">📺 شاشات</option><option value="meal">🍽️ وجبات</option>
-                    <option value="drink">☕ مشروبات</option><option value="wc">🚻 دورة مياه</option>
-                    <option value="seat">💺 مقاعد مريحة</option><option value="charge">🔌 منافذ شحن</option>
-                    <option value="luggage">🧳 أمتعة</option><option value="other">⭐ أخرى</option>
-                  </select>
-                  <div className="flex-1 min-w-0">
-                    <input className={`${inp} w-full`} list={`feat-${f.id}`} style={{...ist,borderColor:isVagueFeature(f.text)?"#E8D9A8":B.border}}
-                      value={f.text} placeholder={FEATURE_PRESETS[f.icon||"ac"]?.[0]??"مثال: مكيف هواء"}
-                      onChange={e=>updFeat(f.id,"text",e.target.value)}/>
-                    {/* الاقتراحات تحمل التكرار في نصّها: «وجبة مشمولة لكل
-                        رحلة» تُجيب سؤال الفريق داخل العبارة، ولا تحتاج
-                        حقلاً ثانياً ولا عموداً في القاعدة. */}
-                    <datalist id={`feat-${f.id}`}>
-                      {(FEATURE_PRESETS[f.icon||"ac"]??[]).map(x=><option key={x} value={x}/>)}
-                    </datalist>
-                    {isVagueFeature(f.text)&&(
-                      <div className="text-xs font-bold mt-1 flex items-center gap-1" style={{color:"#8A6A08"}}>
-                        <AlertTriangle size={10}/>وصفٌ مبهم — يقرؤه العميل. اختر من الاقتراحات أو اكتب ما يشمله بالضبط.
-                      </div>
-                    )}
-                  </div>
-                  <button aria-label="حذف الميزة" title="حذف الميزة" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0 self-start mt-0.5"
-                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
-                </motion.div>
-              ))}</AnimatePresence>
-              {form.features.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Wrench size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف مواصفات بعد</p></div>}
+              <div className="grid gap-2" style={{gridTemplateColumns:"repeat(auto-fill, minmax(42px, 1fr))"}}>
+                {TRANSPORT_FEATURE_CATALOG.map(({id,label,Icon})=>{
+                  const selected=form.features.some(feature=>feature.icon===id);
+                  return <button key={id} type="button" aria-label={label} aria-pressed={selected}
+                    onClick={()=>toggleFeature(id,label)}
+                    className="aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all"
+                    style={{background:selected?B.gold:B.fill,color:selected?B.black:B.text2,border:`1.5px solid ${selected?B.gold:B.border}`,boxShadow:selected?"0 5px 14px rgba(192,134,44,.24)":"none"}}>
+                    <Icon size={18}/>
+                  </button>;
+                })}
+              </div>
+              {form.features.some(feature=>!TRANSPORT_FEATURE_CATALOG.some(item=>item.id===feature.icon))&&(
+                <div className="text-xs" style={{color:B.muted}}>توجد رموز محفوظة من بيانات سابقة؛ تبقى كما هي حتى تُزال من السجل.</div>
+              )}
             </motion.div>}
             {tab==="media"&&<motion.div role="tabpanel" id="trn-panel-media" aria-labelledby="trn-tab-media" key="media" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <p className="font-bold text-sm flex items-center gap-2" style={{color:B.black}}>صور وفيديو المركبة
-                  <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:media.length>=TRANSPORT_MEDIA_MAX?"#FBE6E6":B.bg,color:media.length>=TRANSPORT_MEDIA_MAX?"#BE2626":B.muted,border:`1px solid ${media.length>=TRANSPORT_MEDIA_MAX?"#F3C9C9":B.border}`}}>{media.length} / {TRANSPORT_MEDIA_MAX}</span>
+                  <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:media.length>=TRANSPORT_MEDIA_MAX?"#FBE6E6":B.fill,color:media.length>=TRANSPORT_MEDIA_MAX?"#BE2626":B.muted,border:`1px solid ${media.length>=TRANSPORT_MEDIA_MAX?"#F3C9C9":B.border}`}}>{media.length} / {TRANSPORT_MEDIA_MAX}</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <button onClick={()=>addMedia("image")} disabled={media.length>=TRANSPORT_MEDIA_MAX} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:media.length>=TRANSPORT_MEDIA_MAX?B.bg:B.black,border:"none",color:media.length>=TRANSPORT_MEDIA_MAX?B.muted:B.cream,opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><ImagePlus size={12}/>صورة</button>
+                    style={{background:media.length>=TRANSPORT_MEDIA_MAX?B.fill:B.black,border:"none",color:media.length>=TRANSPORT_MEDIA_MAX?B.muted:B.cream,opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><ImagePlus size={12}/>صورة</button>
                   <button onClick={()=>addMedia("video")} disabled={media.length>=TRANSPORT_MEDIA_MAX} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.bg,border:`1px solid ${B.border}`,color:"#1E52C7",opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><Film size={12}/>فيديو</button>
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#1E52C7",opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><Film size={12}/>فيديو</button>
                 </div>
               </div>
               <p className="text-xs -mt-2" style={{color:B.muted}}>رتّب العناصر بالأسهم — أول صورة أساسية تظهر كغلاف المركبة.</p>
               <AnimatePresence>{media.map((m,idx)=>(
                 <motion.div key={m.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
                   className="rounded-2xl p-3 flex gap-3" style={{border:`1px solid ${m.primary?B.gold:B.border}`,background:m.primary?"rgba(192,134,44,0.05)":"#fff"}}>
-                  <label className="relative rounded-xl overflow-hidden flex items-center justify-center cursor-pointer flex-shrink-0" style={{width:88,height:88,border:`1px dashed ${B.border}`,background:B.bg}}>
+                  <label className="relative rounded-xl overflow-hidden flex items-center justify-center cursor-pointer flex-shrink-0" style={{width:88,height:88,border:`1px dashed ${B.border}`,background:B.fill}}>
                     {m.url
                       ? (m.kind==="image"
                           ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
@@ -501,14 +502,14 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                   </label>
                   <div className="flex-1 flex flex-col gap-2 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:B.bg,color:B.text2,border:`1px solid ${B.border}`}}>#{idx+1}</span>
+                      <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>#{idx+1}</span>
                       <span className="text-xs font-bold" style={{color:m.kind==="image"?"#8a6a08":"#1E52C7"}}>{m.kind==="image"?"صورة":"فيديو"}</span>
                       {m.primary&&<span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08"}}>أساسية</span>}
                     </div>
                     {m.kind==="image"&&(
                       <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={()=>setPrimaryMedia(m.id)} disabled={m.primary} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                          style={{background:m.primary?"#FBF3D6":B.bg,color:m.primary?"#8A6A08":B.muted,border:`1px solid ${m.primary?"#EBD9A0":B.border}`}}><Star size={11}/>{m.primary?"الصورة الأساسية":"اجعلها أساسية"}</button>
+                          style={{background:m.primary?"#FBF3D6":B.fill,color:m.primary?"#8A6A08":B.muted,border:`1px solid ${m.primary?"#EBD9A0":B.border}`}}><Star size={11}/>{m.primary?"الصورة الأساسية":"اجعلها أساسية"}</button>
                         <select value={m.category} onChange={e=>updMedia(m.id,"category",e.target.value)} className="border rounded-lg px-2.5 py-1.5 text-xs cursor-pointer"
                           style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}>
                           {TRANSPORT_MEDIA_CATS.map(c=><option key={c} value={c}>{c}</option>)}
@@ -518,9 +519,9 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     <button aria-label="تقديم العنصر في الترتيب" title="تقديم العنصر في الترتيب" onClick={()=>moveMedia(m.id,-1)} disabled={idx===0} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:B.bg,border:`1px solid ${B.border}`,color:idx===0?B.border:B.text2}}><ChevronUp size={14}/></button>
+                      style={{background:B.fill,border:`1px solid ${B.border}`,color:idx===0?B.border:B.text2}}><ChevronUp size={14}/></button>
                     <button aria-label="تأخير العنصر في الترتيب" title="تأخير العنصر في الترتيب" onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:B.bg,border:`1px solid ${B.border}`,color:idx===media.length-1?B.border:B.text2}}><ChevronDown size={14}/></button>
+                      style={{background:B.fill,border:`1px solid ${B.border}`,color:idx===media.length-1?B.border:B.text2}}><ChevronDown size={14}/></button>
                     <button aria-label="حذف الصورة أو الفيديو" title="حذف الصورة أو الفيديو" onClick={()=>delMedia(m.id)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
                       style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><Trash2 size={13}/></button>
                   </div>
@@ -529,17 +530,51 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
               {media.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ImagePlus size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف صور أو فيديو بعد</p></div>}
             </motion.div>}
             {tab==="reviews"&&<motion.div role="tabpanel" id="trn-panel-reviews" aria-labelledby="trn-tab-reviews" key="reviews" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <p className="font-bold text-sm" style={{color:B.black}}>آراء المعتمرين</p>
-                <button onClick={addReview} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{background:B.bg,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-bold text-sm" style={{color:B.black}}>آراء المعتمرين</p>
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{color:B.muted}}>CSV مطلوب بالأعمدة: اسم العميل، نص الرأي، التقييم (1–5)، حالة النشر (منشور / غير منشور).</p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={downloadTransportReviewTemplate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><Download size={12}/>تحميل النموذج</button>
+                  <label className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}>
+                    <FileUp size={12}/>استيراد CSV
+                    <input type="file" accept=".csv,text/csv" className="hidden" onChange={event=>{readReviewImport(event.target.files?.[0]);event.currentTarget.value="";}}/>
+                  </label>
+                  <button onClick={addReview} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+                </div>
               </div>
+              {reviewImport&&(
+                <div className="rounded-2xl p-4 flex flex-col gap-3" style={{background:"#FBF3D6",border:"1px solid #EBD9A0"}}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold" style={{color:"#6b5a2a"}}>معاينة قبل الاستيراد — {reviewImport.length} رأي</div>
+                    <button type="button" onClick={()=>setReviewImport(null)} className="text-xs font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>إلغاء</button>
+                  </div>
+                  <div className="overflow-x-auto rounded-xl" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
+                    <table className="w-full text-xs" style={{minWidth:460,borderCollapse:"collapse"}}>
+                      <thead style={{background:B.fill,color:B.text2}}><tr>
+                        <th className="p-2 text-start">العميل</th><th className="p-2 text-start">الرأي</th><th className="p-2 text-start">التقييم</th><th className="p-2 text-start">النشر</th>
+                      </tr></thead>
+                      <tbody>{reviewImport.slice(0,8).map((review,index)=><tr key={`${review.name}-${index}`} style={{borderTop:`1px solid ${B.border}`,color:B.text3}}>
+                        <td className="p-2 font-bold">{review.name}</td><td className="p-2">{review.text}</td><td className="p-2">{review.rating}/5</td><td className="p-2">{review.consent?"منشور":"غير منشور"}</td>
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
+                  {reviewImport.length>8&&<p className="text-xs" style={{color:B.muted}}>تُعرض أول 8 آراء من أصل {reviewImport.length}.</p>}
+                  <button type="button" onClick={confirmReviewImport} className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                    style={{background:B.gold,color:B.black,border:"none"}}><Check size={13}/>اعتماد الاستيراد</button>
+                </div>
+              )}
               <AnimatePresence>{form.reviews.map(rv=>(
                 <motion.div key={rv.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
                   className="rounded-2xl p-4 flex gap-3" style={{border:`1px solid ${B.border}`}}>
                   <div className="flex-1 flex flex-col gap-2">
                     <input className={inp} style={ist} value={rv.name} placeholder="الاسم الأول" onChange={e=>updReview(rv.id,"name",e.target.value)}/>
                     <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={rv.text} placeholder="ماذا قال عن المواصلة؟" onChange={e=>updReview(rv.id,"text",e.target.value)}/>
+                    {typeof rv.rating==="number"&&<span className="text-xs font-bold" style={{color:"#8A6A08"}}>التقييم: {rv.rating}/5</span>}
                     {rv.image&&(
                       <div className="relative rounded-xl overflow-hidden self-start" style={{border:`1px solid ${B.border}`,width:96,height:96}}>
                         <img src={rv.image} alt="صورة مرفقة" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
@@ -549,11 +584,11 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
                     )}
                     <div className="flex items-center gap-2 flex-wrap">
                       <button onClick={()=>updReview(rv.id,"consent",!rv.consent)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                        style={{background:rv.consent?"#E3F3E8":B.bg,color:rv.consent?"#1E7A44":B.muted,border:`1px solid ${rv.consent?"#C4E4CE":B.border}`}}>
+                        style={{background:rv.consent?"#E3F3E8":B.fill,color:rv.consent?"#1E7A44":B.muted,border:`1px solid ${rv.consent?"#C4E4CE":B.border}`}}>
                         <Check size={11}/>{rv.consent?"تم الإذن":"في انتظار الإذن"}
                       </button>
                       <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                        style={{background:B.bg,color:"#8a6a08",border:`1px solid ${B.border}`}}>
+                        style={{background:B.fill,color:"#8a6a08",border:`1px solid ${B.border}`}}>
                         <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"إرفاق صورة (اختياري)"}
                         <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("transport-reviews",url=>updReview(rv.id,"image",url))}/>
                       </label>
@@ -572,8 +607,8 @@ function TransportModal({initial,onSave,onClose,onDelete,seatFloor}:{
             style={{background:canSave?B.gold:"#d6cfc6",color:canSave?B.black:"#a09688",border:"none",cursor:canSave?"pointer":"not-allowed"}}>
             <Check size={14}/>حفظ المواصلة</button>
           {!canSave&&<span className="self-center text-xs font-bold" style={{color:"#BE2626"}}>{saveBlock}</span>}
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={onCancel} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
+            style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>
     </motion.div>
@@ -586,23 +621,37 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
      نموذج التعديل تمرّ من هنا، فالموظف لا يملأ نموذجاً ليُرفض في آخره. */
   const { canWrite, isAdmin } = useRole();
   const mayWrite = canWrite("transport");
-  const openForm = (t: any) => {
+  const transports=useStore(s=>s.transports); const setTransports=useStore(s=>s.setTransports);
+  const trips=useStore(s=>s.trips); const packages=useStore(s=>s.packages);
+  /* التعديلات غير المحفوظة في sessionStorage أيضاً، لا في ذاكرة الصفحة فقط. لذلك تبقى
+     نافذة التعديل كما هي عند تبديل قسمٍ في اللوحة، وحتى لو أُعيد تركيب
+     صفحة المواصلات لسببٍ تقني. لا تذهب إلا بحفظٍ أو إلغاءٍ صريح. */
+  const [editorDraft,setEditorDraft]=useState<TransportEditorDraft|null>(()=>readTransportDraft());
+  const saveEditorDraft=useCallback((next:TransportEditorDraft)=>{
+    setEditorDraft(next);
+    try { sessionStorage.setItem(TRANSPORT_DRAFT_KEY,JSON.stringify(next)); } catch { /* تبقى التعديلات في الذاكرة */ }
+  },[]);
+  const discardEditorDraft=useCallback(()=>{
+    setEditorDraft(null);
+    try { sessionStorage.removeItem(TRANSPORT_DRAFT_KEY); } catch { /* لا شيء */ }
+  },[]);
+  const openForm = (transport: Transport | null) => {
     if (!mayWrite) {
       toast.error("لا تملك صلاحية التعديل", { description: "هذه الشاشة يكتبها مدير النظام وحده." });
       return;
     }
-    setEditTarget(t); setShowModal(true);
+    /* لا نكتب فوق تعديل مفتوح بالخطأ: يعود الموظف له أولاً أو يلغيها. */
+    if (editorDraft) {
+      toast.message("لديك تعديل غير محفوظ مفتوح بالفعل");
+      return;
+    }
+    saveEditorDraft(createTransportDraft(transport));
   };
-  const transports=useStore(s=>s.transports); const setTransports=useStore(s=>s.setTransports);
-  const trips=useStore(s=>s.trips); const packages=useStore(s=>s.packages);
-  const [showModal,setShowModal]=useState(false);
-  const [editTarget,setEditTarget]=useState<Transport|null>(null);
   const [search,setSearch]=useState("");
   /* التصفية على القيمة الساكنة لا على كل ضغطة مفتاح. */
   const query = useDebounced(search);
   const [modeFilter,setModeFilter]=useState<"all"|"bus"|"flight">("all");
   const [statusFilter,setStatusFilter]=useState<"all"|"active"|"inactive">("all");
-  const [deleteId,setDeleteId]=useState<string|null>(null);
   const filtered=transports.filter(t=>
     (!query||t.name.includes(query)||t.id.toLowerCase().includes(query.toLowerCase())||t.model.includes(query))&&
     (modeFilter==="all"||t.mode===modeFilter)&&
@@ -615,13 +664,20 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     flights:transports.filter(t=>t.mode==="flight").length,
     totalSeats:transports.reduce((a,t)=>a+t.seats,0),
   };
-  function handleSave(t:Transport){setTransports(p=>editTarget?p.map(x=>x.id===t.id?t:x):[t,...p]);setShowModal(false);}
+  function handleSave(t:Transport){
+    setTransports(p=>editorDraft?.editId?p.map(x=>x.id===t.id?t:x):[t,...p]);
+    discardEditorDraft();
+  }
+  const requestCancel=()=>{
+    if(!editorDraft) return;
+    if(window.confirm("هل تريد إلغاء التعديلات؟ ستُحذف كل التعديلات غير المحفوظة.")) discardEditorDraft();
+  };
 
   /* موانع الحذف النهائي — تُعرض بنصّها لا تُخفي الزرّ.
 
      حذف مركبةٍ تحملها رحلةٌ أو باقة يترك مرجعاً معلّقاً: الرحلة تفقد
      سعتها والباقة تفقد نقلها، ويقرأ العميل «غير متوفّر» بلا سبب.
-     والأرشفة تبقى متاحة دائماً — هي الطريق الصحيح لمركبةٍ خرجت من
+     والإيقاف يبقى متاحاً دائماً — هو الطريق الصحيح لمركبةٍ خرجت من
      الخدمة ولها تاريخ. */
   /* أرضية المقاعد: أكبر حجزٍ قائم على رحلةٍ تحمل هذه المركبة. الرحلات
      المنتهية مستثناة — مقاعدها لم تعد تُحجَز، وإبقاؤها يقفل السعة على
@@ -634,14 +690,14 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
   function blockersFor(id:string):string[] {
     const out:string[]=[];
     const n=trips.filter(t=>t.transportId===id).length;
-    if(n) out.push(`مرتبطة بـ${n} ${n===1?"رحلة":"رحلات"} — أرشفها بدل حذفها.`);
+    if(n) out.push(`مرتبطة بـ${n} ${n===1?"رحلة":"رحلات"} — أوقفها بدل حذفها.`);
     const p=packages.filter(x=>x.transportId===id);
     if(p.length) out.push(`تعتمد عليها ${p.length===1?"باقة":`${p.length} باقات`}: ${p.map(x=>x.name).join(" · ")}`);
     return out;
   }
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.primary:"#fff",color:on?B.gold:B.text2,transition:"all 0.15s"});
+  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="المواصلات" crumb="إدارة المواصلات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <div className="px-8 pt-5">
         {/* Stats */}
@@ -689,8 +745,16 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
             <AnimatePresence>{filtered.map(t=>(
               <TransportCard key={t.id} tr={t} canWrite={mayWrite} isAdmin={isAdmin}
                 onEdit={()=>{openForm(t);}}
-                onToggleActive={next=>setTransports(p=>p.map(x=>x.id===t.id?{...x,status:next?"active":"inactive"}:x))}
-                onArchive={reason=>{setArchiveReason(reason);setTransports(p=>p.filter(x=>x.id!==t.id));}}
+                onToggleActive={next=>{
+                  if(next) {
+                    const readiness=transportReadiness(t);
+                    if(!readiness.canActivate) {
+                      toast.error("أكمل بيانات المواصلة قبل تفعيلها",{description:readiness.blockers.map(item=>item.label).join(" · ")});
+                      return;
+                    }
+                  }
+                  setTransports(p=>p.map(x=>x.id===t.id?{...x,status:next?"active":"inactive"}:x));
+                }}
                 onDelete={async reason=>{
                   await permanentlyDelete("transports",t.id,reason);
                   writeLocalOnly(()=>setTransports(p=>p.filter(x=>x.id!==t.id)));
@@ -702,8 +766,8 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
         </EntityGate>
       </main>
       <AnimatePresence>
-        {deleteId&&<DeleteDialog onConfirm={reason=>{setArchiveReason(reason);setTransports(p=>p.filter(t=>t.id!==deleteId));setDeleteId(null);}} onCancel={()=>setDeleteId(null)}/>}
-        {showModal&&<TransportModal initial={editTarget} seatFloor={editTarget?seatFloorFor(editTarget.id):0} onSave={handleSave} onClose={()=>setShowModal(false)} onDelete={editTarget?()=>{const id=editTarget.id;setShowModal(false);setDeleteId(id);}:undefined}/>}
+        {editorDraft&&<TransportModal draft={editorDraft} seatFloor={editorDraft.editId?seatFloorFor(editorDraft.editId):0}
+          onDraftChange={saveEditorDraft} onSave={handleSave} onCancel={requestCancel}/>}
       </AnimatePresence>
     </div>
   );

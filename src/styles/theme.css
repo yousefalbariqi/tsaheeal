@@ -1,24 +1,32 @@
 @custom-variant dark (&:is(.dark *));
 
+/* هذه المتغيّرات هي نسخة shadcn من اللوحة في src/lib/theme.ts — وما
+   لا يتطابق منها معها يظهر فارقاً بين مكوّن shadcn وجاره المكتوب يدوياً
+   في الشاشة نفسها. تُحدَّث معه دائماً.
+
+   ثلاثة منها كانت تناقضه صراحةً: الخلفية بيج (#EFEBE2) والصفحة صارت
+   بيضاء دافئة، والنصّ بنّيٌّ فاتح (#5C421B) على حدّ ٤٫٥:١ بالكاد،
+   و--ts-card بنّيٌّ داكن (#8C6423) باسم «بطاقة» بينما كل بطاقةٍ بيضاء. */
 :root {
   --font-size: 16px;
-  --background: #EFEBE2;
-  --foreground: #5C421B;
+  --background: #FAF8F4;
+  --foreground: #1B1712;
   --card: #ffffff;
-  --card-foreground: #5C421B;
+  --card-foreground: #1B1712;
   --popover: #ffffff;
-  --popover-foreground: #5C421B;
+  --popover-foreground: #1B1712;
+  /* الذهبي هو اللون الأساسي للفعل، ونصُّه أسود: الأبيض عليه ٣٫١:١. */
   --primary: #C0862C;
-  --primary-foreground: #5C421B;
-  --secondary: #FAFBE6;
-  --secondary-foreground: #5C421B;
-  --muted: #E7E1D8;
-  --muted-foreground: #A79E92;
-  --accent: #FAFBE6;
-  --accent-foreground: #5C421B;
+  --primary-foreground: #1B1712;
+  --secondary: #F5F2EB;
+  --secondary-foreground: #1B1712;
+  --muted: #F5F2EB;
+  --muted-foreground: #7A7168;
+  --accent: #F7EEDC;
+  --accent-foreground: #1B1712;
   --destructive: #BE2626;
   --destructive-foreground: #ffffff;
-  --border: #E2DBCE;
+  --border: #E7E0D3;
   --input: transparent;
   --input-background: #ffffff;
   --switch-background: #C7BBA6;
@@ -26,14 +34,16 @@
   --font-weight-normal: 400;
   --ring: #C0862C;
   /* Tasaheel brand tokens */
-  --ts-black: #5C421B;
+  --ts-black: #1B1712;
+  --ts-green: #154C48;
   --ts-gold: #C0862C;
-  --ts-cream: #FAFBE6;
-  --ts-bg: #EFEBE2;
-  --ts-card: #8C6423;
-  --ts-border: #E2DBCE;
-  --ts-text-muted: #A79E92;
-  --ts-text-secondary: #6b6259;
+  --ts-cream: #FBF7EC;
+  --ts-bg: #FAF8F4;
+  --ts-card: #FFFFFF;
+  --ts-fill: #F5F2EB;
+  --ts-border: #E7E0D3;
+  --ts-text-muted: #7A7168;
+  --ts-text-secondary: #5C5348;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);

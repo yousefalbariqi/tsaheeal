@@ -14,6 +14,7 @@
    الجدول، ومن نافذة التأكيد، وستُقرأ من دوالّ القاعدة في الموجة الأولى
    حين تصير الانتقالات مفروضةً لا موصوفة. */
 import type { Booking, BookingStatus, Pkg, Trip } from "@/types";
+import { allVerified, needsRecheck } from "./verification";
 import { sar } from "@/lib/money";
 import { isSaudiMobile } from "@/lib/phone";
 import { statusLabel } from "@/lib/status";
@@ -30,7 +31,9 @@ const WAITING: Partial<Record<BookingStatus, string>> = {
   accepted:         "بانتظار إرسال رابط الدفع أو تحصيل المبلغ كاشاً",
   awaiting_payment: "أُرسل رابط الدفع — بانتظار سداد العميل",
   awaiting_trip:    "بانتظار تحديد رحلة",
-  paid:             "وصل المبلغ — بانتظار تحقّق الموظف ثم التأكيد",
+  /* محطّةٌ لم تعد تُسلَك: تأكيد الدفع يُنهي الطلب في نفس الضغطة. النصّ
+     باقٍ لطلباتٍ سُجّلت قبل دمج الخطوتين (٢٠٢٦-٠٩-١١). */
+  paid:             "وصل المبلغ — بانتظار إتمام الطلب",
   verifying:        "بانتظار تحقّق الموظف",
   verified:         "بانتظار التأكيد النهائي",
   confirmed:        "مكتمل — صدرت الفاتورة والتذكرة",
@@ -54,8 +57,8 @@ export interface FlowCtx {
   booking: Booking;
   trip?: Trip;
   pkg?: Pkg;
-  /** تحقّق الموظف من كل المعتمرين في هذه الجلسة. */
-  allVerified?: boolean;
+  /* تحقّق الموظف لم يعد يُمرَّر من الشاشة: صار محفوظاً على المعتمر
+     نفسه فيُقرأ من `booking.pilgrims` — لا حالةَ جلسةٍ تُنسى بالتحديث. */
   /** فعّل «تم استلام الدفع فعلياً» في لوحة الإجراءات. */
   payReceived?: boolean;
   /** فاتورةٌ موجودة فعلاً في القاعدة لهذا الطلب. */
@@ -101,6 +104,15 @@ export function bookingGaps(ctx: FlowCtx): Gap[] {
 
   if (["paid", "confirmed", "verified"].includes(b.status) && b.paymentStatus !== "verified") {
     gaps.push({ key: "pay", label: "الدفع غير موثَّق — لا طريقة ولا تاريخ متحقَّق", blocking: true });
+  }
+
+  /* «بانتظار التحقق» ليس نقصاً في كل طلب: طلبٌ جديد كلُّ معتمريه كذلك،
+     وهو ترتيبٌ لا خلل — ويمنع القبولَ وحده (انظر transitionsFor). النقص
+     أن يُعدَّل معتمرٌ بعد تحقّقٍ تمّ، أو يُوسَم بخطأ: هنا طلب النظام
+     مراجعةً ولم تُجب، فيمنع ما بعده. */
+  const recheck = needsRecheck(pilgrims).length;
+  if (recheck > 0) {
+    gaps.push({ key: "verify", label: `${recheck} معتمر يحتاج تحقّقاً جديداً بعد تعديل بياناته`, blocking: true });
   }
 
   if (!isSaudiMobile(b.clientPhone)) {
@@ -162,6 +174,9 @@ export interface Transition {
   opensSeatMap?: boolean;
   /** يحتاج نافذة سبب: الرفض سببٌ داخلي ورسالة، والإلغاء سببٌ واحد. */
   reason?: "reject" | "cancel";
+  /** إجراءٌ لا يُبرَز: يُعرض صغيراً جانباً لا زرّاً رئيسياً. الطلب المؤكد
+      عمله طباعةٌ وإرسال، والإلغاء استثناءٌ لا واجهة. */
+  secondary?: boolean;
   patch?: Partial<Booking>;
 }
 
@@ -213,15 +228,16 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
     case "new":
     case "reviewing": {
       const acceptBlockers: string[] = [];
-      if (ctx.allVerified === false) acceptBlockers.push("لم يُتحقّق من جميع المعتمرين");
-      /* المقاعد تُختار في الكروكي نفسه، فغيابها ليس مانعاً هنا. */
-      gaps.filter(g => g.key !== "seats").forEach(g => acceptBlockers.push(g.label));
+      if (!allVerified(b.pilgrims ?? [])) acceptBlockers.push("لم يُتحقّق من جميع المعتمرين");
+      /* المقاعد تُراجَع وتُؤكَّد في الكروكي نفسه، فغيابها ليس مانعاً هنا.
+         والتحقق قيل قبل سطرين بنصٍّ أوضح من نصّ النقص. */
+      gaps.filter(g => g.key !== "seats" && g.key !== "verify").forEach(g => acceptBlockers.push(g.label));
       return [
         {
-          to: "accepted", label: "قبول الطلب واختيار المقاعد", tone: "ok",
+          to: "accepted", label: "قبول الطلب وتأكيد المقاعد", tone: "ok",
           blockers: acceptBlockers, opensSeatMap: true,
           effects: [
-            "تُقفل المقاعد المختارة باسم العميل في نفس اللحظة",
+            "تُقفل المقاعد المؤكَّدة باسم العميل في نفس اللحظة",
             "الطلب لا يصير مؤكداً — الدفع ما زال مطلوباً",
           ],
         },
@@ -247,13 +263,15 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
           ],
         },
         {
-          to: "paid", label: "تم الدفع كاش في الفرع", tone: "ok",
+          /* ضغطةٌ واحدة تُنهي الطلب: الدفع المستلَم كاشاً لا ينتظر خطوة
+             «تحقّق وتأكيد» بعده — الموظف قبض المال وهو مسؤول عن صحّته. */
+          to: "confirmed", label: "تم الدفع كاش في الفرع", tone: "ok",
           blockers: gapText ? [gapText] : [],
           patch: { paymentStatus: "verified", payMethod: "كاش في الفرع" },
           effects: [
             `يُسجَّل استلام ${sar(b.total)} كاشاً باسمك وبتاريخ اليوم`,
-            "لا رابط دفع — المبلغ في اليد",
-            "لا تُصدر التذكرة إلا بعد التأكيد النهائي",
+            "يصير الطلب مؤكداً في نفس الضغطة — لا خطوة تحقّقٍ بعدها",
+            "تُصدر الفاتورة والتذكرة تلقائياً",
           ],
         },
       ];
@@ -261,12 +279,19 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
     case "awaiting_payment":
       return [
         {
-          to: "paid", label: "تأكيد الدفع يدوياً", tone: "ok",
-          blockers: ctx.payReceived === false ? ["فعّل «تم استلام الدفع فعلياً» أولاً"] : [],
+          /* قرار ٢٠٢٦-٠٩-١١: «تم استلام الدفع» ثم «تأكيد الدفع» ثم نافذة
+             «هل أنت متأكد؟» ثلاثُ خطواتٍ لقرارٍ واحد. بقيت الأولى شرطاً
+             والثانية تنفيذاً، وسقطت الثالثة ومعها محطّة «تم الدفع». */
+          to: "confirmed", label: "تأكيد الدفع", tone: "ok",
+          blockers: [
+            ...(ctx.payReceived === false ? ["فعّل «تم استلام الدفع فعلياً» أولاً"] : []),
+            ...(gapText ? [gapText] : []),
+          ],
           patch: { paymentStatus: "verified" },
           effects: [
             `يُسجَّل ${sar(b.total)} محصَّلاً بالطريقة والتاريخ`,
             "يُوقف رابط الدفع المُرسَل",
+            "يصير الطلب مؤكداً وتصدر الفاتورة والتذكرة تلقائياً",
           ],
         },
         {
@@ -275,10 +300,12 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
         },
       ];
 
+    /* محطّةٌ لا يصلها المسار الجديد. تبقى لطلباتٍ سُجّلت «مدفوعة» قبل
+       دمج الخطوتين: بلا إجراءٍ هنا تبقى عالقةً بلا فاتورةٍ ولا تذكرة. */
     case "paid":
       return [
         {
-          to: "confirmed", label: "تحقّق وتأكيد", tone: "ok",
+          to: "confirmed", label: "إتمام الطلب وإصدار التذكرة", tone: "ok",
           /* هذا هو موضع منع التذكرة: حارس القاعدة يُصدر الفاتورة والتذكرة
              لحظةَ صيرورة الطلب «مؤكداً» — فالبوابة هنا لا عند زرّ التذكرة. */
           blockers: ticketBlockers(ctx),
@@ -293,10 +320,13 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
         },
       ];
 
+    /* الطلب المؤكد عمله طباعةٌ وإرسال — وهي مستنداتٌ لا انتقالات، فموضعها
+       شريط «إجراءات ما بعد الحجز» في الشاشة. ولا يبقى هنا إلا الإلغاء
+       ثانوياً غير بارز. */
     case "confirmed":
       return [
         {
-          to: "cancelled", label: "إلغاء الطلب المؤكد", tone: "risk",
+          to: "cancelled", label: "إلغاء الطلب المؤكد", tone: "risk", secondary: true,
           blockers: [], reason: "cancel", effects: cancelEffects(ctx),
         },
       ];

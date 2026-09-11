@@ -178,7 +178,7 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
         </div>
 
         {/* ── المسؤول وموعد الردّ الأقصى ── */}
-        <div className="rounded-xl p-4 mt-5 flex flex-col gap-3" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+        <div className="rounded-xl p-4 mt-5 flex flex-col gap-3" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
           <div className="flex items-center gap-2 text-xs font-bold" style={{ color: B.text3 }}>
             <UserCheck size={13} />المسؤول وموعد الردّ
             {isOverdue(req) && <span className="px-2 py-0.5 rounded-full" style={{ background: "#FBE6E6", color: "#BE2626" }}>متأخّر عن الموعد</span>}
@@ -225,7 +225,7 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
             </button>
             <button onClick={() => setContactOpen(v => !v)}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-              style={{ background: B.primary, color: B.cream, border: "none" }}>
+              style={{ background: B.gold, color: B.black, border: "none" }}>
               سجّل تواصلاً
             </button>
           </div>
@@ -238,7 +238,7 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
             <div className="flex flex-wrap gap-2">
               {CUSTOM_CLOSE_REASONS.map(r => (
                 <button key={r} onClick={() => setCloseReason(r)} className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
-                  style={{ background: closeReason === r ? B.primary : "#fff", color: closeReason === r ? B.cream : B.text2, border: `1px solid ${closeReason === r ? B.primary : B.border}` }}>{r}</button>
+                  style={{ background: closeReason === r ? B.gold : "#fff", color: closeReason === r ? B.black : B.text2, border: `1px solid ${closeReason === r ? B.gold : B.border}` }}>{r}</button>
               ))}
             </div>
             <div className="flex gap-2">
@@ -251,12 +251,12 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
 
         {/* سجل التواصل — وقتٌ ونتيجةٌ وملاحظة الموظف. */}
         {contactOpen && (
-          <div className="rounded-xl p-4 mt-3 flex flex-col gap-3" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+          <div className="rounded-xl p-4 mt-3 flex flex-col gap-3" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
             <div className="text-xs font-bold" style={{ color: B.text3 }}>نتيجة التواصل</div>
             <div className="flex flex-wrap gap-2">
               {CONTACT_OUTCOMES.map(o => (
                 <button key={o} onClick={() => setContactOutcome(o)} className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
-                  style={{ background: contactOutcome === o ? B.primary : "#fff", color: contactOutcome === o ? B.cream : B.text2, border: `1px solid ${contactOutcome === o ? B.primary : B.border}` }}>{o}</button>
+                  style={{ background: contactOutcome === o ? B.gold : "#fff", color: contactOutcome === o ? B.black : B.text2, border: `1px solid ${contactOutcome === o ? B.gold : B.border}` }}>{o}</button>
               ))}
             </div>
             <textarea value={contactNote} onChange={e => setContactNote(e.target.value)} rows={2} placeholder="ملاحظة الموظف — ما قاله العميل، ما وُعد به…"
@@ -325,9 +325,9 @@ export function CustomRequestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) 
             <button key={s.value} onClick={() => setFilter(s.value)}
               className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
               style={{
-                background: filter === s.value ? B.primary : "#fff",
-                color: filter === s.value ? B.cream : B.text2,
-                border: `1px solid ${filter === s.value ? B.primary : B.border}`,
+                background: filter === s.value ? B.gold : "#fff",
+                color: filter === s.value ? B.black : B.text2,
+                border: `1px solid ${filter === s.value ? B.gold : B.border}`,
               }}>{s.label}</button>
           ))}
         </div>

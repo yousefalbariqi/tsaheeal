@@ -1,14 +1,11 @@
 export type VehicleMode   = "bus" | "flight";
-/* «مسودة» أُضيفت لأن المركبة الجديدة كانت تبدأ «نشطة ومتاحة» بتكلفة مقعدٍ
-   صفر وبلا لوحةٍ ولا تأمين — فتدخل تسعير الباقات وتُطلَق بها رحلة. */
-export type VehicleStatus = "draft" | "active" | "inactive";
+/* المواصلة إمّا متاحة للحجز أو متوقفة مع الاحتفاظ بسجلّها. */
+export type VehicleStatus = "active" | "inactive";
 export type RoomKind      = "private" | "shared";
 export type MediaKind     = "image" | "video";
 
-/* حالة الفندق. «مسودة» أُضيفت لأن الفندق الجديد كان يبدأ «نشطاً ومتاحاً»
-   قبل إدخال غرفةٍ واحدة أو صورة — فيصل العميل إلى سكنٍ لا سعر له.
-   المسودة تعني: مُدخَلٌ ولم يُعتمد بعد، ولا يظهر للعميل بحال. */
-export type HotelStatus = "draft" | "active" | "inactive";
+/* الفندق إمّا متاح للحجز أو متوقف مع الاحتفاظ بسجلّه. */
+export type HotelStatus = "active" | "inactive";
 
 export interface HotelFeature { id: string; icon: string; text: string; }
 export interface HotelReview  { id: string; name: string; text: string; consent: boolean; image?: string; }
@@ -29,7 +26,7 @@ export interface Hotel {
 }
 
 export interface TransportFeature { id: string; text: string; icon?: string; }
-export interface TransportReview  { id: string; name: string; text: string; consent: boolean; image?: string; }
+export interface TransportReview  { id: string; name: string; text: string; consent: boolean; image?: string; rating?: number; }
 export interface Transport {
   id: string; name: string; mode: VehicleMode;
   vehicleType: string;   // حافلة عادية / حافلة VIP / طيران
@@ -197,7 +194,17 @@ export interface DocEvent {
   actorName?:string; outcome?:string; note?:string; createdAt:string;
 }
 
-export interface Pilgrim { name:string; docType?:"national_id"|"iqama"|"passport"; idNumber:string; nationality:string; gender:"male"|"female"; ageGroup?:"adult"|"child"; birthDate:string; phone:string; seat?:number; }
+export interface Pilgrim {
+  name:string; docType?:"national_id"|"iqama"|"passport"; idNumber:string; nationality:string;
+  gender:"male"|"female"; ageGroup?:"adult"|"child"; birthDate:string; phone:string; seat?:number;
+  /* تحقّق الموظف — صفةُ المعتمر لا صفةُ الجلسة ولا صفةُ مرحلة الطلب، فلا
+     يُعاد سؤال الموظف عمّا أجابه. غيابه «بانتظار التحقق»، و«stale» تعني
+     أن البيانات عُدِّلت بعد التحقق فيلزم تحقّقٌ جديد. الشرح في
+     features/bookings/verification.ts. */
+  verify?:"verified"|"error"|"stale";
+  verifiedAt?:string;
+  verifiedBy?:string;
+}
 export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"|"awaiting_payment"|"awaiting_trip"|"paid"|"verifying"|"verified"|"confirmed"|"cancelled";
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
 /** غرفة واحدة في توزيع سكن حجز. السعر مثبَّت وقت الحجز لا مقروء من الباقة:
@@ -222,7 +229,8 @@ export interface Booking {
   customerId?:string;             // حساب المستفيد (جلسة الجوال) إن وُجد
   payToken?:string;               // رمز رابط الدفع — يُفتح من واتساب بلا جلسة
   customer?:CustomerAccount;      // ملف الحساب (قراءة فقط في لوحة الموظف)
-  /** الموظف المسؤول — يُكتب بـassign_booking لا بالحفظ العام. */
+  /** عمودان متروكان: لا تعيين للطلب — أي موظف استقبال يتعامل معه
+      مباشرةً (قرار ٢٠٢٦-٠٩-١١). لا تكتب فيهما الواجهة شيئاً. */
   assignedTo?:string; assignedAt?:string;
   /** سبب الرفض أو الإلغاء أو الإغلاق الجماعي. */
   closedReason?:string;

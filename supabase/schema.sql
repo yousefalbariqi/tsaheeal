@@ -78,7 +78,7 @@ create index on hotel_room_photos(room_type_id);
 create table transports (
   id text primary key, name text, mode text, vehicle_type text,
   seats int, seat_cost numeric, model text, year text, plate text,
-  driver text, supervisor text, status text, notes text
+  driver text, supervisor text, status text check (status in ('active','inactive')) default 'inactive', notes text
 );
 create table transport_features (
   id bigint generated always as identity primary key,
@@ -88,7 +88,8 @@ create table transport_features (
 create table transport_reviews (
   id bigint generated always as identity primary key,
   transport_id text references transports(id) on delete cascade,
-  item_id text, name text, text text, consent boolean, image text, sort int
+  item_id text, name text, text text, consent boolean, image text, rating numeric, sort int,
+  constraint transport_reviews_rating_range check (rating is null or (rating >= 1 and rating <= 5))
 );
 create table transport_media (
   id bigint generated always as identity primary key,
@@ -205,7 +206,11 @@ create table bookings (
 create table booking_pilgrims (
   id bigint generated always as identity primary key,
   booking_id text references bookings(id) on delete cascade,
-  name text, doc_type text, id_number text, nationality text, gender text, age_group text, birth_date text, phone text, seat_no int, sort int
+  name text, doc_type text, id_number text, nationality text, gender text, age_group text, birth_date text, phone text, seat_no int, sort int,
+  /* تحقّق الموظف من بيانات هذا المعتمر — يُحفظ مرّةً ولا يُعاد بتغيّر
+     مرحلة الطلب. null = بانتظار التحقق · verified · error = يوجد خطأ ·
+     stale = عُدِّلت البيانات بعد التحقق فيلزم تحقّقٌ جديد. */
+  verify text, verified_at text, verified_by text
 );
 create table booking_seats (
   id bigint generated always as identity primary key,
@@ -374,8 +379,8 @@ begin
   insert into transport_features(transport_id,item_id,text,icon,sort)
     select v,e->>'id',e->>'text',e->>'icon',(o-1)::int from jsonb_array_elements(coalesce(doc->'features','[]')) with ordinality t(e,o);
   delete from transport_reviews where transport_id=v;
-  insert into transport_reviews(transport_id,item_id,name,text,consent,image,sort)
-    select v,e->>'id',e->>'name',e->>'text',(e->>'consent')::boolean,e->>'image',(o-1)::int
+  insert into transport_reviews(transport_id,item_id,name,text,consent,image,rating,sort)
+    select v,e->>'id',e->>'name',e->>'text',(e->>'consent')::boolean,e->>'image',nullif(e->>'rating','')::numeric,(o-1)::int
     from jsonb_array_elements(coalesce(doc->'reviews','[]')) with ordinality t(e,o);
   delete from transport_media where transport_id=v;
   insert into transport_media(transport_id,item_id,kind,url,is_primary,category,sort)
@@ -480,8 +485,9 @@ begin
     created_at=excluded.created_at,staff=excluded.staff,created_by=excluded.created_by,branch_id=excluded.branch_id,
     source=excluded.source,sent_date=excluded.sent_date;
   delete from booking_pilgrims where booking_id=v;
-  insert into booking_pilgrims(booking_id,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,seat_no,sort)
-    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',nullif(e->>'seat','')::int,(o-1)::int
+  insert into booking_pilgrims(booking_id,name,doc_type,id_number,nationality,gender,age_group,birth_date,phone,seat_no,sort,verify,verified_at,verified_by)
+    select v,e->>'name',nullif(e->>'docType',''),e->>'idNumber',e->>'nationality',e->>'gender',nullif(e->>'ageGroup',''),e->>'birthDate',e->>'phone',nullif(e->>'seat','')::int,(o-1)::int,
+      nullif(e->>'verify',''),nullif(e->>'verifiedAt',''),nullif(e->>'verifiedBy','')
     from jsonb_array_elements(coalesce(doc->'pilgrims','[]')) with ordinality t(e,o);
   delete from booking_seats where booking_id=v;
   insert into booking_seats(booking_id,seat_no,sort)

@@ -91,7 +91,7 @@ export function EmptyState({ title, note, action }: { title: string; note?: stri
     <div className="rounded-2xl px-6 py-12 flex flex-col items-center text-center gap-3"
       style={{ background: "#fff", border: `1px solid ${B.border}` }}>
       <span className="w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+        style={{ background: B.fill, border: `1px solid ${B.border}` }}>
         <Inbox size={24} style={{ color: B.muted }} />
       </span>
       <strong className="text-sm font-bold" style={{ color: B.text3 }}>{title}</strong>

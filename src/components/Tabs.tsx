@@ -17,7 +17,7 @@ import { B } from "@/lib/theme";
 export type TabDef<T extends string> = { id: T; label: string };
 
 export function TabStrip<T extends string>({
-  tabs, active, onChange, tone = "onDark", idPrefix, inkAt,
+  tabs, active, onChange, tone = "onDark", idPrefix,
 }: {
   tabs: readonly TabDef<T>[];
   active: T;
@@ -26,13 +26,9 @@ export function TabStrip<T extends string>({
   tone?: "onDark" | "onLight";
   /** بادئة المعرّفات لربط كل تبويب بلوحته. */
   idPrefix: string;
-  /* الخطّ الذهبي على الحافة الملاصقة للوحة: أعلى الشريط حين ينزل من رأسٍ
-     داكن، وأسفله حين يعلو فاصلاً على سطحٍ فاتح. الافتراضي يتبع tone. */
-  inkAt?: "top" | "bottom";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const dark = tone === "onDark";
-  const ink = inkAt ?? (dark ? "top" : "bottom");
 
   /* الأسهم تتبع اتجاه القراءة: في RTL اليسار يتقدّم واليمين يرجع. */
   const onKey = (e: React.KeyboardEvent) => {
@@ -57,14 +53,18 @@ export function TabStrip<T extends string>({
             tabIndex={on ? 0 : -1} onClick={() => onChange(t.id)}
             className={`relative px-4 py-2.5 font-bold cursor-pointer transition-all whitespace-nowrap ${dark ? "text-xs rounded-t-lg" : "text-sm rounded-t-xl"}`}
             style={{
-              background: on ? "#fff" : "transparent",
+              background: "transparent",
               color: on ? B.black : dark ? "#CFC5B6" : B.text2,
               border: "none",
             }}>
-            {t.label}
+            {/* الكتلة الذهبية هي المحدِّد، لا خطٌّ تحته: التبويب المحدّد
+                يُملأ بالذهبي القوي ونصُّه أسود (٥٫٧:١). وهي نفسها العنصر
+                المتحرّك — layoutId يُزلقها بين التبويبات، فحلّت محلّ الخطّ
+                الذي كان يتحرّك وحده فوق سطحٍ أبيض. */}
             {on && <motion.span layoutId={`${idPrefix}-ink`} aria-hidden
-              className={`absolute inset-x-0 h-0.5 ${ink === "top" ? "top-0" : "bottom-0"}`}
+              className={`absolute inset-0 ${dark ? "rounded-t-lg" : "rounded-t-xl"}`}
               style={{ background: B.gold }} />}
+            <span className="relative">{t.label}</span>
           </button>
         );
       })}

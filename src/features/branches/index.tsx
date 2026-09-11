@@ -64,7 +64,7 @@ function ArchiveBranchButton({branch,links,onArchive}:{branch:Branch;links:strin
     <button onClick={()=>{ if(blocked){ toast.error("لا يمكن أرشفة فرع مرتبط",{description:`${links.join(" · ")} — عطّله بدل أرشفته.`,duration:8000}); return; } onArchive(); }}
       title={blocked?`مرتبط: ${links.join(" · ")}`:`أرشفة ${branch.name}`}
       className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-      style={{background:blocked?B.bg:"#FBF3D6",color:blocked?B.muted:"#8A6A08",border:`1px solid ${blocked?B.border:"#E8D9A8"}`}}>
+      style={{background:blocked?B.fill:"#FBF3D6",color:blocked?B.muted:"#8A6A08",border:`1px solid ${blocked?B.border:"#E8D9A8"}`}}>
       {blocked?"مرتبط":"أرشفة"}
     </button>
   );
@@ -122,7 +122,7 @@ function BranchModal({branch,managers,onSave,onClose}:{
       style={{background:"rgba(21,76,72,.55)"}} onClick={onClose}>
       <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primary}}>
+        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>{branch.id?"تعديل فرع":"إضافة فرع جديد"}</h3>
           <button onClick={onClose} aria-label="إغلاق النافذة" title="إغلاق" className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
@@ -189,7 +189,7 @@ function BranchModal({branch,managers,onSave,onClose}:{
             {busy && <Spinner size={14} color={B.black}/>}
             {busy?"جارٍ الحفظ…":"حفظ الفرع"}
           </button>
-          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.bg,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>
     </motion.div>
@@ -276,7 +276,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     : <span style={{color:B.muted}}>—</span>;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الفروع" crumb="إدارة الفروع" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <div className="px-4 md:px-8 pt-4 md:pt-5">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -322,7 +322,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 <tr key={b.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
                   <td style={{padding:"14px 16px"}}>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primary,color:B.gold}}><Building size={15}/></div>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primaryDeep,color:B.gold}}><Building size={15}/></div>
                       <span className="font-bold" style={{color:B.black}}>{b.name}</span>
                     </div>
                   </td>
@@ -360,7 +360,7 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
           {pg.rows.map(b=>(
             <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primary,color:B.gold}}><Building size={16}/></div>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primaryDeep,color:B.gold}}><Building size={16}/></div>
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-sm" style={{color:B.black}}>{b.name}</div>
                   <div className="text-xs" style={{color:B.muted}}>{b.city}</div>

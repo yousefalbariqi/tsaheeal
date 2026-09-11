@@ -36,7 +36,7 @@ export const PAY_ACCOUNT = { org:"مؤسسة تساهيل للعمرة", bank:"�
    ويُدار من شاشة الفروع. مصفوفةٌ ثابتة بجانب جدولٍ حيّ تعني أن مستنداً
    قد يحمل فرعاً لم يعد قائماً، أو يُغفل فرعاً أُضيف. */
 /* Deterministic QR-style pattern (visual placeholder, includes finder squares) */
-export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
+export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boolean;onClose:()=>void}) {
   const { isAdmin } = useRole();
   const [dialog,setDialog] = useState<"cancel"|"refund"|null>(null);
   /* الطور لا الحالة الخام: «منتهية» و«انتهى الاستحقاق» مشتقّان من
@@ -63,7 +63,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
         <style>{`@media print{ body *{visibility:hidden !important;} #invoice-sheet, #invoice-sheet *{visibility:visible !important;} #invoice-sheet{position:absolute !important;inset:0 !important;margin:0 !important;max-width:none !important;box-shadow:none !important;border-radius:0 !important;} }`}</style>
         {/* شريط الإجراءات — مشترك مع التذكرة (features/docs/DocActions) */}
         <DocActions
-          docType="invoice" docId={pay.id}
+          docType="invoice" docId={pay.id} autoPrint={autoPrint}
           fileName={docFileName("invoice", pay.id, pay.clientName)}
           whatsapp={{
             phone: pay.clientPhone,
@@ -91,7 +91,7 @@ export function InvoiceModal({pay,onClose}:{pay:Payment;onClose:()=>void}) {
           )}
           <div style={{position:"relative",zIndex:1}}>
           {/* Header band */}
-          <div className="relative px-8 py-7" style={{background:B.primary}}>
+          <div className="relative px-8 py-7" style={{background:B.primaryDeep}}>
             <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
             <div className="flex items-start justify-between gap-6">
               <div>
@@ -334,29 +334,40 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const serverSearching = srv.searching;
   const activePg: Paged<Payment> = srv.supported ? srv.paged : pg;
 
+  /* البطاقات بيضاء كلّها. كانت أربعةُ أسطحٍ ملوّنة — خضراء وبنفسجية
+     وحمراء وخضراء متدرّجة — في صفٍّ واحد، فيبدو الصفّ أربعَ لوحاتٍ لا
+     لوحةً واحدة. ودلالةُ الحالة لم تُفقد: انتقلت من خلفيةِ البطاقة كلّها
+     إلى نقطةٍ صغيرة قبل العنوان، فبقي المعنى وذهب التشتيت.
+     `accent` هي البطاقة المميّزة — تُبرَز بحافةٍ ذهبية لا بلونِ سطحٍ ثانٍ. */
   const kpis = [
-    {label:"إجمالي الفواتير",        value:payments.length,          sub:"كل الطلبات",        bg:"#fff",   br:B.border,    fg:B.black},
-    {label:"مدفوعة",                  value:payments.filter(p=>p.payStatus==="verified").length, sub:"تم التحصيل",  bg:"#E3F3E8",br:"#C4E4CE", fg:"#1E7A44"},
-    {label:"رابط أُرسل",             value:payments.filter(p=>p.payStatus==="sent").length,     sub:"بانتظار الدفع",bg:"#F1E9FA",br:"#D8BBFA",fg:"#7226BE"},
-    {label:"فشل الدفع",              value:payments.filter(p=>p.payStatus==="failed").length,   sub:"يحتاج متابعة",bg:"#FBE6E6",br:"#F3C9C9",fg:"#BE2626"},
-    {label:"الإيرادات المُحصّلة",    value:sar(payments.filter(p=>p.payStatus==="verified").reduce((a,p)=>a+p.total,0)), sub:"تم استلامها",bg:`linear-gradient(135deg,${B.primary},${B.primaryDeep})`,br:"rgba(192,134,44,.3)",fg:B.gold},
+    {label:"إجمالي الفواتير",        value:payments.length,          sub:"كل الطلبات",        dot:null},
+    {label:"مدفوعة",                  value:payments.filter(p=>p.payStatus==="verified").length, sub:"تم التحصيل",  dot:"#1E7A44"},
+    {label:"رابط أُرسل",             value:payments.filter(p=>p.payStatus==="sent").length,     sub:"بانتظار الدفع",dot:"#7226BE"},
+    {label:"فشل الدفع",              value:payments.filter(p=>p.payStatus==="failed").length,   sub:"يحتاج متابعة",dot:"#BE2626"},
+    {label:"الإيرادات المُحصّلة",    value:sar(payments.filter(p=>p.payStatus==="verified").reduce((a,p)=>a+p.total,0)), sub:"تم استلامها",dot:null,accent:true},
   ];
 
   const statusChips = payStatusChips(["verified","sent","failed","none"]);
-  const chipStyle=(v:string)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${statusFilter===v?B.gold:B.border}`,background:statusFilter===v?B.primary:"#fff",color:statusFilter===v?B.gold:B.text2,whiteSpace:"nowrap" as const});
+  const chipStyle=(v:string)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${statusFilter===v?B.gold:B.border}`,background:statusFilter===v?B.gold:"#fff",color:statusFilter===v?B.black:B.text2,whiteSpace:"nowrap" as const});
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background:B.bg}}>
+    <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الفواتير" crumb="إدارة الفواتير" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       {/* Stats */}
       <div className="px-4 md:px-8 pt-4 md:pt-5">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {kpis.map(k=>(
-            <div key={k.label} className="rounded-2xl px-4 py-4 flex flex-col gap-1"
-              style={{background:k.bg,border:`1px solid ${k.br}`,boxShadow:k.fg===B.gold?"0 8px 24px -8px rgba(192,134,44,0.25)":"none"}}>
-              <div className="text-xs font-semibold" style={{color:k.fg===B.gold?B.muted:"#7a7168"}}>{k.label}</div>
-              <div className="font-extrabold text-2xl leading-tight" style={{color:k.fg,fontFamily:"var(--font-app)"}}>{k.value}</div>
-              <div className="text-xs" style={{color:k.fg===B.gold?"#9DBAB6":B.muted}}>{k.sub}</div>
+            <div key={k.label} className="relative overflow-hidden rounded-2xl px-4 py-4 flex flex-col gap-1"
+              style={{background:B.surface,border:`1px solid ${k.accent?"rgba(192,134,44,0.45)":B.border}`,
+                boxShadow:k.accent?"0 8px 24px -12px rgba(192,134,44,0.45)":"0 1px 4px rgba(27,23,18,0.05)"}}>
+              {k.accent&&<span aria-hidden className="absolute top-0 inset-x-0"
+                style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>}
+              <div className="flex items-center gap-1.5 text-xs font-semibold" style={{color:B.muted}}>
+                {k.dot&&<span aria-hidden className="rounded-full flex-shrink-0" style={{width:7,height:7,background:k.dot}}/>}
+                {k.label}
+              </div>
+              <div className="font-extrabold text-2xl leading-tight" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{k.value}</div>
+              <div className="text-xs" style={{color:B.muted}}>{k.sub}</div>
             </div>
           ))}
         </div>
@@ -404,7 +415,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                       </td>
                       <td className="col-action" style={{padding:"14px 16px"}}>
                         <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                          style={{background:B.primary,color:B.cream,border:"none"}}>عرض الفاتورة</button>
+                          style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>
                       </td>
                     </tr>
                   );
@@ -435,7 +446,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 <div className="text-xs mb-3" style={{color:B.muted}}>{p.packageName} · {p.payMethod||"—"}</div>
                 <div className="flex items-center justify-between">
                   <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(p.total)}</div>
-                  <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.primary,color:B.cream,border:"none"}}>عرض الفاتورة</button>
+                  <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>
                 </div>
               </motion.div>
             );

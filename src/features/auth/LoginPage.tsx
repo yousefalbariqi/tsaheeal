@@ -61,9 +61,9 @@ export function LoginPage() {
 
           <button onClick={submit} disabled={busy || !email.trim() || !password}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-extrabold text-sm"
-            style={{ background: busy || !email.trim() || !password ? "#EEECEA" : B.primary, color: busy || !email.trim() || !password ? B.muted : B.cream, border: "none", cursor: busy || !email.trim() || !password ? "not-allowed" : "pointer" }}>
+            style={{ background: busy || !email.trim() || !password ? "#EEECEA" : B.gold, color: busy || !email.trim() || !password ? B.muted : B.black, border: "none", cursor: busy || !email.trim() || !password ? "not-allowed" : "pointer" }}>
             {busy
-              ? <><Spinner size={15} track="rgba(255,255,255,0.4)" color="#fff" />جارٍ الدخول…</>
+              ? <><Spinner size={15} track="rgba(27,23,18,0.15)" color={B.muted} />جارٍ الدخول…</>
               : <><LogIn size={16} />دخول</>}
           </button>
           <div className="flex items-center justify-center gap-1.5 text-xs" style={{ color: B.muted }}>
