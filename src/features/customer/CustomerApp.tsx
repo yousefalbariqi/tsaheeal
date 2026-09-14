@@ -2,9 +2,9 @@ import { cloneElement, isValidElement, useCallback, useEffect, useId, useMemo, u
   type ReactElement, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Users, X, Search, ArrowLeft, Clock, Eye} from "lucide-react";
+import { Check, Users, X, Search, ArrowLeft, Clock, Eye, MapPin} from "lucide-react";
 import { B } from "@/lib/theme";
-import type { Pkg, Trip } from "@/types";
+import type { Pkg, Trip, TravellerType } from "@/types";
 import { type RoomSplit, splitTotal, splitSummary } from "./roomSplit";
 import { Spinner } from "@/components/Spinner";
 import { Toaster, toast } from "sonner";
@@ -13,41 +13,47 @@ import { todayYMD } from "@/lib/utils";
 import { QRBlock } from "@/components/QRBlock";
 import { NationalitySelect } from "@/components/NationalitySelect";
 import { BirthDateSelect } from "@/components/BirthDateSelect";
-import { SearchSelect } from "@/components/SearchSelect";
+import { SearchSelect, searchNorm } from "@/components/SearchSelect";
 import { DOC_TYPES, docTypeDef, docText, type DocType } from "@/data/docTypes";
-import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { WhatsAppFab } from "@/components/WhatsAppFab";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/app/components/ui/input-otp";
 import { LANGS, dirOf, makeT, type Lang } from "./i18n";
 import { SlaCountdown } from "./ui/SlaCountdown";
-import { fetchCatalog, submitBooking, fetchTakenSeats, myBookings, SeatsError, AuthRequiredError, SKIP_SEAT_CHECK, availSeats, holdSeats, releaseSeatHolds, type Catalog, type TrackResult } from "./data";
+import { fetchCatalog, submitBooking, myBookings, SeatsError, AuthRequiredError, availSeats, type Catalog, type TrackResult } from "./data";
 import { isSellable, tripState } from "@/lib/trip";
 import {
   sendOtp, verifyOtp, signInNoOtp, customerAccountExists, signInWithCustomerPassword, signUpCustomer, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
   cachedPhoneLocal, isWhatsappEnabled, authErrorMessage, isFail,
   type CustomerSession,
 } from "./customerAuth";
-import { DirProvider, GrayButton, CTAButton } from "./ui/kit";
-import { FlowScreen, InputStack, StackField, PhoneField, TextLink, Labeled } from "./ui/FlowScreen";
+import { DirProvider, GrayButton, CTAButton, Sheet } from "./ui/kit";
+import { TravellerTypeGrid } from "./ui/TravellerType";
+import { FlowScreen, InputStack, StackField, PhoneField, TextLink } from "./ui/FlowScreen";
 import { C, T, R, G, LTR, SPACE, formatDate } from "./ui/tokens";
 import { AppBar, BottomBar, DesktopNav } from "./ui/chrome";
 import { Timeline } from "./ui/Timeline";
-import { Explore } from "./screens/Explore";
+import { Explore, matchesDestination } from "./screens/Explore";
 import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
 import { FocusConfigure, FocusDetails } from "./screens/FocusBooking";
 import { Account } from "./screens/Account";
-import { parseRoute, pathOf, NEEDS_PACKAGE, type Screen } from "./routing";
+import { parseRoute, pathOf, NEEDS_PACKAGE, HOME, type Screen } from "./routing";
 import { publicSettings } from "@/data/settings";
 import { configureSla } from "./sla";
 import { readDraft, writeDraft, clearDraft, draftHasInput, emptyPax, type Pax } from "./draft";
-import { fetchTravellers, saveTraveller, type Traveller } from "./travellers";
+import { fetchTravellers, saveTraveller } from "./travellers";
 
-/* "listing" هي الصفحة trip + seat + room. الشاشة تُقرأ من المسار
+/* "listing" هي صفحة الباقة والحجوزات. الشاشة تُقرأ من المسار
    (routing.ts) وPax ومسوّدتها في draft.ts. */
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
 const validPhone=(p:string)=>/^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
 const validName=(s:string)=>s.trim().split(/\s+/).filter(Boolean).length>=2&&s.trim().length>=5;
+/** ملف الحساب يحفظ الاسم الأول والأخير، بينما نموذج الحجز يطلب الاسم
+    كاملاً كما في الوثيقة. نفصل آخر كلمة للاسم الأخير بعد تحقق الاسم. */
+const profileName=(full:string)=>{
+  const words=full.trim().split(/\s+/).filter(Boolean);
+  return { firstName:words[0]??"", lastName:words.slice(1).join(" ") };
+};
 
 /* تحقق حقول المعتمر — رسالة لكل حقل تظهر تحته مباشرة.
    جوال المعتمر الأول إلزامي (هو جوال التواصل والتتبّع)، وبقية المرافقين اختياري. */
@@ -138,6 +144,15 @@ function LField({label,hint,error,optional,group,children}:{label:string;hint?:s
   );
 }
 
+/** العدد في الحجز ليس قائمةَ أشخاصٍ تُملأ الآن. نوضح أين ومتى تُستكمل
+    بيانات المرافقين بدلاً من خلق بطاقات فارغة لا يملكها صاحب الحجز. */
+function CompanionNotice({t}:{t:(k:string)=>string}){
+  return <div className="flex flex-col gap-1.5" style={{padding:"14px",borderRadius:R.card,background:"#FFF8E8",border:"1px solid #ECD9A4"}}>
+    <strong style={{...T.body,color:C.ink}}>{t("otherPilgrimsTitle")}</strong>
+    <span style={{...T.small,color:C.ink2,lineHeight:1.75}}>{t("otherPilgrimsNotice")}</span>
+  </div>;
+}
+
 const AR_MONTHS=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 const AR_WEEK=["س","ح","ن","ث","ر","خ","ج"];
 /* بلا مرحلة «مؤكد»: كانت تفصل بين الدفع والتذكرة بخطوة لا يرى المستفيد
@@ -160,7 +175,7 @@ const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل ا�
 - لا يُسترد المبلغ بعد إصدار التذكرة أو انطلاق الرحلة.
 
 4) المقاعد والسكن:
-- يُخصّص المقعد المختار للمستفيد، وقد تُجرى تعديلات تشغيلية طارئة عند الضرورة.
+- يُنظّم فريق تساهيل المقعد المناسب للمستفيد بعد مراجعة الطلب.
 - نوع السكن حسب الباقة والفندق المرتبط بها.
 
 5) المسؤولية:
@@ -174,10 +189,19 @@ const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل ا�
 
 /* شاشات المسار — قاعدتها بيضاء وشريطها السفلي ثابت، فلا خلفية مزخرفة
    ولا فراغ سفلي ولا زر واتساب عائم يغطّي زر الإجراء. */
-const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","seats","review","success"];
+const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","review","success"];
 /* شاشات لها شريط تنقّل سفلي — الزر العائم يرتفع فوقه. */
 const TABBED_SCREENS:Screen[]=["packages","track","profile"];
 const BOOKING_RESUME_KEY="tsaheel.booking.resume";
+/* من أي تجربةٍ دخل المستفيد مسار الحجز. كان في الذاكرة وحدها فيضيع عند
+   إعادة التحميل: من يُحدّث صفحة بيانات المعتمرين ثم يضغط «رجوع» كان
+   يهبط في صفحة التفاصيل القديمة — تجربتان تختلطان في مسارٍ واحد. */
+const BOOKING_ORIGIN_KEY="tsaheel.booking.origin";
+/* الافتراضي «focus»: هي الرئيسية ومسار الحجز الأساسي، فجلسةٌ بلا سجلّ
+   (رابط /book/:id مُلصق) تنتمي إليها لا إلى التجربة المحفوظة. */
+const readBookingOrigin=():"standard"|"focus"=>{
+  try{ return sessionStorage.getItem(BOOKING_ORIGIN_KEY)==="standard"?"standard":"focus"; }catch{ return "focus"; }
+};
 
 export function CustomerApp(){
   /* اللغة تُحفظ: «زر EN يجب أن يحفظ اختيار المستخدم». المتصفّح وحده
@@ -203,14 +227,25 @@ export function CustomerApp(){
   const [persons,setPersons]=useState(1);
   const [split,setSplit]=useState<RoomSplit|null>(null);
   const [bookingMode,setBookingMode]=useState<"full"|"transport">("full");
+  /* العميل يختار المدينة فقط؛ نقطة الانطلاق ووقتها مثبتتان في الرحلة من الإدارة. */
+  const [departureCity,setDepartureCity]=useState("");
+  const [departureCitySheet,setDepartureCitySheet]=useState(false);
+  /* نصّ البحث في ورقة المدن. يُفرَّغ عند كل فتح: ورقةٌ تُفتح على بحثٍ
+     سابق تُخفي مدناً موجودة ويبدو أنها اختفت. */
+  const [depQuery,setDepQuery]=useState("");
+  const [travellerType,setTravellerType]=useState<TravellerType|"">("");
+  const [travellerTypeSheet,setTravellerTypeSheet]=useState(false);
   /* مسار Focus يبقى داخل تجربته عند الرجوع من بيانات المعتمرين؛ لا يعيده
-     إلى صفحة التفاصيل القديمة في الحجز الرئيسي. */
-  const [bookingOrigin,setBookingOrigin]=useState<"standard"|"focus">("standard");
-  const [takenSeats,setTakenSeats]=useState<number[]>([]);
+     إلى صفحة التفاصيل القديمة. ويُكتب في الجلسة لا في الذاكرة وحدها حتى
+     يصمد أمام إعادة التحميل في منتصف المسار. */
+  const [bookingOrigin,setBookingOriginState]=useState<"standard"|"focus">(readBookingOrigin);
+  const setBookingOrigin=useCallback((o:"standard"|"focus")=>{
+    setBookingOriginState(o);
+    try{ sessionStorage.setItem(BOOKING_ORIGIN_KEY,o); }catch{}
+  },[]);
   const [pax,setPax]=useState<Pax[]>([emptyPax()]);
   const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
   const [paxTried,setPaxTried]=useState(false);
-  const [activePax,setActivePax]=useState(0);
   const [termsOpen,setTermsOpen]=useState(false);
   const [agreed,setAgreed]=useState(false);
   const [submitting,setSubmitting]=useState(false);
@@ -224,8 +259,6 @@ export function CustomerApp(){
      لا تُنشئ حقيقةً ثانية. */
   const pkgRef=useRef<Pkg|null>(null);
   pkgRef.current=pkg;
-  /** معرّف رحلة أتت من مسوّدة مستعادة — يُستهلك مرّة فلا تُصفَّر مقاعدها. */
-  const restoredTrip=useRef<string|null>(null);
 
   /* الانتقال بين الشاشات = تغيير المسار. الباقة تُمرَّر صراحةً حين
      تُختار في نفس المُعالِج (setPkg ثم setScreen): حالة React لم تكن
@@ -246,7 +279,7 @@ export function CustomerApp(){
     const id=pkgRef.current?.id??route.packageId;
     if(!id) return;
     const candidate=requested??(screen==="listing"?"passengers":screen);
-    const target=(candidate==="passengers"||candidate==="seats"||candidate==="review")
+    const target=(candidate==="passengers"||candidate==="review")
       ? candidate : "passengers";
     try{ sessionStorage.setItem(BOOKING_RESUME_KEY,pathOf(target,id)); }catch{}
   },[route.packageId,screen]);
@@ -277,9 +310,8 @@ export function CustomerApp(){
   const [ordersLoading,setOrdersLoading]=useState(false);
   const [catErr,setCatErr]=useState(false);
   // شاشة الحساب
-  const [acFirst,setAcFirst]=useState(""); const [acLast,setAcLast]=useState("");
-  const [acBirth,setAcBirth]=useState(""); const [acEmail,setAcEmail]=useState("");
-  const [acTried,setAcTried]=useState(false); const [acSaving,setAcSaving]=useState(false);
+  const [acEmail,setAcEmail]=useState("");
+  const [acSaving,setAcSaving]=useState(false);
   const [acErr,setAcErr]=useState("");
 
   /* بلا catch كان الفشل يترك loading=true إلى الأبد، و`if(loading) return null`
@@ -303,25 +335,12 @@ export function CustomerApp(){
      حتى لا يظهر شريط بيج فوق الرأس في iOS Safari (منطقة شريط الحالة والسحب الزائد). */
   useEffect(()=>{ const prev=document.body.style.background; document.body.style.background="#fff";
     return ()=>{ document.body.style.background=prev; }; },[]);
-  useEffect(()=>{ setPax(prev=>{ const a=[...prev]; while(a.length<persons) a.push(emptyPax()); return a.slice(0,persons); }); },[persons]);
+  /* عدد المقاعد محفوظ في الطلب، لكنه لا يخلق نماذج بيانات للمرافقين.
+     نموذج واحد فقط هو صاحب الحساب/الحجز؛ بيانات الآخرين تُستكمل لاحقاً. */
+  useEffect(()=>{ setPax(prev=>[prev[0]??emptyPax()]); },[persons]);
   /* فئة السكن مستقلة عن عدد معتمري الطلب. تبقى المختارة عند تغيير العدد،
      ويعاد فقط ضرب سعر الفرد في العدد الجديد. */
   useEffect(()=>{ setSplit(s=>s ? ({ ...s, perNight: s.rooms.reduce((sum, r) => sum + r.perNight, 0) * persons }) : null); },[persons]);
-  /* المقاعد المحجوزة: الفشل يعني كروكياً بلا حجوزات — أفضل من شاشة معطّلة،
-     والقاعدة ترفض المقعد المأخوذ في آخر خطوة على أي حال. */
-  useEffect(()=>{ if(!trip) return;
-    /* رحلةٌ استُعيدت من مسوّدة تحتفظ بمقاعدها؛ وتبديل الرحلة يصفّرها. */
-    if(restoredTrip.current===trip.id) restoredTrip.current=null;
-    else setPax(a=>a.map(x=>({...x,seat:null})));
-    fetchTakenSeats(trip.id).then(list=>{
-      setTakenSeats(list);
-      /* مقعد في مسوّدة قد حجزه غيره أثناء الغياب. إسقاطه هنا يُظهر
-         «اختر مقعداً» بدل أن يصل الطلب للقاعدة فتردّه في آخر خطوة. */
-      const taken=new Set(list);
-      setPax(a=>a.some(x=>x.seat!=null&&taken.has(x.seat))
-        ? a.map(x=>x.seat!=null&&taken.has(x.seat)?{...x,seat:null}:x) : a);
-    }).catch(e=>{ console.error("[fetchTakenSeats]",e); setTakenSeats([]); });
-  },[trip?.id]);
   useEffect(()=>()=>{ if(resendTimer.current) clearInterval(resendTimer.current); },[]);
 
   /* معاينة الموظف: /p/PKG-3?preview=1
@@ -371,6 +390,49 @@ export function CustomerApp(){
      يختفي: اختفاؤه يجعل يوماً فاتت مقاعده يبدو يوماً لا تسير فيه الباقة أصلاً.
      الملغاة والمؤرشفة تبقى مستبعدة — عرضها ضجيج لا معلومة. */
   const pkgTripsShown=(p:Pkg)=>cat.trips.filter(x=>{const st=tripState(x);return x.packageId===p.id && (st==="open"||st==="full") && x.departureDate>=today;}).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
+  /* المدن ليست قائمةً في الكود: تُجمع من مدن الرحلات نفسها، وهي تُحدَّد
+     في لوحة الإدارة عند إنشاء الرحلة (مدينة + نقطة + وقت). فمدينةٌ بلا
+     رحلةٍ قادمة لا تظهر أصلاً — ولا يقع العميل على خيارٍ مآله فراغ.
+     قبل اختيار الباقة يُقرأ المصدر من كل باقات الوجهة، وبعده من الباقة
+     وحدها: في الحالتين ما يُعرض هو ما يمكن حجزه فعلاً. */
+  const departureCities=useMemo(()=>{
+    const source=screen==="focus"
+      ? (city?activePkgs.filter(p=>matchesDestination(p,city)):[])
+      : (pkg?[pkg]:[]);
+    return [...new Set(source.flatMap(p=>pkgTrips(p)).map(x=>x.departureCity?.trim())
+      .filter((x):x is string=>!!x))].sort((a,b)=>a.localeCompare(b,"ar"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[screen,city,activePkgs,pkg,cat.trips,today]);
+  /* ── متى تُسأل مدينة الانطلاق؟ ──
+     في الرئيسية: حين تكون للوجهة المختارة مدنُ انطلاقٍ مسجّلة — لا حين
+     تكون الوجهة «مكة والمدينة» وحدها. ذلك الربط قاعدةُ الصفحة القديمة،
+     ونقلُه كما هو أسقط الخطوة عن رحلات مكة وهي اليوم كلُّ ما يُسيَّر:
+     الشرط يتحقّق لوجهةٍ بلا باقة، ولا يتحقّق للوجهة التي فيها الرحلات.
+     المصدر هو الرحلات نفسها: إن سجّلت لها الإدارة مدناً، سُئل العميل.
+     وفي الصفحة القديمة تبقى القاعدة كما كانت — لا تُمسّ. */
+  const needsDepartureCity=screen==="focus"
+    ? departureCities.length>0
+    : (!!pkg&&pkg.destination.trim()==="مكة والمدينة");
+  /* نتائج البحث في ورقة المدن — بالتطبيع العربي نفسه الذي يستعمله بقية
+     البحث في الواجهة، فلا يجد حقلٌ ما لا يجده آخر. */
+  const depMatches=useMemo(()=>{
+    const q=searchNorm(depQuery);
+    return q?departureCities.filter(c=>searchNorm(c).includes(q)):departureCities;
+  },[departureCities,depQuery]);
+  const pickDepartureCity=useCallback((dep:string)=>{
+    /* تغيير المدينة يُبطل الرحلة المختارة: هي رحلة المدينة السابقة.
+       وفي الرئيسية لا رحلة بعد، فلا شيء يُفقد. */
+    setDepartureCity(dep); setTrip(null); setTravellerType(""); setDepartureCitySheet(false);
+  },[]);
+  const tripsForDepartureCity=(list:Trip[])=>needsDepartureCity
+    ? list.filter(x=>x.departureCity===departureCity)
+    : list;
+  /* الرحلة التي تُبنى عليها صفحتا Focus: المختارة، وإلا أقرب رحلةٍ
+     قابلة للحجز. تُحسب هنا مرّةً فيقرؤها الرسمُ وحارسُ المسار من مصدرٍ
+     واحد — وإلا حَرَسَ الحارسُ شرطاً غير الذي يرسم به الشرطُ الآخر. */
+  const focusTrip=useMemo(()=>trip??(pkg?pkgTrips(pkg)[0]??null:null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trip,pkg,cat.trips]);
   /* وسيلة النقل: الرحلة المختارة أولاً، وإلا افتراضي الباقة —
      وإلا اختفى قسم النقل كلياً حتى يختار المستفيد تاريخاً، وهو يحتاجه ليقرر. */
   const transport=cat.transports.find(x=>x.id===(trip?.transportId||pkg?.transportId));
@@ -384,7 +446,6 @@ export function CustomerApp(){
   const total=bookingMode==="transport"
     ? persons * (pkg?.transportOnlyPrice ?? 0)
     : split?splitTotal(split,nights):(trip?.price??0)*persons;
-  const takenSet=useMemo(()=>new Set(takenSeats),[takenSeats]);
 
   /* ── مزامنة الباقة مع المسار ──
      المسار قد يتغيّر بلا نقرة: زر الرجوع، رابط مُلصق، إعادة تحميل.
@@ -398,6 +459,38 @@ export function CustomerApp(){
     if(found) setPkg(found);
   },[loading,route.packageId,activePkgs,pkg?.id]);
 
+  /* الاختيار يُمسح إن لم تعد الباقة تنطلق منه — لا عند كل تغيّر باقة.
+     في المسار الجديد تُختار المدينة قبل الباقة (خطوةٌ بعد الوجهة)،
+     فالمسح الشامل كان يُلغي اختيار العميل في اللحظة التي يفتح فيها
+     الرحلة التي اختارها بنفسه من تلك المدينة. */
+  useEffect(()=>{
+    /* بلا باقة لا شيء يُقاس عليه — والمدينة هنا اختيارُ خطوة الوجهة في
+       الرئيسية، يسبق الباقة ولا يُمحى بها. */
+    if(!pkg) return;
+    setDepartureCity(c=>c&&pkgTrips(pkg).some(x=>x.departureCity?.trim()===c)?c:"");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[pkg?.id,cat.trips]);
+  /* الورقة تُفتح من تلقائها حيث تكون المدينة مطلوبةً ولم تُختر: بعد
+     اختيار الوجهة في الرئيسية، وفي صفحة الباقة القديمة. خطوةٌ واحدة
+     تأتي إلى العميل، لا حقلٌ يبحث عنه في الصفحة. */
+  useEffect(()=>{
+    const atChoice=(screen==="focus"&&!!city)||screen==="listing";
+    /* ورقةٌ بلا خيارات لا تُفتح من تلقائها: لو لم تُسجَّل مدن الانطلاق
+       بعد، تبقى الرحلات معروضةً بلا تصفية بدل نافذةٍ فارغة تستقبل
+       الزائر على الصفحة الرئيسية. الرسالة تبقى في متناوله من الشريط. */
+    if(atChoice&&needsDepartureCity&&!departureCity&&departureCities.length>0) setDepartureCitySheet(true);
+  },[screen,city,needsDepartureCity,departureCity,departureCities.length]);
+  /* البحث يُفرَّغ عند كل فتح: ورقةٌ تُفتح على بحثٍ سابق تُخفي مدناً
+     موجودة، فيبدو للعميل أنها اختفت من الخدمة. */
+  useEffect(()=>{ if(departureCitySheet) setDepQuery(""); },[departureCitySheet]);
+  /* في صفحتي Focus تُقرأ المدينة من الرحلة المعروضة إن غابت — بعد إعادة
+     تحميل في منتصف المسار مثلاً. الرحلة تحمل مدينتها من الإدارة، فلا
+     يُسأل العميل عمّا أجاب عنه ضمناً حين اختار الرحلة. */
+  useEffect(()=>{
+    if((screen==="focusListing"||screen==="focusConfigure")&&!departureCity&&focusTrip?.departureCity)
+      setDepartureCity(focusTrip.departureCity.trim());
+  },[screen,departureCity,focusTrip]);
+
   /* ── استعادة المسوّدة ──
      مرّة واحدة عند أول جهوز للكتالوج: بعدها الحالة في الذاكرة أحدث من
      المسوّدة، فإعادة تطبيقها تُرجع المستفيد خطوةً إلى الوراء. */
@@ -410,11 +503,8 @@ export function CustomerApp(){
     const d=pid?readDraft():null;
     if(d&&d.packageId===pid){
       const tr=d.tripId?cat.trips.find(x=>x.id===d.tripId)??null:null;
-      /* الرحلة المستعادة لا تُصفَّر مقاعدها — أثر [trip?.id] أدناه يصفّرها
-         عند كل تبديل رحلة، وهو صحيح للتبديل خطأٌ للاستعادة. */
-      if(tr) restoredTrip.current=tr.id;
       setTrip(tr); setPersons(d.persons); setSplit(d.split); setBookingMode(d.bookingMode ?? "full");
-      setPax(d.pax); setAgreed(d.agreed); setActivePax(d.activePax);
+      setPax([d.pax[0]??emptyPax()]); setAgreed(d.agreed); setTravellerType(d.travellerType);
     }
     setRouteReady(true);
   },[loading,route.packageId,cat.trips]);
@@ -425,8 +515,16 @@ export function CustomerApp(){
   useEffect(()=>{
     if(!routeReady||!pkg||bookingNo) return;
     if(!draftHasInput(pax,trip?.id??null,split)) return;
-    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,bookingMode,pax,agreed,activePax});
-  },[routeReady,pkg?.id,trip?.id,persons,split,bookingMode,pax,agreed,activePax,bookingNo]);
+    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,bookingMode,travellerType,pax,agreed});
+  },[routeReady,pkg?.id,trip?.id,persons,split,bookingMode,travellerType,pax,agreed,bookingNo]);
+
+  /* ── العناوين القديمة ──
+     /focus صارت هي «/». تُرسَم الصفحة نفسها ثم يُصحَّح العنوان استبدالاً:
+     رابطٌ أُرسل أيام التجربة يصل إلى الرئيسية، ولا يبقى عنوانان لصفحةٍ
+     واحدة. أثرٌ مستقل عن الحرّاس لأنه لا يتوقّف على وصول الكتالوج. */
+  useEffect(()=>{
+    if(route.legacyPath) navigate(pathOf(route.screen,route.packageId),{replace:true});
+  },[route.legacyPath,route.screen,route.packageId,navigate]);
 
   /* ── حرّاس المسار ──
      مسار لا يمكن رسمه كان يُعيد لا شيء: صفحة بيضاء صامتة. الآن
@@ -440,144 +538,58 @@ export function CustomerApp(){
     if(catErr) return;
     /* مسار مجهول: يُصحَّح العنوان إلى «/» بدل إبقاء رابط تالف في
        شريط العنوان يُشارَك ويُحفظ كأنه صحيح. */
-    if(route.unknown){ replaceScreen("packages",""); return; }
+    if(route.unknown){ replaceScreen(HOME,""); return; }
     const pid=route.packageId;
-    if(pid&&!activePkgs.some(p=>p.id===pid)){ replaceScreen("packages",""); return; }
-    if(NEEDS_PACKAGE.includes(screen)&&!pkg){ replaceScreen("packages",""); return; }
-    if((screen==="seats"||screen==="review")&&!trip){ replaceScreen("listing"); return; }
+    if(pid&&!activePkgs.some(p=>p.id===pid)){ replaceScreen(HOME,""); return; }
+    if(NEEDS_PACKAGE.includes(screen)&&!pkg){ replaceScreen(HOME,""); return; }
+    /* صفحتا Focus تُبنيان على رحلةٍ بعينها: بلا رحلةٍ قابلة للحجز كان
+       شرط الرسم يُرجع لا شيء — صفحة بيضاء صامتة لرابطٍ مُشارَك انتهت
+       مواعيد باقته. الآن يعود الزائر إلى الرئيسية ليختار من المتاح. */
+    if((screen==="focusListing"||screen==="focusConfigure")&&!focusTrip){ replaceScreen(HOME,""); return; }
+    if(screen==="review"&&!trip){ replaceScreen(bookingOrigin==="focus"?"focusListing":"listing"); return; }
     /* شاشة النجاح بلا رقم طلب: تحديثٌ بعد الإرسال. الطلب محفوظ فعلاً،
        فالوجهة «طلباتي» لا نموذج فارغ. */
-    if(screen==="success"&&!bookingNo){ replaceScreen(session?"track":"packages",""); return; }
+    if(screen==="success"&&!bookingNo){ replaceScreen(session?"track":HOME,""); return; }
     if(screen==="otp"&&!validPhone(loginPhone)){ replaceScreen("login"); return; }
     /* الجلسة تُقرأ بوعد — قبل جهوزها لا يُطرد أحد من مسار محمي. */
     if(!sessionReady) return;
-    if(!session&&(screen==="passengers"||screen==="seats"||screen==="review")){
+    if(!session&&(screen==="passengers"||screen==="review")){
       rememberBookingResume(screen); setIntent("flow"); replaceScreen("login"); return;
     }
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
-  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
+  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,focusTrip,bookingOrigin,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
 
-  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+  /* النافذة الإجباريّة حالةٌ محسوبة لا حدثٌ يُطلق.
 
-  // ── تحقق خطوة بيانات المعتمرين ──
+     كانت تُفتح بنداءٍ في لحظة اختيار الرحلة، ثم حارسٌ يُغلقها إن لم
+     تكن الشاشة شاشةَ حجز. والاثنان يتسابقان: `setScreen` يُحدّث المسار،
+     و`screen` يُقرأ من المسار، فتأتي رايةُ الفتح في رسمةٍ والشاشةُ
+     الجديدة في التي بعدها — فيرى الحارس شاشةً قديمة ويُغلق ما فُتح للتوّ.
+
+     المحسوب لا يتسابق: «أنت في شاشة حجز، ومعك رحلة، ولم تختر بعد» ⇒
+     النافذة مفتوحة. ومغادرةُ الشاشة تُبطل الشرط فتُغلق وحدها — فلا
+     تبقى نافذةٌ لا تُغلق معلّقةً فوق الرئيسية بعد زرّ الرجوع. */
+  const travellerScreen=screen==="listing"||screen==="focusListing"||screen==="focusConfigure";
+  /* شاشات Focus تعمل على `focusTrip` (يرجع لأول رحلة عند فتح رابطٍ
+     مباشر)، والشاشة القديمة على `trip` المختار في تقويمها. */
+  const travellerTrip=(screen==="focusListing"||screen==="focusConfigure")?focusTrip:trip;
+  const mustPickTraveller=travellerScreen&&!!pkg&&!!travellerTrip&&!travellerType;
+  const travellerSheetOpen=mustPickTraveller||travellerTypeSheet;
+
+  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+
+  // ── تحقق نموذج صاحب الحجز ──
   const paxErrs=useMemo(()=>pax.map((p,i)=>paxErrors(p,i===0,t,lang)),[pax,t,lang]);
   const paxValid=paxErrs.every(e=>Object.keys(e).length===0);
   const setPaxField=(i:number,k:keyof Pax,v:string)=>setPax(a=>a.map((x,j)=>j===i?{...x,[k]:v}:x));
   const touch=(i:number,f:PaxField)=>setPaxTouched(s=>({...s,[`${i}.${f}`]:true}));
   const errOf=(i:number,f:PaxField)=>(paxTried||paxTouched[`${i}.${f}`])?paxErrs[i]?.[f]:undefined;
-  function goSeats(){
+  function goReview(){
     setPaxTried(true);
     if(!paxValid){ window.scrollTo({top:0,behavior:"smooth"}); return; }
-    setActivePax(pax.findIndex(x=>x.seat==null)>=0?pax.findIndex(x=>x.seat==null):0);
     window.scrollTo({top:0});
-    setScreen("seats");
+    setScreen("review");
   }
-
-  /* ── توزيع المقاعد بالاسم: يختار المستفيد المعتمر ثم مقعده، فينتقل تلقائياً للتالي.
-        المقعد مرتبط بالشخص لا بالحجز، فلا يلتبس على الموظف من يجلس أين. ── */
-  const seats=useMemo(()=>pax.map(x=>x.seat).filter((n):n is number=>n!=null),[pax]);
-  const seatsDone=pax.length>0&&pax.every(x=>x.seat!=null);
-
-  /* ── الحجز المؤقت للمقاعد (20260917) ──
-     كل تغييرٍ في المختار يُحجز عشر دقائق باسم الجلسة، ويُجدَّد ما دام
-     المستفيد في مسار الحجز، ويُحرَّر عند خروجه. المقعد الذي أخذه غيره
-     أثناء التردّد يُسقَط من بطاقته فوراً ويُقال له، بدل رفضٍ في آخر خطوة. */
-  const [heldUntil,setHeldUntil]=useState<string|null>(null);
-  const [holdMsg,setHoldMsg]=useState("");
-  const seatsKey=seats.slice().sort((a,b)=>a-b).join(",");
-  const inFlow=screen==="seats"||screen==="review"||screen==="passengers";
-  useEffect(()=>{
-    if(!trip||!session||!inFlow){ return; }
-    if(!seats.length){ setHeldUntil(null); return; }
-    let alive=true;
-    const run=async()=>{
-      const r=await holdSeats(trip.id,seats);
-      if(!alive) return;
-      if(r.fail==="unsupported"||r.fail==="other"){ setHeldUntil(null); return; }
-      if(r.fail){
-        const n=r.seat;
-        setTakenSeats(prev=>n!=null&&!prev.includes(n)?[...prev,n]:prev);
-        setPax(a=>a.map(x=>x.seat===n?{...x,seat:null}:x));
-        setHoldMsg(r.fail==="seat_held"?t("seatHeldByOther"):`${t("errSeats")} (${n})`);
-        return;
-      }
-      setHoldMsg(""); setHeldUntil(r.expiresAt);
-    };
-    const first=setTimeout(run,500);
-    const renew=setInterval(run,4*60_000);
-    return ()=>{ alive=false; clearTimeout(first); clearInterval(renew); };
-  },[trip?.id,seatsKey,session?.userId,inFlow]);
-  useEffect(()=>{
-    /* الخروج من المسار يحرّر المقاعد لغيرك — لا انتظار عشر دقائق. */
-    if(inFlow||!trip||!session) return;
-    setHeldUntil(null);
-    void releaseSeatHolds(trip.id);
-  },[inFlow,trip?.id,session?.userId]);
-  useEffect(()=>{
-    if(!heldUntil) return;
-    const id=setInterval(()=>{ if(Date.parse(heldUntil)<=Date.now()){ setHeldUntil(null); setHoldMsg(t("seatHoldExpired")); if(trip) fetchTakenSeats(trip.id).then(setTakenSeats).catch(()=>{}); } },15_000);
-    return ()=>clearInterval(id);
-  },[heldUntil,trip?.id]);
-  function assignSeat(n:number){
-    if(takenSet.has(n)) return;
-    setPax(a=>{
-      const owner=a.findIndex(x=>x.seat===n);
-      const next=a.map((x,j)=>{
-        if(j===activePax) return {...x,seat:x.seat===n?null:n};      // النقر على نفس المقعد يلغيه
-        if(owner===j) return {...x,seat:null};                        // مقعد مأخوذ من مرافق يُنقل
-        return x;
-      });
-      const after=next.findIndex((x,j)=>j>activePax&&x.seat==null);
-      const any=next.findIndex(x=>x.seat==null);
-      setActivePax(after>=0?after:any>=0?any:activePax);
-      return next;
-    });
-  }
-
-  /* ── دفتر المسافرين داخل خطوة بيانات المعتمرين ──
-     الدفتر كان يُقرأ ويُكتب في صفحة «حسابي» وحدها، وهي أبعد مكان عن
-     الحاجة إليه: المستفيد يكتب أسماء مرافقيه وأرقام هوياتهم من جديد في
-     كل حجز، والدفتر يملأ بلا أن يوفّر إدخالاً واحداً. */
-  const [book,setBook]=useState<Traveller[]>([]);
-  useEffect(()=>{
-    if(screen!=="passengers"||!session) return;
-    let alive=true;
-    fetchTravellers().then(r=>{ if(alive) setBook(r); })
-      .catch(e=>{ console.error("[travellers] تعذّر جلب الدفتر:",e); });
-    return ()=>{ alive=false; };
-  },[screen,session?.userId]);
-
-  /** يحوّل سجل الدفتر إلى الحالة نفسها التي تقرؤها حقول النموذج. لا نكتفي
-      بعرض اسم السجل: إن كانت قيمة غير صالحة فلن تبدو الحقول مكتملة ثم
-      يرفضها التحقق عند الضغط على «التالي». */
-  const travellerPax=(current:Pax,i:number,tr:Traveller):Pax=>{
-    const docType=tr.docType&&docTypeDef(tr.docType)?tr.docType:"";
-    return {...current,
-      name:tr.name.trim(), docType, idNumber:tr.idNumber.trim(),
-      nationality:tr.nationality, gender:tr.gender, ageGroup:tr.ageGroup,
-      birthDate:tr.birthDate, phone:i===0?(session?.phoneLocal??current.phone):tr.phone.replace(/\s/g, ""),
-      /* المقعد ملكُ البطاقة لا ملكُ الشخص في الدفتر — لا يُنقل. */
-    };
-  };
-  const canApplyTraveller=(i:number,tr:Traveller)=>{
-    const current=pax[i]??emptyPax();
-    return Object.keys(paxErrors(travellerPax(current,i,tr),i===0,t,lang)).length===0;
-  };
-
-  /** تعبئة بطاقة معتمر من الدفتر بعد اجتياز التحقق على الحالة الفعلية. */
-  const applyTraveller=(i:number,tr:Traveller)=>{
-    const next=travellerPax(pax[i]??emptyPax(),i,tr);
-    if(Object.keys(paxErrors(next,i===0,t,lang)).length){
-      /* دفاعٌ ثانٍ إن تغيّر السجل بين الرسم والضغط؛ لا نعرض تعبئة مزيفة. */
-      toast.error(t("fillFirst"));
-      return;
-    }
-    setPax(a=>a.map((x,j)=>j===i?{...next,seat:x.seat}:x));
-    /* الحقول تُعدّ ملموسة لأن قيمها أصبحت في Form State فعلاً. */
-    setPaxTouched(s=>({...s,[`${i}.name`]:true,[`${i}.docType`]:true,[`${i}.idNumber`]:true,
-      [`${i}.nationality`]:true,[`${i}.birthDate`]:true,[`${i}.phone`]:true,
-      [`${i}.gender`]:true,[`${i}.ageGroup`]:true}));
-  };
 
   /** يغذّي الدفتر من الحجز. المطابقة برقم الوثيقة — الاسم يُكتب بصيغ
       مختلفة في كل مرة، فالمطابقة به تُنشئ نسخاً للشخص نفسه. */
@@ -610,28 +622,35 @@ export function CustomerApp(){
     /* الطلب يُنشأ بجوال موثّق — الجلسة قد تنتهي بين الخطوات. */
     if(!session){ setErrMsg(t("errLoginRequired")); openLogin("flow"); return; }
     if(!agreed){ setErrMsg(t("iAgreeRead")); return; }
+    /* الرجوع يتبع المسار الذي جاء منه: قذفُ من دخل من الرئيسية (Focus)
+       إلى شاشة `listing` القديمة كان ينقله بين تصميمين في منتصف حجزه. */
+    if(!travellerType){
+      setErrMsg(t("travellerTypeRequired"));
+      setScreen(bookingOrigin==="focus"?"focusListing":"listing",pkg.id);
+      return;
+    }
     if(!paxValid){ setErrMsg(t("required")); setPaxTried(true); setScreen("passengers"); return; }
-    if(!seatsDone){ setErrMsg(t("pickSeatsHint").replace("{n}",String(persons))); setScreen("seats"); return; }
     setSubmitting(true);
     try{
       const id=await submitBooking({
-        tripId:trip.id, packageId:pkg.id, clientName:pax[0].name, clientPhone:pax[0].phone.replace(/\s/g,""),
+        tripId:trip.id, packageId:pkg.id, clientName:pax[0].name, clientPhone:session.phoneLocal.replace(/\s/g,""),
         /* النصّ يُبنى بالعربية دائماً لا بلغة الواجهة: لوحة الموظف والتذاكر
            وصفحة الدفع تعرضه كما هو، فحجز بالإنجليزية كان يكتب فيها سطراً
            إنجليزياً وسط جدول عربي. والغرف تُحفظ مفصّلة بجواره. */
-        roomType:bookingMode==="transport"?"مواصلات فقط":split?splitSummary(split,makeT("ar")):"", persons, total, seats,
+        roomType:bookingMode==="transport"?"مواصلات فقط":split?splitSummary(split,makeT("ar")):"", persons, travellerType, total,
         bookingMode: bookingMode === "transport" ? "transport_only" : "full_package",
         rooms:bookingMode==="transport"?undefined:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons,perNight:r.perNight})),
-        pilgrims:pax.map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
+        /* لا تُنشأ سجلات وهمية للمرافقين: سجلّ صاحب الحجز وحده الآن. */
+        pilgrims:[pax[0]].map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
-          phone:p.phone.replace(/\s/g,""),seat:p.seat??undefined})),
+          phone:(p.phone||session.phoneLocal).replace(/\s/g,"")})),
       });
       /* المسوّدة تُمحى قبل الانتقال: الطلب صار في القاعدة، وبقاؤها
          يعيد المستفيد إلى نموذج مملوء لطلب أرسله. */
       clearDraft();
       setBookingNo(id); setSubmittedAt(Date.now()); setScreen("success");
       /* دفتر المسافرين يتغذّى من كل حجز — لا يُنتظر ولا يُعطّل النجاح. */
-      void rememberTravellers(pax);
+      void rememberTravellers([pax[0]]);
     }catch(e){
       /* أي خطأ آخر كان يُعرض كـ«لم تعد المقاعد كافية» فيضيّع سببه الحقيقي
          (رحلة محذوفة، صلاحية، شبكة). نعرض نصّه كما هو ونسجّله. */
@@ -660,10 +679,8 @@ export function CustomerApp(){
         name: p.name.trim()?p.name:full,
         birthDate: p.birthDate||session.profile?.birthDate||"",
         phone: session.phoneLocal };
-      /* قد تصل مسوّدة بعد الجلسة فتكتب جوالاً فارغاً فوق الحالة، بينما
-         الواجهة تعرض جوال الجلسة المقفَل. لا نترك العرض والتحقق يقرآن
-         مصدرين مختلفين: نعيد الجوال إلى Form State ونُبقي المرجع نفسه
-         إن لم يتغير شيء لتفادي دورة تحديث زائفة. */
+      /* يبقى رقم الجوال في Form State للحفظ والتحقق فقط؛ لا نعرضه ثانية
+         داخل نموذج صاحب الحجز بعد أن أُدخل في خطوة الدخول. */
       if(next.name===p.name&&next.birthDate===p.birthDate&&next.phone===p.phone) return a;
       return [next,...a.slice(1)];
     });
@@ -680,7 +697,7 @@ export function CustomerApp(){
     let saved="";
     try{ saved=sessionStorage.getItem(BOOKING_RESUME_KEY)??""; sessionStorage.removeItem(BOOKING_RESUME_KEY); }catch{}
     const savedRoute=saved?parseRoute(saved):null;
-    if(savedRoute?.packageId&&(savedRoute.screen==="passengers"||savedRoute.screen==="seats"||savedRoute.screen==="review")){
+    if(savedRoute?.packageId&&(savedRoute.screen==="passengers"||savedRoute.screen==="review")){
       navigate(saved);
       return;
     }
@@ -690,9 +707,9 @@ export function CustomerApp(){
   /** بعد التحقق: من ملفه ناقص يُكمل حسابه، وإلا يعود لِما جاء منه. */
   function afterAuth(s:CustomerSession){
     if(!s.profile?.complete){
-      setAcFirst(s.profile?.firstName??""); setAcLast(s.profile?.lastName??"");
-      setAcBirth(s.profile?.birthDate??""); setAcEmail(s.profile?.email??"");
-      setAcTried(false); setAcErr(""); setScreen("account"); return;
+      /* الصفحة التالية هي نموذج صاحب الحجز الكامل، لا ملفاً مختصراً ثم
+         نموذج «معتمر 1» مكرراً. */
+      setAcEmail(s.profile?.email??""); setAcErr(""); setScreen("account"); return;
     }
     continueAfterAuth();
   }
@@ -758,16 +775,20 @@ export function CustomerApp(){
     setSession(r.session); afterAuth(r.session);
   }
   async function submitAccount(){
-    setAcTried(true); setAcErr("");
-    if(!acFirst.trim()||!acLast.trim()||!acBirth) return;
+    setPaxTried(true); setAcErr("");
+    const owner=pax[0]??emptyPax();
+    if(Object.keys(paxErrors(owner,true,t,lang)).length) return;
+    const {firstName,lastName}=profileName(owner.name);
     setAcSaving(true);
-    const r=await saveProfile({firstName:acFirst,lastName:acLast,birthDate:acBirth,email:acEmail});
+    const r=await saveProfile({firstName,lastName,birthDate:owner.birthDate,email:acEmail||session?.profile?.email||""});
     setAcSaving(false);
     if(isFail(r)){ setAcErr(authErrorMessage(r,t)); return; }
     setSession(s=>s?{...s,profile:r.profile}:s);
-    continueAfterAuth();
+    /* بيانات الحساب هي بيانات المعتمر الأساسي؛ لا نفتح له نموذجاً ثانياً. */
+    void rememberTravellers([owner]);
+    setScreen("review");
   }
-  async function logout(){ await clearSession(); setSession(null); setMyOrders(null); setScreen("packages"); }
+  async function logout(){ await clearSession(); setSession(null); setMyOrders(null); setScreen(HOME); }
 
   /** بوابة الدخول بين صفحة التفاصيل وبيانات المعتمرين. */
   function goAfterListing(){
@@ -793,6 +814,12 @@ export function CustomerApp(){
   const primaryBtn=(on=true)=>({background:on?G.gold:"#d6cfc6",color:on?B.black:"#a09688",border:"none",cursor:on?"pointer":"not-allowed"} as const);
 
   const isFlow=FLOW_SCREENS.includes(screen);
+  /* رئيسيةُ الشاشة الحالية. للموقع رئيسيتان ما دام القديم محفوظاً: من
+     فتح الاستكشاف القديم على مساره الداخلي يبقى فيه حين يضغط الشعار أو
+     تبويب «استكشاف»، وما عداه — والطلبات والحساب مشتركة بين التجربتين —
+     يعود إلى الرئيسية الجديدة. بلا هذا كان تبويب «استكشاف» من «طلباتي»
+     يقذف زائر Focus إلى التصميم القديم. */
+  const homeScreen:Screen = (screen==="packages"||screen==="listing") ? "packages" : HOME;
   /* الحساب والحجوزات جزءٌ من الواجهة الجديدة كذلك؛ لا تعود لهما خلفية
      الحرم القديمة أو لون قاعدة مختلف حين ينتقل العميل بين التبويبات. */
   const whiteBase=isFlow||screen==="packages"||screen==="focus"||screen==="focusListing"||screen==="focusConfigure"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
@@ -840,7 +867,7 @@ export function CustomerApp(){
       )}
       <div className="relative flex flex-col flex-1" style={{zIndex:1}}>
       {!isFlow && (screen === "packages" || screen === "listing" || screen === "track" || screen === "profile" || screen === "custom") &&
-        <DesktopNav screen={screen} onNav={setScreen} lang={lang} setLang={setLang} t={t}
+        <DesktopNav screen={screen} home={homeScreen} onNav={setScreen} lang={lang} setLang={setLang} t={t}
           cities={cities} city={city} setCity={setCity}
           signedIn={!!session} onLogin={()=>openLogin("track")} onSignup={()=>openLogin("track")}/>
       }
@@ -855,16 +882,19 @@ export function CustomerApp(){
           tripsOf={pkgTrips}
           /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
              وتوزيع غرفها إلى نموذج باقة أخرى. */
-          onOpen={p=>{setBookingOrigin("standard");clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("listing",p.id);}}
+          onOpen={p=>{setBookingOrigin("standard");clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setScreen("listing",p.id);}}
           onCustom={()=>setScreen("custom")}
           signedIn={!!session}
           onAccount={()=>session ? setScreen("profile") : openLogin("track")}
           t={t} lang={lang} setLang={setLang}
         />
-        <BottomBar screen={screen} onNav={setScreen} t={t}/>
+        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
       </>}
 
-      {/* نسخة تجريبية منفصلة: /focus. لا تغيّر شاشة الاستكشاف الرئيسية (/). */}
+      {/* ═══ الرئيسية — تجربة Focus على «/» ═══
+          نفس مكوّن الاستكشاف بخاصيّة destinationFirst: الوجهة أولاً ثم
+          الرحلات. لم تُمسّ كتلة الاستكشاف القديم أعلاه ولا خُلطت عناصرها
+          هنا؛ هي محفوظة كما هي على /classic حتى يُتأكّد من استقرار هذه. */}
       {screen==="focus"&&<>
         <Explore
           packages={activePkgs}
@@ -872,11 +902,18 @@ export function CustomerApp(){
           transports={cat.transports}
           cities={cities} city={city} setCity={nextCity=>{
             setCity(nextCity);
+            /* الوجهة تغيّرت ⇒ مدينة انطلاقٍ اختيرت لوجهةٍ أخرى لا تُحمل
+               معها: قد لا تُسيّر هذه الوجهة رحلةً منها أصلاً. */
+            setDepartureCity("");
             if(!nextCity){ setPkg(null); setTrip(null); setScreen("focus"); }
           }}
           tripsOf={pkgTrips}
           destinationFirst
-          onOpen={(p,chosenTrip)=>{setBookingOrigin("focus");clearDraft();setPkg(p);setTrip(chosenTrip??pkgTrips(p)[0]??null);setPersons(1);setSplit(null);setBookingMode("full");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setActivePax(0);setAgreed(false);setScreen("focusListing",p.id);}}
+          departureCity={departureCity} departureRequired={needsDepartureCity}
+          onPickDepartureCity={()=>setDepartureCitySheet(true)}
+          /* مدينة الانطلاق لا تُمسح هنا: اختارها العميل قبل الرحلة،
+             والرحلة المفتوحة تنطلق منها. مسحُها كان يعني سؤاله مرّتين. */
+          onOpen={(p,chosenTrip)=>{setBookingOrigin("focus");clearDraft();setPkg(p);setTrip(chosenTrip??pkgTrips(p)[0]??null);setPersons(1);setSplit(null);setBookingMode("full");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setScreen("focusListing",p.id);}}
           onCustom={()=>setScreen("custom")}
           signedIn={!!session}
           onAccount={()=>session ? setScreen("profile") : openLogin("track")}
@@ -885,14 +922,16 @@ export function CustomerApp(){
       </>}
 
       {/* صفحات التفاصيل والتخصيص الخاصة بتجربة Focus فقط. */}
-      {screen==="focusListing"&&pkg&&(trip??pkgTrips(pkg)[0])&&
-        <FocusDetails pkg={pkg} trip={trip??pkgTrips(pkg)[0]} hotel={hotel} transport={transport} lang={lang}
+      {screen==="focusListing"&&pkg&&focusTrip&&
+        <FocusDetails pkg={pkg} trip={focusTrip} hotel={hotel} transport={transport} lang={lang}
           persons={persons} setPersons={setPersons} split={split} setSplit={setSplit}
+          travellerType={travellerType} setTravellerType={setTravellerType}
           onBack={()=>setScreen("focus")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
       }
-      {screen==="focusConfigure"&&pkg&&(trip??pkgTrips(pkg)[0])&&
-        <FocusConfigure pkg={pkg} trip={trip??pkgTrips(pkg)[0]} hotel={hotel} transport={transport}
+      {screen==="focusConfigure"&&pkg&&focusTrip&&
+        <FocusConfigure pkg={pkg} trip={focusTrip} hotel={hotel} transport={transport}
           persons={persons} setPersons={setPersons} split={split} setSplit={setSplit} lang={lang}
+          travellerType={travellerType} setTravellerType={setTravellerType}
           onBack={()=>setScreen("focusListing")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
       }
 
@@ -900,76 +939,96 @@ export function CustomerApp(){
       {screen==="listing"&&pkg&&
         <Listing
           pkg={pkg}
-          trips={pkgTrips(pkg)}
-          calendarTrips={pkgTripsShown(pkg)}
+          trips={tripsForDepartureCity(pkgTrips(pkg))}
+          calendarTrips={tripsForDepartureCity(pkgTripsShown(pkg))}
           hotel={hotel}
           transport={transport}
           trip={trip}
-          setTrip={tr=>{ setTrip(tr); if(tr) setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); }}
+          setTrip={tr=>{ setTrip(tr); if(tr){ setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); setTravellerType(""); } }}
           persons={persons} setPersons={setPersons}
           bookingMode={bookingMode} setBookingMode={mode=>{setBookingMode(mode); if(mode==="transport") setSplit(null);}}
           split={split} setSplit={setSplit}
           total={total}
+          /* الرجوع يبقى في التجربة القديمة (/classic) لا يقفز إلى الرئيسية
+             الجديدة: من فتح هذه الصفحة فتحها بمسارها، فلا يُنقل بين
+             تصميمين في ضغطة رجوع واحدة. */
           onBack={()=>setScreen("packages")}
           onNext={goAfterListing}
+          departureCityRequired={needsDepartureCity} departureCity={departureCity}
+          onDepartureCityClick={()=>setDepartureCitySheet(true)}
+          travellerType={travellerType} onTravellerTypeClick={()=>setTravellerTypeSheet(true)}
           terms={TERMS_AR}
           t={t} lang={lang}
         />}
 
+      {/* ── مدينة الانطلاق ──
+          مرحلةٌ في المسار: ورقةٌ تُفتح وحدها بعد الوجهة، فيها بحثٌ يعمل
+          على التطبيع العربي («دمام» تجد «الدمام»)، والقائمة تُبنى من مدن
+          الرحلات المنشورة — مدينةٌ جديدة تُطلق منها رحلة تظهر هنا بلا
+          تعديل كود. */}
+      <Sheet open={departureCitySheet} onClose={()=>setDepartureCitySheet(false)} title={t("chooseDepartureCity")} tall>
+        <div className="flex flex-col" style={{gap:8}}>
+          <p style={{...T.body,color:C.ink2,margin:"0 0 2px"}}>{t("departureCityHint")}</p>
+          <div className="ts-dep-search-bar">
+            <div className="ts-dep-search">
+              <Search size={17}/>
+              <input value={depQuery} onChange={e=>setDepQuery(e.target.value)}
+                placeholder={t("searchCity")} inputMode="search" autoComplete="off"
+                aria-label={t("searchCity")}
+                /* Enter على نتيجةٍ واحدة يختارها: البحث الذي يُضيّق إلى
+                   خيارٍ وحيد ثم يطلب ضغطةً ثانية يعمل ضدّ من استعمله. */
+                onKeyDown={e=>{ if(e.key==="Enter"&&depMatches.length===1){ pickDepartureCity(depMatches[0]); } }}/>
+              {depQuery&&<button type="button" onClick={()=>setDepQuery("")} aria-label={t("clearSearch")}><X size={15}/></button>}
+            </div>
+          </div>
+          {/* الاسم `dep` لا `city`: الأخير هو الوجهة في هذا الملف، وتظليله
+              هنا كان يجعل السطر يبدو كأنه يكتب الوجهة لا مدينة الانطلاق. */}
+          {depMatches.map(dep=>{
+            const selected=dep===departureCity;
+            return <button key={dep} type="button" onClick={()=>pickDepartureCity(dep)}
+              className="flex items-center gap-3 text-start" style={{padding:"15px 14px",borderRadius:R.card,cursor:"pointer",fontFamily:"inherit",
+                background:selected?C.greenTint:C.white,border:`1px solid ${selected?C.green:C.border}`,color:C.ink}}>
+              <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:selected?C.green:C.fill,color:selected?C.white:C.ink2}}><MapPin size={18}/></span>
+              <span style={{...T.body,fontWeight:600,flex:1}}>{dep}</span>
+              {selected&&<Check size={17} style={{color:C.green}}/>}
+            </button>;
+          })}
+          {!departureCities.length&&<div style={{...T.body,color:C.ink2,background:C.fill,padding:14,borderRadius:R.card}}>{t("noDepartureCities")}</div>}
+          {!!departureCities.length&&!depMatches.length&&
+            <div style={{...T.body,color:C.ink2,background:C.fill,padding:14,borderRadius:R.card}}>{t("noCityMatch")}</div>}
+        </div>
+      </Sheet>
+
+      <Sheet open={travellerSheetOpen} onClose={()=>setTravellerTypeSheet(false)} title={t("whoTravels")} center
+        dismissible={!!travellerType}>
+        {/* الاختيار يُغلق الورقة فوراً بلا زر تأكيد: خيارٌ واحدٌ من ثلاثة
+            بلا حقولٍ بعده، وزرُّ تأكيدٍ عليه نقرةٌ ثانية بلا معنى. */}
+        <TravellerTypeGrid value={travellerType} t={t}
+          onPick={v=>{ setTravellerType(v); setTravellerTypeSheet(false); }}/>
+      </Sheet>
+
       {/* ═══ CUSTOM — رحلة حسب الطلب: طلب لا حجز ═══ */}
       {screen==="custom"&&<>
-        <CustomRequestScreen lang={lang} dir={dir} onBack={()=>setScreen("packages")} onDone={()=>setScreen("packages")}/>
+        <CustomRequestScreen lang={lang} dir={dir} onBack={()=>setScreen(HOME)} onDone={()=>setScreen(HOME)}/>
       </>}
 
-      {/* ═══ PASSENGERS — بطاقة لكل معتمر؛ الأول مُعبَّأ من الحساب ═══ */}
+      {/* ═══ OWNER — نموذج واحد لصاحب الحجز فقط ═══ */}
       {screen==="passengers"&&
         <FlowScreen
           variant="auth"
-          title={t("passengers")} subtitle={t("pilgrimCardHint")} step={2}
+          title={t("ownerDetails")} subtitle={t("ownerDetailsHint")} step={2}
           onBack={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")} onClose={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")}
-          cta={goSeats} ctaLabel={t("next")}
+          cta={goReview} ctaLabel={t("next")}
           error={paxTried&&!paxValid?t("fillFirst"):undefined}>
           <div className="flex flex-col gap-4">
-          {pax.map((p,i)=>{
+          {pax.slice(0,1).map((p,i)=>{
             const doc=p.docType?docTypeDef(p.docType):null;
             const inp="w-full border px-3.5 focus:outline-none";
             const ist=(bad?:string)=>({borderColor:bad?C.danger:C.border,borderRadius:R.chip,height:52,
               fontSize:16,fontFamily:"inherit",background:C.white,color:C.ink} as const);
             const ltr={direction:"ltr",textAlign:(dir==="rtl"?"right":"left")} as const;
-            /* الدفتر يستثني من عُبّئ في بطاقة أخرى: رقم وثيقة واحد لا
-               يسافر في مقعدين، وعرضه يدعو إلى خطأ ترفضه القاعدة. */
-            const usedIds=new Set(pax.filter((_,j)=>j!==i).map(o=>o.idNumber.trim()).filter(Boolean));
-            /* السجل الناقص لا يظهر كخيار استعادة: عرضه ثم رفضه عند
-               «التالي» أسوأ من إخفائه إلى أن يكتمل من صفحة الحساب. */
-            const bookAvail=book.filter(tr=>tr.idNumber.trim()&&!usedIds.has(tr.idNumber.trim())&&canApplyTraveller(i,tr));
             return (
               <div key={i} className="p-4 flex flex-col gap-4" style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:R.card}}>
-                <div className="flex items-center justify-between" style={{...T.h3,color:C.ink}}>
-                  {t("person")} {i+1}
-                  {p.ageGroup==="child"&&<span style={{...T.small,background:C.fill,color:C.ink2,border:`1px solid ${C.border}`,borderRadius:R.pill,padding:"2px 10px"}}>{t("child")}</span>}
-                </div>
-
-                {/* دفتر المسافرين — ضغطةٌ تُعبّئ البطاقة بدل إعادة كتابة
-                    اسم ورقم هوية وجنسية وتاريخ ميلاد لكل مرافق. */}
-                {bookAvail.length>0&&
-                  <div className="flex flex-col gap-2">
-                    <span style={{...T.small,fontWeight:500,color:C.ink}}>{t("fromBook")}</span>
-                    <div className="flex flex-wrap gap-2">
-                      {bookAvail.map(tr=>{
-                        const on=!!p.idNumber.trim()&&p.idNumber.trim()===tr.idNumber.trim();
-                        return (
-                          <button key={tr.id} type="button" onClick={()=>applyTraveller(i,tr)}
-                            style={{...T.small,fontWeight:500,padding:"7px 12px",borderRadius:R.pill,
-                              cursor:"pointer",fontFamily:"inherit",
-                              background:on?C.greenTint:C.white,border:`1px solid ${on?C.green:C.border}`,
-                              color:on?C.green:C.ink}}>
-                            {on?"✓ ":""}{tr.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <span style={{...T.small,fontWeight:400,color:C.ink2}}>{t("fromBookHint")}</span>
-                  </div>}
 
                 {/* الاسم */}
                 <LField label={t("name")} hint={t("nameHint")} error={errOf(i,"name")}>
@@ -990,28 +1049,6 @@ export function CustomerApp(){
                       options={[{value:"male",label:t("male")},{value:"female",label:t("female")}]}/>
                   </LField>
                 </div>
-
-                {/* الجوال — يختفي للطفل، ويكفي جوال ولي الأمر.
-                    جوال المعتمر الأول هو الرقم الموثّق: يُعرض ولا يُعدَّل،
-                    فلا ينفصل الطلب عن الحساب الذي سيتتبّعه. */}
-                {p.ageGroup==="child"
-                  ? <div style={{...T.small,fontWeight:400,background:C.fill,color:C.ink2,borderRadius:R.chip,padding:"10px 12px"}}>{t("childNoPhone")}</div>
-                  : i===0&&session
-                    ? (
-                      <LField label={t("phone")} hint={undefined}>
-                        <div className="flex items-center justify-between px-3.5"
-                          style={{background:C.fill,border:`1px solid ${C.border}`,borderRadius:R.chip,height:52}}>
-                          <span style={{...LTR,fontSize:16,fontFamily:"var(--font-app)",color:C.ink}}>{session.phoneLocal}</span>
-                          <span style={{...T.small,background:C.greenTint,color:C.green,borderRadius:R.pill,padding:"3px 10px"}}>✓ {t("verifiedBadge")}</span>
-                        </div>
-                      </LField>
-                    )
-                    : (
-                      <LField label={t("phone")} hint={t("phoneHint")} error={errOf(i,"phone")} optional={i>0?t("optional"):undefined}>
-                        <input value={p.phone} onChange={e=>setPaxField(i,"phone",e.target.value.replace(/[^\d+ ]/g,""))} onBlur={()=>touch(i,"phone")}
-                          inputMode="tel" maxLength={14} placeholder={t("phonePh")} className={inp} style={{...ist(errOf(i,"phone")),...ltr}}/>
-                      </LField>
-                    )}
 
                 {/* نوع الوثيقة — يحدّد شكل الرقم المطلوب */}
                 <LField label={t("docType")} hint={t("docTypeHint")} error={errOf(i,"docType")}>
@@ -1047,66 +1084,16 @@ export function CustomerApp(){
               </div>
             );
           })}
+          <CompanionNotice t={t}/>
           </div>
-        </FlowScreen>}
-
-      {/* ═══ SEATS — مقعد لكل معتمر بالاسم، بعد إدخال بياناتهم ═══ */}
-      {screen==="seats"&&trip&&
-        <FlowScreen
-          variant="auth"
-          title={t("assignSeats")} subtitle={t("pickPilgrim")} step={3}
-          onBack={()=>setScreen("passengers")} onClose={()=>setScreen("listing")}
-          cta={()=>{ if(seatsDone) setScreen("review"); }} ctaLabel={t("next")} ctaDisabled={!seatsDone}>
-        <div className="flex flex-col gap-4">
-          {/* قائمة المعتمرين — النشط مميّز، ومقعده يظهر بجانب اسمه */}
-          <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            {pax.map((x,i)=>{
-              const on=i===activePax;
-              return (
-                <button key={i} onClick={()=>setActivePax(i)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-start cursor-pointer"
-                  style={{background:on?"#EAF5F0":"#fff",border:"none",borderTop:i?`1px solid ${B.border}`:"none"}}>
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{background:x.gender==="female"?"#F1E9FA":"#EAF1FE",color:x.gender==="female"?"#7226BE":"#1E52C7"}}>{i+1}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate text-sm font-bold" style={{color:B.black}}>{x.name||`${t("person")} ${i+1}`}</span>
-                    {x.ageGroup==="child"&&<span className="text-[11px]" style={{color:B.muted}}>{t("child")}</span>}
-                  </span>
-                  {x.seat!=null
-                    ? <span className="px-2.5 py-1 rounded-lg text-xs font-extrabold flex-shrink-0" style={{background:"#FFF7EA",color:"#8a6a08",border:`1px solid ${B.gold}`,fontFamily:"var(--font-app)"}}>{t("seatFor")} {x.seat}</span>
-                    : <span className="text-xs flex-shrink-0" style={{color:on?G.green:B.muted,fontWeight:on?700:500}}>{on?t("chooseSeat"):"—"}</span>}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* كروكي الباص — النقر يخصّص المقعد للمعتمر النشط ثم ينتقل للتالي */}
-          <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <BusSeatGrid
-              capacity={trip.seats} occupied={takenSet}
-              selected={seats} need={pax.length} onToggle={assignSeat}
-            />
-          </div>
-
-          {seatsDone
-            ? <div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#E3F3E8",border:"1px solid #C4E4CE",color:"#1E7A44"}}>✓ {t("allSeatsSet")}</div>
-            : <div className="rounded-xl px-4 py-3 text-sm" style={{background:B.bg,color:B.muted}}>{t("pickSeatsHint").replace("{n}",String(pax.filter(x=>x.seat==null).length))}</div>}
-          {/* المهلة ظاهرة: «احجز المقعد مؤقتاً بمهلة واضحة». */}
-          {holdMsg&&<div className="rounded-xl px-4 py-3 text-sm font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{holdMsg}</div>}
-          {heldUntil&&!holdMsg&&(
-            <div className="rounded-xl px-4 py-2.5 text-xs" style={{background:B.bg,color:B.text2}}>
-              {t("seatHeldUntil").replace("{t}",new Date(heldUntil).toLocaleTimeString(lang==="en"?"en-GB":"ar-SA-u-nu-latn",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Riyadh"}))}
-            </div>
-          )}
-        </div>
         </FlowScreen>}
 
       {/* ═══ REVIEW ═══ */}
       {screen==="review"&&pkg&&trip&&
         <FlowScreen
           variant="auth"
-          title={t("review")} step={4}
-          onBack={()=>setScreen("seats")} onClose={()=>setScreen("listing")}
+          title={t("review")} step={3}
+          onBack={()=>setScreen("passengers")} onClose={()=>setScreen("listing")}
           cta={doSubmit} ctaLabel={submitting?t("submitting"):t("submit")}
           ctaBusy={submitting} ctaDisabled={!agreed} error={errMsg}>
         <div className="flex flex-col" style={{gap:20}}>
@@ -1114,14 +1101,19 @@ export function CustomerApp(){
           <div className="flex flex-col" style={{gap:10}}>
             {[[t("package"),pkg.name],
               [t("trip"),`${formatDate(trip.departureDate,lang)} · ${trip.departureTime}`],
+              ...(needsDepartureCity ? [[t("departureCity"),departureCity]] : []),
+              [t("whoTravels"),t(travellerType)],
               ...(bookingMode==="transport" ? [["نوع الحجز","🚌 مواصلات فقط"]] : [[t("room"),split?splitSummary(split,t):"—"]]),
-              [t("people"),`${persons}`],
-              [t("seat"),seats.join("، ")||"—"]].map(([l,v])=>(
+              [t("people"),`${persons}`]].map(([l,v])=>(
               <div key={l} className="flex items-start justify-between" style={{gap:16,...T.body}}>
                 <span style={{color:C.ink2,flexShrink:0}}>{l}</span>
                 <span style={{color:C.ink,fontWeight:500,textAlign:"end"}}>{v}</span>
               </div>
             ))}
+          </div>
+
+          <div className="rounded-xl px-4 py-3 text-sm" style={{background:"#EAF1FE",border:"1px solid #CBDBFB",color:"#1E52C7"}}>
+            {t("seatArrangedByUs")}
           </div>
 
           {/* المعتمرون */}
@@ -1132,7 +1124,6 @@ export function CustomerApp(){
                 <span className="truncate" style={{...T.body,fontWeight:500,color:C.ink}}>{p.name||"—"}</span>
                 <span className="flex items-center flex-shrink-0" style={{gap:8,...T.small,fontWeight:400,color:C.ink2}}>
                   {p.nationality&&<span>{p.nationality}</span>}
-                  {p.seat!=null&&<span style={{background:C.greenTint,color:C.green,borderRadius:R.pill,padding:"2px 8px",fontWeight:500}}>{t("seatFor")} {p.seat}</span>}
                   <span style={{...LTR,fontFamily:"var(--font-app)"}}>{p.idNumber}</span>
                 </span>
               </div>
@@ -1204,7 +1195,7 @@ export function CustomerApp(){
         <FlowScreen
           variant="auth"
           title={t("successTitle")} subtitle={t("successMsg")} align="center"
-          cta={()=>{reset();setScreen("packages");}} ctaLabel={t("home")}>
+          cta={()=>{reset();setScreen(HOME);}} ctaLabel={t("home")}>
           <div className="flex flex-col items-center" style={{gap:20}}>
             <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",damping:14}}
               className="flex items-center justify-center"
@@ -1303,7 +1294,7 @@ export function CustomerApp(){
               : <div className="text-center py-10" style={{...T.body,color:C.ink2}}>{t("noBookings")}</div>}
           <div style={{height:8}}/>
         </div>
-        <BottomBar screen={screen} onNav={setScreen} t={t}/>
+        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
       </>}
 
       {/* ═══ LOGIN — الجوال ═══ */}
@@ -1363,45 +1354,59 @@ export function CustomerApp(){
           </div>
         </FlowScreen>}
 
-      {/* ═══ ACCOUNT — إكمال بيانات الحساب (أول مرة فقط) ═══ */}
-      {screen==="account"&&
-        <FlowScreen
+      {/* ═══ ACCOUNT — بيانات صاحب الحساب = المعتمر الأساسي ═══ */}
+      {screen==="account"&&(()=>{
+        const p=pax[0]??emptyPax();
+        const doc=p.docType?docTypeDef(p.docType):null;
+        const inp="w-full border px-3.5 focus:outline-none";
+        const ist=(bad?:string)=>({borderColor:bad?C.danger:C.border,borderRadius:R.chip,height:52,
+          fontSize:16,fontFamily:"inherit",background:C.white,color:C.ink} as const);
+        const ltr={direction:"ltr",textAlign:(dir==="rtl"?"right":"left")} as const;
+        return <FlowScreen
           variant="auth"
-          title={t("completeAccount")} subtitle={t("accountHint")} step={1}
+          title={t("ownerDetails")} subtitle={t("ownerDetailsHint")} step={1}
           onClose={()=>setScreen(intent==="track"?"track":"listing")}
-          cta={submitAccount} ctaLabel={t("saveAndContinue")} ctaBusy={acSaving}
-          ctaDisabled={!acFirst.trim()||!acLast.trim()||!acBirth} error={acErr}>
-          <Labeled label={t("legalName")}>
-            <div className="ts-account-name-grid">
-              <InputStack>
-              <StackField label={t("firstName")} value={acFirst} onChange={setAcFirst}
-                  error={acTried&&!acFirst.trim()?" ":undefined} last/>
-              </InputStack>
-              <InputStack>
-              <StackField label={t("lastName")} value={acLast} onChange={setAcLast} last
-                error={acTried&&!acLast.trim()?" ":undefined}/>
-              </InputStack>
+          cta={submitAccount} ctaLabel={t("saveAndContinue")} ctaBusy={acSaving} error={acErr}>
+          <div className="flex flex-col gap-4">
+            <LField label={t("name")} hint={t("nameHint")} error={errOf(0,"name")}>
+              <input value={p.name} onChange={e=>setPaxField(0,"name",e.target.value)} onBlur={()=>touch(0,"name")}
+                placeholder={t("namePh")} className={inp} style={ist(errOf(0,"name"))}/>
+            </LField>
+            <div className="grid grid-cols-2 gap-3">
+              <LField group label={t("ageGroup")}>
+                <SegPick dir={dir} value={p.ageGroup}
+                  onChange={v=>setPax(a=>[{...(a[0]??emptyPax()),ageGroup:v as Pax["ageGroup"],phone:v==="child"?"":(a[0]?.phone??"")}])}
+                  options={[{value:"adult",label:t("adult")},{value:"child",label:t("child")} ]}/>
+              </LField>
+              <LField group label={t("gender")}>
+                <SegPick dir={dir} value={p.gender} onChange={v=>setPaxField(0,"gender",v)}
+                  options={[{value:"male",label:t("male")},{value:"female",label:t("female")} ]}/>
+              </LField>
             </div>
-          </Labeled>
-          <Labeled label={t("birthDate")} hint={acTried&&!acBirth?t("required"):t("birthDateHint")} bad={acTried&&!acBirth}>
-            <BirthDateSelect lang={lang} dir={dir} value={acBirth} invalid={acTried&&!acBirth}
-              onChange={setAcBirth}/>
-          </Labeled>
-          <Labeled label={t("emailOptional")}>
-            <InputStack>
-              <StackField label={t("email")} value={acEmail} onChange={setAcEmail} last ltr
-                type="email" inputMode="email" placeholder="name@example.com"/>
-            </InputStack>
-          </Labeled>
-          {session&&
-            <div className="flex items-center justify-between" style={{...T.meta,color:C.ink2,marginTop:4}}>
-              <span>{t("phone")}</span>
-              <span className="flex items-center" style={{gap:8}}>
-                <span style={{...LTR,fontFamily:"var(--font-app)",color:C.ink}}>{session.phoneLocal}</span>
-                <span style={{...T.small,background:C.greenTint,color:C.green,borderRadius:R.pill,padding:"2px 8px"}}>✓ {t("verifiedBadge")}</span>
-              </span>
-            </div>}
-        </FlowScreen>}
+            <LField label={t("docType")} hint={t("docTypeHint")} error={errOf(0,"docType")}>
+              <SearchSelect dir={dir} searchable={false} subInTrigger={false} value={p.docType} invalid={!!errOf(0,"docType")}
+                onChange={v=>{setPax(a=>[{...(a[0]??emptyPax()),docType:v as DocType,idNumber:""}]);touch(0,"docType");}}
+                options={DOC_TYPES.map(d=>({value:d.value,label:docText(d.label,lang),prefix:d.icon,sub:docText(d.hint,lang)}))}
+                placeholder={t("docTypePh")}/>
+            </LField>
+            <LField label={doc?docText(doc.numberLabel,lang):t("idNumber")} hint={doc?docText(doc.hint,lang):t("docTypeHint")} error={errOf(0,"idNumber")}>
+              <input value={p.idNumber} disabled={!p.docType} onBlur={()=>touch(0,"idNumber")}
+                onChange={e=>{const raw=e.target.value;const v=doc?.numeric?raw.replace(/\D/g,""):raw.replace(/\s/g,"");setPaxField(0,"idNumber",v.slice(0,doc?.maxLength??20));}}
+                inputMode={doc?.numeric?"numeric":"text"} maxLength={doc?.maxLength??20} placeholder={doc?doc.placeholder:"—"}
+                className={inp} style={{...ist(errOf(0,"idNumber")),...ltr,background:p.docType?C.white:C.fill,cursor:p.docType?"text":"not-allowed"}}/>
+            </LField>
+            <LField label={t("nationality")} hint={t("nationalityHint")} error={errOf(0,"nationality")}>
+              <NationalitySelect lang={lang} dir={dir} value={p.nationality} invalid={!!errOf(0,"nationality")} placeholder={t("nationalityPh")}
+                onChange={v=>{setPaxField(0,"nationality",v);touch(0,"nationality");}}/>
+            </LField>
+            <LField group label={t("birthDate")} hint={p.birthDate?undefined:t("birthDateHint")} error={errOf(0,"birthDate")}>
+              <BirthDateSelect lang={lang} dir={dir} value={p.birthDate} invalid={!!errOf(0,"birthDate")}
+                onChange={v=>{setPaxField(0,"birthDate",v);touch(0,"birthDate");}}/>
+            </LField>
+            <CompanionNotice t={t}/>
+          </div>
+        </FlowScreen>;
+      })()}
 
       {/* ═══ PROFILE ═══ */}
       {screen==="profile"&&<>
@@ -1413,7 +1418,7 @@ export function CustomerApp(){
           onLogout={logout}
           onBookings={()=>setScreen("track")}
         />
-        <BottomBar screen={screen} onNav={setScreen} t={t}/>
+        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
       </>}
 
       </div>

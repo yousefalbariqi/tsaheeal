@@ -18,7 +18,7 @@
    النصّ المتناوب كان يشغّل مؤقّتاً لكل بطاقة — مع عشرين باقة يصير عشرين
    مؤقّتاً تعمل معاً. */
 import { useMemo, useState } from "react";
-import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ArrowLeft, CalendarDays, LayoutGrid, List as ListIcon, Crown, Bus, UserRound, Check, Headphones, ShieldCheck, UsersRound, ChevronLeft, RotateCcw, Tag } from "lucide-react";
+import { MapPin, Sparkles, Hotel as HotelIcon, Plane, ArrowLeft, CalendarDays, LayoutGrid, List as ListIcon, Crown, Bus, UserRound, Check, Headphones, ShieldCheck, UsersRound, ChevronLeft, RotateCcw, Tag, Clock } from "lucide-react";
 import type { Pkg, Trip, Hotel, Transport } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { C, T, R, SPACE, STICKY_H, FONT, flipRTL, money } from "../ui/tokens";
@@ -49,6 +49,15 @@ export interface ExploreProps {
   setLang: (l: Lang) => void;
   /** تجربة مستقلة تبدأ باختيار الوجهة قبل قائمة الباقات. */
   destinationFirst?: boolean;
+  /* ── مدينة الانطلاق ──
+     خطوةٌ واحدة بعد الوجهة مباشرة، ثم لا تُعرض إلا رحلات تلك المدينة.
+     الحالة في CustomerApp لا هنا: هي ترافق العميل إلى نموذج الحجز
+     وملخّص الطلب، ونسخةٌ ثانية هنا تتفارق عنها عند أول رجوع. */
+  departureCity?: string;
+  /** الوجهة المختارة تحتاج مدينة انطلاق (مكة والمدينة وحدها اليوم). */
+  departureRequired?: boolean;
+  /** فتح ورقة المدن — لاختيارها أوّلاً ولتغييرها بعد ذلك. */
+  onPickDepartureCity?: () => void;
 }
 
 /* سعر «يبدأ من» اليدوي من الباقة؛ لا يُشتق من الغرف أو المواصلات. */
@@ -239,15 +248,34 @@ const dateParts = (iso: string, lang: Lang, calendar: CalendarSystem = "gregory"
     month: new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(date),
   };
 };
+/* وقت الانطلاق يُدخَل في الإدارة بصيغة ٢٤ ساعة («13:00»)، ويُقرأ هنا
+   كما يقوله الناس: «1:00 م». الأرقام لاتينية كبقية أرقام الواجهة. */
+const departureTimeLabel = (hhmm: string | undefined, lang: Lang): string => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? "");
+  if (!m) return "";
+  const hour = Number(m[1]);
+  const suffix = lang === "ar" ? (hour < 12 ? "ص" : "م") : (hour < 12 ? "AM" : "PM");
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${m[2]} ${suffix}`;
+};
+/* ما يُقال للعميل عن انطلاقه: الوقت ثم النقطة — وكلاهما من الرحلة كما
+   حدّدتها الإدارة. النقطة قد تغيب في رحلةٍ قديمة، فيبقى الوقت وحده
+   بلا فاصلٍ معلّق. */
+const departureLine = (trip: Trip, lang: Lang): string =>
+  [departureTimeLabel(trip.departureTime, lang), (trip.departurePoint ?? "").trim()]
+    .filter(Boolean).join(" · ");
+
 const returnDateFor = (trip: Trip, pkg: Pkg) =>
   /^\d{4}-\d{2}-\d{2}$/.test(trip.returnDate ?? "") ? trip.returnDate : addDateDays(trip.departureDate, Math.max(0, pkg.days - 1));
 
 /* المرحلة الثانية للتجربة: خطٌ زمني للمغادرات. الأيام الفارغة تمرّ
    بهدوء، والرحلة فقط هي التي تقطع الخط ببطاقة قابلة للحجز. */
-function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
+function FocusTrips({ packages, tripsOf, destination, departureCity = "", departureRequired = false, onPickDepartureCity, onBack, onOpen, lang }: {
   packages: Pkg[];
   tripsOf: (p: Pkg) => Trip[];
   destination: string;
+  departureCity?: string;
+  departureRequired?: boolean;
+  onPickDepartureCity?: () => void;
   onBack: () => void;
   onOpen: (p: Pkg, trip?: Trip) => void;
   lang: Lang;
@@ -261,16 +289,29 @@ function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
   const dates = useMemo(() => Array.from({ length: visibleDays }, (_, i) => addDateDays(today, i)), [today, visibleDays]);
   const timelineDates = useMemo(() => dates.map(iso => ({ iso, part: dateParts(iso, lang, calendar) })), [dates, lang, calendar]);
   const visible = useMemo(() => packages.filter(p => matchesDestination(p, destination)), [packages, destination]);
+  /* مدينة الانطلاق تُصفّي لا تُرتّب: من اختار الدمام لا يُعرض له ما
+     ينطلق من الخبر أصلاً. المدينة على الرحلة لا على الباقة — فالباقة
+     الواحدة قد تنطلق من مدينتين في تاريخين. */
+  const upcoming = useMemo(() => {
+    const city = departureCity.trim();
+    return visible.flatMap(pkg => tripsOf(pkg)
+      .filter(next => next.departureDate >= today && (!city || next.departureCity?.trim() === city))
+      .map(next => ({ pkg, next })));
+  }, [visible, tripsOf, today, departureCity]);
   const tripsByDay = useMemo(() => {
     const out = new Map<string, { pkg: Pkg; next: Trip }[]>();
-    visible.forEach(pkg => tripsOf(pkg).filter(t => t.departureDate >= today).forEach(next => {
-      const list = out.get(next.departureDate) ?? [];
-      list.push({ pkg, next }); out.set(next.departureDate, list);
-    }));
+    upcoming.forEach(entry => {
+      const list = out.get(entry.next.departureDate) ?? [];
+      list.push(entry); out.set(entry.next.departureDate, list);
+    });
     out.forEach(list => list.sort((a, b) => a.next.departureTime.localeCompare(b.next.departureTime)));
     return out;
-  }, [visible, tripsOf, today]);
+  }, [upcoming]);
   const destinationLabel = cityLabel(destination, lang);
+  /* المدينة مرحلةٌ في المسار لا معلومةٌ على الرحلة: قبل اختيارها لا
+     تُعرض قائمةٌ تخلط منطلَق الدمام بمنطلَق الخبر. الورقة تُفتح وحدها،
+     وإن أُغلقت بقي الطلب ظاهراً في مكان القائمة — لا تخطٍّ صامت. */
+  const awaitingCity = departureRequired && !departureCity;
   /* لا حدّ زمني مصطنع: قد يضيف المشغّل رحلة بعد أعوام. التحميل يدويٌّ
      بدفعات أسبوعية فقط، فلا يتحول الخط إلى تمرير لا نهائي مكلف. */
   const loadMore = () => {
@@ -299,13 +340,49 @@ function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
       </div>
 
       <div className="ts-focus-body">
-        <div className="ts-focus-timeline-head">
+        {/* مدينة الانطلاق: خطوةٌ واحدة تُسأل مرّة، ثم تبقى ظاهرةً قابلة
+            للتغيير بضغطة. لا حقل في الصفحة ولا فلتر يُبحث عنه. */}
+        {departureRequired && (
+          <button type="button" className={`ts-focus-depart${departureCity ? "" : " is-empty"}`} onClick={onPickDepartureCity}>
+            <span className="ts-focus-depart-icon"><MapPin size={18}/></span>
+            <span className="ts-focus-depart-copy">
+              <small>{lang === "ar" ? "الانطلاق من" : "Departing from"}</small>
+              <strong>{departureCity || (lang === "ar" ? "اختر مدينتك" : "Choose your city")}</strong>
+            </span>
+            <span className="ts-focus-depart-action">
+              {departureCity ? (lang === "ar" ? "تغيير" : "Change") : (lang === "ar" ? "اختيار" : "Choose")}
+              <ChevronLeft size={15} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
+            </span>
+          </button>
+        )}
+        {!awaitingCity && <div className="ts-focus-timeline-head">
           <div><span>{lang === "ar" ? "مواعيد الانطلاق" : "Departure dates"}</span><small>{lang === "ar" ? "عرض أسبوعين في كل دفعة" : "Two weeks per batch"}</small></div>
           <div className="ts-focus-calendar-switch" role="group" aria-label={lang === "ar" ? "نظام التاريخ" : "Calendar system"}>
             <button type="button" className={calendar === "gregory" ? "active" : ""} onClick={() => setCalendar("gregory")}>{lang === "ar" ? "ميلادي" : "Gregorian"}</button>
             <button type="button" className={calendar === "islamic" ? "active" : ""} onClick={() => setCalendar("islamic")}>{lang === "ar" ? "هجري" : "Hijri"}</button>
           </div>
-        </div>
+        </div>}
+        {awaitingCity && (
+          <div className="ts-focus-empty">
+            <MapPin size={26}/>
+            <strong>{lang === "ar" ? "اختر مدينة الانطلاق" : "Choose your departure city"}</strong>
+            <small>{lang === "ar" ? "لنعرض لك الرحلات التي تنطلق من مدينتك وحدها." : "So we show only the trips departing from your city."}</small>
+            <button type="button" className="ts-focus-empty-action" onClick={onPickDepartureCity}>{lang === "ar" ? "اختيار المدينة" : "Choose city"}</button>
+          </div>
+        )}
+        {!awaitingCity && upcoming.length === 0 && (
+          /* المدينة قد لا تُسيّر رحلةً في هذه الفترة. كان الخط يُرسم
+             فارغاً وتحته زرُّ «تحميل مزيد» يُضغط بلا نتيجة إلى الأبد. */
+          <div className="ts-focus-empty">
+            <CalendarDays size={26}/>
+            <strong>{lang === "ar"
+              ? (departureCity ? `لا رحلات من ${departureCity} حالياً` : "لا رحلات متاحة حالياً")
+              : (departureCity ? `No trips from ${departureCity} yet` : "No trips available yet")}</strong>
+            <small>{lang === "ar" ? "جرّب مدينة أخرى أو عد لاحقاً — نضيف المواعيد أولاً بأول." : "Try another city or check back soon — new dates are added regularly."}</small>
+            {departureRequired && <button type="button" className="ts-focus-empty-action" onClick={onPickDepartureCity}>{lang === "ar" ? "تغيير مدينة الانطلاق" : "Change departure city"}</button>}
+          </div>
+        )}
+        {!awaitingCity && upcoming.length > 0 && <>
         <div className="ts-focus-timeline" role="list" aria-label={lang === "ar" ? "التسلسل الزمني للرحلات القادمة" : "Upcoming trip timeline"}>
           {timelineDates.map(({ iso, part }, index) => {
             const isToday = iso === today;
@@ -321,7 +398,7 @@ function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
                   const returnDate = dateParts(returnDateFor(next, pkg), lang, calendar);
                   return <button key={next.id} type="button" className="ts-focus-trip-card" onClick={() => onOpen(pkg, next)}>
                     <img src={pkgCover(pkg)} alt="" loading="lazy" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/>
-                    <span className="ts-focus-trip-info"><strong>{lang === "ar" ? `رحلة ${destination === "مكة" ? "مكة" : "مكة والمدينة"} — ${pkg.days} أيام` : `${destinationLabel} · ${pkg.days} days`}</strong><small><CalendarDays size={14}/>{lang === "ar" ? `${depart.weekday} ${depart.day}` : `${depart.weekday} ${depart.day}`}</small><small><RotateCcw size={14}/>{lang === "ar" ? `العودة: ${returnDate.weekday} ${returnDate.day}` : `Return: ${returnDate.weekday} ${returnDate.day}`}</small><em><Tag size={14}/>{lang === "ar" ? `تبدأ من ${money(minTotal(pkg))} ر.س` : `From ${money(minTotal(pkg))} SAR`}</em><span className="ts-focus-trip-arrow"><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></span></span>
+                    <span className="ts-focus-trip-info"><strong>{lang === "ar" ? `رحلة ${destination === "مكة" ? "مكة" : "مكة والمدينة"} — ${pkg.days} أيام` : `${destinationLabel} · ${pkg.days} days`}</strong><small><CalendarDays size={14}/>{lang === "ar" ? `${depart.weekday} ${depart.day}` : `${depart.weekday} ${depart.day}`}</small><small><RotateCcw size={14}/>{lang === "ar" ? `العودة: ${returnDate.weekday} ${returnDate.day}` : `Return: ${returnDate.weekday} ${returnDate.day}`}</small><small><Clock size={14}/><span className="ts-focus-trip-depart">{departureLine(next, lang)}</span></small><em><Tag size={14}/>{lang === "ar" ? `تبدأ من ${money(minTotal(pkg))} ر.س` : `From ${money(minTotal(pkg))} SAR`}</em><span className="ts-focus-trip-arrow"><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></span></span>
                   </button>;
                 })}
               </div>}
@@ -330,12 +407,13 @@ function FocusTrips({ packages, tripsOf, destination, onBack, onOpen, lang }: {
           })}
         </div>
         <button type="button" className="ts-focus-load-more" onClick={loadMore} disabled={loadingMore} aria-live="polite">{loadingMore ? (lang === "ar" ? "جارٍ تحميل المواعيد…" : "Loading dates…") : (lang === "ar" ? "تحميل مزيد من المواعيد" : "Load more dates")}<ChevronLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button>
+        </>}
       </div>
     </section>
   );
 }
 
-export function Explore({ packages, hotels, transports = [], tripsOf, cities, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang, destinationFirst = false }: ExploreProps) {
+export function Explore({ packages, hotels, transports = [], tripsOf, cities, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang, destinationFirst = false, departureCity = "", departureRequired = false, onPickDepartureCity }: ExploreProps) {
   const dir = useDir();
   const [view, setView] = useState<View>(readView);
   const pickView = (v: View) => {
@@ -391,7 +469,9 @@ export function Explore({ packages, hotels, transports = [], tripsOf, cities, ci
     return <DestinationChoice onChoose={setCity} signedIn={signedIn} onAccount={onAccount} t={t} lang={lang} setLang={setLang} />;
   }
   if (destinationFirst) {
-    return <FocusTrips packages={packages} tripsOf={tripsOf} destination={city} onBack={() => setCity("")} onOpen={onOpen} lang={lang} />;
+    return <FocusTrips packages={packages} tripsOf={tripsOf} destination={city}
+      departureCity={departureCity} departureRequired={departureRequired} onPickDepartureCity={onPickDepartureCity}
+      onBack={() => setCity("")} onOpen={onOpen} lang={lang} />;
   }
 
   /* ── بطاقة الباقة في الشبكة ── */

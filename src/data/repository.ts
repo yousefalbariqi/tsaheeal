@@ -188,6 +188,7 @@ const packageFrom = (r: any): Pkg => ({
 const tripFrom = (r: any): Trip => ({
   id: r.id, packageId: r.package_id ?? "", transportId: r.transport_id ?? "", hotelId: r.hotel_id ?? "",
   branchId: r.branch_id ?? "", busPlate: r.bus_plate ?? "", busCode: r.bus_code ?? "",
+  departureCity: r.departure_city ?? undefined,
   departureDate: r.departure_date, returnDate: r.return_date, departureTime: r.departure_time,
   departurePoint: r.departure_point, departureMapUrl: r.departure_map_url,
   /* أعمدة الموجتَين ١ و٢ اختيارية في الصفّ: قبل ترحيلها لا يعيدها select
@@ -200,6 +201,7 @@ const tripFrom = (r: any): Trip => ({
 });
 const bookingFrom = (r: any): Booking => ({
   id: r.id, tripId: r.trip_id ?? "", packageId: r.package_id ?? undefined, clientName: r.client_name, clientPhone: r.client_phone, roomType: r.room_type, persons: r.persons,
+  travellerType: r.traveller_type ?? undefined,
   total: r.total, status: r.status, paymentStatus: r.payment_status, payMethod: r.pay_method ?? undefined, txnNo: r.txn_no ?? undefined, payDate: r.pay_date ?? undefined,
   seats: sortBy(r.booking_seats).map((s: any) => s.seat_no),
   /* undefined لا [] عند الغياب: upsert_booking لا يمسّ الغرف إلا إذا حمل

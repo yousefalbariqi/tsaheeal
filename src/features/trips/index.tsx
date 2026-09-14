@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { sar } from "@/lib/money";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ArrowRight, Archive, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check } from "lucide-react";
+import { Plus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, History, Settings2, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check } from "lucide-react";
 import { toast } from "sonner";
 import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
-import { statusLabel } from "@/lib/status";
 import { useRole } from "@/lib/useRole";
 import { EntityGate } from "@/components/States";
 import type { Hotel, Transport, Pkg, Trip, Branch, Booking, TripDriver } from "@/types";
 import { uid, parseYMD, ymd, newId, openWhatsApp, copyText, money } from "@/lib/utils";
 import {
-  tripState, tripTotals, splitByPhase, nextTrip, calendarAnchor, dayColor,
-  seatsOf, shortDate, untilLabel, type TripState,
+  tripState, tripBoardState, occupancy, nextTrip, calendarAnchor, dayColor,
+  seatsOf, shortDate, untilLabel, dayName, tableDate, tripDeparture,
+  splitByHorizon, groupByWeek, AR_MONTHS,
+  type TripBoardState, type TripGroup, type Horizon,
   defaultReturnDate, returnBeforeDeparture, findVehicleConflict,
   cancelImpact, tripCancelWhatsApp, type CancelImpact,
 } from "@/lib/trip";
@@ -25,7 +26,6 @@ import { AppSelect } from "@/components/AppSelect";
 import { SearchSelect, type SearchOption } from "@/components/SearchSelect";
 import { ArabicDatePicker } from "@/components/ArabicDatePicker";
 import { useStore } from "@/store/useStore";
-import { destBadge } from "@/features/packages";
 import { Field } from "@/components/Field";
 import { isOperational } from "@/features/transport/readiness";
 
@@ -51,12 +51,13 @@ const parseYMDDate=(s:string):Date|undefined=>{ const p=parseYMD(s); return p?ne
    والمحجوز — هذه وعودٌ بيعت على أساسها مقاعد، وتغييرها إلغاءٌ وإطلاقٌ من
    جديد لا تعديل. */
 type TripForm = Pick<Trip,"packageId"|"branchId"|"transportId"|"busPlate"|"busCode"|"departureDate"|"returnDate"|"departureTime"|"departurePoint"|"departureMapUrl"|"drivers">
+  & { departureCity:string }
   & { returnTime:string; departureAddress:string };
 
 const emptyForm = ():TripForm => ({
   packageId:"",branchId:"",transportId:"",busPlate:"",busCode:"",
   departureDate:"",returnDate:"",departureTime:"22:00",returnTime:"",
-  departurePoint:"",departureMapUrl:"",departureAddress:"",
+  departureCity:"",departurePoint:"",departureMapUrl:"",departureAddress:"",
   drivers:[{id:uid(),name:"",phone:""}],
 });
 
@@ -74,10 +75,15 @@ const vehicleOption = (v:Transport):SearchOption => ({
 });
 
 function TripFormModal({
-  mode,initial,packages,branches,prefillPkgId,onSave,onClose
+  mode,initial,packages,branches,prefillPkgId,prefillDate,baseTrip,onSave,onClose
 }:{
   mode:"launch"|"edit";initial?:Trip;packages:Pkg[];branches:Branch[];
-  prefillPkgId?:string;onSave:(t:Trip)=>void;onClose:()=>void;
+  prefillPkgId?:string;
+  /** يومٌ اختير من التقويم — يُملأ تاريخ الذهاب وحده. */
+  prefillDate?:string;
+  /** رحلةٌ قائمة تُتّخذ قاعدةً لرحلةٍ إضافية في اليوم نفسه. */
+  baseTrip?:Trip;
+  onSave:(t:Trip)=>void;onClose:()=>void;
 }) {
   /* المركبات والرحلات من المخزن مباشرةً: فحص التعارض يقرأ كل الرحلات
      القائمة لا ما مرّرته الصفحة لبطاقةٍ واحدة. */
@@ -105,23 +111,45 @@ function TripFormModal({
       packageId:initial.packageId,branchId:initial.branchId,transportId:initial.transportId,
       busPlate:initial.busPlate,busCode:initial.busCode,
       departureDate:initial.departureDate,returnDate:initial.returnDate??"",departureTime:initial.departureTime,
-      returnTime:initial.returnTime??"",departurePoint:initial.departurePoint,departureMapUrl:initial.departureMapUrl,
+      returnTime:initial.returnTime??"",departureCity:initial.departureCity??branches.find(b=>b.id===initial.branchId)?.city??"",departurePoint:initial.departurePoint,departureMapUrl:initial.departureMapUrl,
       departureAddress:initial.departureAddress??"",
       drivers:initial.drivers.length?initial.drivers.map(d=>({...d})):[{id:uid(),name:"",phone:""}],
     };
-    const f=emptyForm(); f.packageId=prefillPkgId??"";
+    const f=emptyForm();
+    /* رحلةٌ إضافية: كل ما يجمعها بالأولى منسوخٌ — الباقة واليوم والمدينة
+       ونقطة الانطلاق والوقت. والمركبة وحدها تُترك فارغة عمداً: الحافلة
+       الواحدة لا تكون في رحلتَين في اليوم نفسه، فنسخُها يُنتج تعارضاً
+       يمنع الحفظ ويُقرأ خطأً في النظام. اختيارُ غيرها هو القرار الوحيد
+       الباقي. */
+    if(baseTrip){
+      Object.assign(f,{
+        packageId:baseTrip.packageId, branchId:baseTrip.branchId,
+        departureCity:baseTrip.departureCity??branches.find(b=>b.id===baseTrip.branchId)?.city??"",
+        departurePoint:baseTrip.departurePoint, departureMapUrl:baseTrip.departureMapUrl,
+        departureAddress:baseTrip.departureAddress??"",
+        departureDate:baseTrip.departureDate, returnDate:baseTrip.returnDate??"",
+        departureTime:baseTrip.departureTime, returnTime:baseTrip.returnTime??"",
+        drivers:baseTrip.drivers.length?baseTrip.drivers.map(d=>({...d,id:uid()})):[{id:uid(),name:"",phone:""}],
+      });
+      return f;
+    }
+    f.packageId=prefillPkgId??"";
+    if(prefillDate) f.departureDate=prefillDate;
     /* الباقة المُمرَّرة تجرّ مركبتها إن كانت نشطة: أقلّ ضغطة، وهو ما كان
        يحدث ضمنياً حين كانت السعة تُشتقّ من مواصلة الباقة. */
     const pkg=packages.find(p=>p.id===f.packageId);
     const v=pkg?vehiclesFor(pkg.id).find(x=>x.id===pkg.transportId):undefined;
     if(v) Object.assign(f,{transportId:v.id,...vehicleIds(v)});
+    if(pkg&&f.departureDate) f.returnDate=defaultReturnDate(f.departureDate,pkg.days);
     return f;
   });
-  const [depMode,setDepMode]=useState<"branch"|"custom">(()=>
-    initial&&!initial.branchId&&(initial.departurePoint||initial.departureMapUrl)?"custom":"branch");
+  const [depMode,setDepMode]=useState<"branch"|"custom">(()=>{
+    const src=initial??baseTrip;
+    return src&&!src.branchId&&(src.departurePoint||src.departureMapUrl)?"custom":"branch";
+  });
   /* تاريخ العودة يُقترح من أيام الباقة ما لم يمسّه الموظف؛ وما مسّه لا
      يُدهَس بتغيير الباقة أو الذهاب بعده. */
-  const [returnTouched,setReturnTouched]=useState(isEdit);
+  const [returnTouched,setReturnTouched]=useState(isEdit||!!baseTrip);
   const [busy,setBusy]=useState(false);
   const set=<K extends keyof TripForm>(k:K,v:TripForm[K])=>setForm(f=>({...f,[k]:v}));
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
@@ -130,6 +158,8 @@ function TripFormModal({
   const req=<span style={{color:B.gold}}>*</span>;
 
   const selPkg=packages.find(p=>p.id===form.packageId);
+  const departureCities=[...new Set(activeBranches.map(b=>b.city).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
+  const departurePoints=activeBranches.filter(b=>!form.departureCity||b.city===form.departureCity);
   const pkgTransport=transports.find(t=>t.id===selPkg?.transportId);
   const vehicles=vehiclesFor(form.packageId);
   /* لا مركبة نشطة مطابقة: إدخالٌ يدوي معلَنٌ لا حجبٌ للإطلاق. الرحلة
@@ -167,14 +197,14 @@ function TripFormModal({
      لحظة الاختيار، فتعديل الفرع لاحقاً لا يغيّر ما وُعد به ركّابها. */
   function pickBranch(bid:string){
     const b=activeBranches.find(x=>x.id===bid);
-    setForm(f=>({...f,branchId:bid,departurePoint:b?b.name:"",departureMapUrl:b?.gmapUrl??"",departureAddress:b?.address??""}));
+    setForm(f=>({...f,branchId:bid,departureCity:b?.city??f.departureCity,departurePoint:b?b.name:"",departureMapUrl:b?.gmapUrl??"",departureAddress:b?.address??""}));
   }
 
   const addDriver=()=>set("drivers",[...form.drivers,{id:uid(),name:"",phone:""}]);
   const delDriver=(id:string)=>set("drivers",form.drivers.filter(d=>d.id!==id));
   const updDriver=(id:string,field:"name"|"phone",val:string)=>set("drivers",form.drivers.map(d=>d.id===id?{...d,[field]:val}:d));
 
-  const depOk = depMode==="branch" ? !!form.branchId : (!!form.departureMapUrl.trim()||!!form.departurePoint.trim());
+  const depOk = !!form.departureCity && (depMode==="branch" ? !!form.branchId : (!!form.departureMapUrl.trim()||!!form.departurePoint.trim()));
   /* السائق ليس شرطاً: تشغيل الحافلات بالتعاقد، والسائق يُسمَّى قبل
      الانطلاق لا قبل فتح الحجز. */
   const baseOk = (manual||!!form.transportId) && !!form.busPlate.trim() && !!form.busCode.trim()
@@ -189,6 +219,7 @@ function TripFormModal({
     const common={
       transportId:effectiveTransportId,busPlate:form.busPlate.trim(),busCode:form.busCode.trim(),
       departureTime:form.departureTime,returnDate:form.returnDate,returnTime:form.returnTime||undefined,
+      departureCity:form.departureCity,
       branchId:depMode==="branch"?form.branchId:"",
       departurePoint:form.departurePoint,departureMapUrl:form.departureMapUrl,
       departureAddress:depMode==="branch"?(form.departureAddress||undefined):undefined,
@@ -201,7 +232,7 @@ function TripFormModal({
       bookedSeats:0,waitingSeats:0});
   }
 
-  const title=isEdit?`تعديل الرحلة — ${initial!.id}`:"إطلاق رحلة جديدة";
+  const title=isEdit?`تعديل الرحلة — ${initial!.id}`:baseTrip?"إطلاق رحلة إضافية":"إطلاق رحلة جديدة";
   const warn={background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08"} as const;
   const danger={background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"} as const;
 
@@ -222,6 +253,10 @@ function TripFormModal({
             <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#CDE7E4"}}><X size={14}/></button>
           </div>
           {isEdit&&<div className="text-xs mt-2" style={{color:"#CDE7E4"}}>يُعدَّل هنا: المركبة، وقت الانطلاق، العودة، نقطة الانطلاق، السائقون. الباقة والسعر والسعة وتاريخ الذهاب ثابتة.</div>}
+          {!isEdit&&baseTrip&&<div className="text-xs mt-2" style={{color:"#CDE7E4"}}>
+            بُنيت على الرحلة <b style={{color:"#fff",fontFamily:"var(--font-app)"}}>{baseTrip.id}</b> — الباقة والتاريخ والوقت ونقطة الانطلاق منسوخة.
+            <span className="block mt-0.5" style={{color:"#A9CFCB"}}>اختر مركبةً أخرى: الحافلة الواحدة لا تكون في رحلتَين في اليوم نفسه.</span>
+          </div>}
         </div>
         <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{scrollbarWidth:"none"}}>
           {/* 1) الباقة */}
@@ -297,7 +332,11 @@ function TripFormModal({
           </div>
           {/* 4) نقطة الانطلاق */}
           <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>نقطة الانطلاق {req}</label>
+            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>مدينة الانطلاق {req}</label>
+            <AppSelect value={form.departureCity} placeholder="اختر مدينة الانطلاق"
+              onChange={city=>setForm(f=>({...f,departureCity:city,branchId:"",departurePoint:"",departureMapUrl:"",departureAddress:""}))}
+              options={departureCities.map(city=>({value:city,label:city}))}/>
+            <label className="block text-xs font-bold mt-4 mb-1.5" style={{color:B.text3}}>نقطة الانطلاق {req}</label>
             <div className="flex gap-2 mb-2">
               {([["branch","من الفروع"],["custom","موقع آخر (خريطة)"]] as const).map(([m,lbl])=>(
                 <button key={m} type="button" onClick={()=>setDepMode(m)} className="flex-1 py-2 rounded-xl text-xs font-bold cursor-pointer"
@@ -306,8 +345,8 @@ function TripFormModal({
             </div>
             {depMode==="branch"
               ? <>
-                  <AppSelect value={form.branchId} placeholder="اختر الفرع" onChange={pickBranch}
-                    options={activeBranches.map(b=>({value:b.id,label:`${b.name} — ${b.city}`}))}/>
+                  <AppSelect value={form.branchId} placeholder={form.departureCity?"اختر نقطة الانطلاق":"اختر المدينة أولاً"} onChange={pickBranch}
+                    disabled={!form.departureCity} options={departurePoints.map(b=>({value:b.id,label:b.name}))}/>
                   {form.branchId&&form.departureAddress&&<div className="text-xs mt-1.5 flex items-center gap-1.5" style={{color:B.muted}}><MapPin size={11} style={{color:B.gold}}/>{form.departureAddress} <span style={{opacity:.7}}>— يُحفظ مع الرحلة كما هو الآن</span></div>}
                 </>
               : <div className="flex flex-col gap-2">
@@ -340,7 +379,7 @@ function TripFormModal({
             {form.returnDate===form.departureDate?"وقت العودة يسبق وقت الانطلاق في اليوم نفسه":"تاريخ العودة لا يسبق الذهاب"}
           </div>}
           {!canSave&&!conflict&&!returnInvalid&&!tooSmall&&<div className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold" style={warn}>
-            ⚠ أكمل: {isEdit?"":"الباقة، "}المركبة{manual?" (اللوحة ورقمها التعريفي)":" (بسعة أكبر من صفر)"}، نقطة الانطلاق، {isEdit?"وقت الانطلاق":"تاريخ ووقت الذهاب"}.
+            ⚠ أكمل: {isEdit?"":"الباقة، "}المركبة{manual?" (اللوحة ورقمها التعريفي)":" (بسعة أكبر من صفر)"}، مدينة ونقطة الانطلاق، {isEdit?"وقت الانطلاق":"تاريخ ووقت الذهاب"}.
           </div>}
         </div>
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
@@ -496,9 +535,9 @@ function CancelFollowUp({trip,pkgName,reason,impact,onClose}:{trip:Trip;pkgName:
 }
 
 /* ════════ نافذة تفاصيل الرحلة ════════ */
-function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,canEdit,onEdit,onToggleStatus,onCancel,onClose}:{
+function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,canEdit,onEdit,onExtra,onToggleStatus,onCancel,onClose}:{
   trip:Trip;pkgName:string;hotelName:string;transportName:string;branch?:Branch;impact:CancelImpact;canEdit:boolean;
-  onEdit:()=>void;onToggleStatus:()=>void;onCancel:(reason:string)=>void;onClose:()=>void;
+  onEdit:()=>void;onExtra:()=>void;onToggleStatus:()=>void;onCancel:(reason:string)=>void;onClose:()=>void;
 }) {
   const [confirmCancel,setConfirmCancel]=useState(false);
   const state=tripState(trip);
@@ -601,6 +640,10 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
         <div className="flex gap-2 px-6 py-4 flex-shrink-0 flex-wrap" style={{borderTop:`1px solid ${B.border}`}}>
           {!isCancelled&&!isEnded&&canEdit&&<button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.gold,color:B.black,border:"none"}}><Pencil size={13}/>تعديل</button>}
+          {/* الرحلة الممتلئة تُفتح لسؤالٍ واحد: هل أُطلق غيرها اليوم نفسه؟
+              فالإجابة إجراءٌ هنا لا رحلةٌ تُنشأ من الصفر في شاشةٍ أخرى. */}
+          {!isCancelled&&!isEnded&&canEdit&&isFull&&<button onClick={onExtra} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+            style={{background:"#FBF3D6",color:"#8A6A08",border:"1px solid #F0E3AE"}}><Plus size={13}/>إطلاق رحلة إضافية</button>}
           {!isCancelled&&!isEnded&&<button onClick={onToggleStatus} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:isFull?"#E3F3E8":"#FBF3D6",color:isFull?"#1E7A44":"#8A6A08",border:`1px solid ${isFull?"#C4E4CE":"#F0E3AE"}`}}>
             {isFull?"استئناف الحجز":"إيقاف الحجز مؤقتاً"}</button>}
@@ -617,128 +660,281 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
   );
 }
 
-/* ════════ كرت الرحلة المختصر (قابل للنقر) ════════
+/* ════════ لوحة التشغيل ════════
 
-   السطر الأخير يتبع الحالة المشتقّة لا السعة وحدها. «المتبقي ٠» على
-   رحلةٍ ملغاة كان يقرأ «امتلأت» — وهي ملاحظة الفريق: الملغاة تُعرض
-   ملغاةً لا ممتلئة، والمنتهية تُعرض بحصيلتها لا بمقاعدَ لم يعد لها
-   معنى. */
-const TRIP_TONE: Record<TripState,{bd:string;bg:string}> = {
-  open:      {bd:"#C4E4CE",bg:"#F0FAF3"},
-  full:      {bd:"#F3C9C9",bg:"#FBE6E6"},
-  running:   {bd:"#BFE1F1",bg:"#EDF7FC"},
-  ended:     {bd:"#DDD8D1",bg:"#F7F5F2"},
-  cancelled: {bd:"#D6CFC6",bg:"#F4F1EC"},
-  archived:  {bd:"#D6CFC6",bg:"#F4F1EC"},
+   الشاشة جدولٌ واحد لا بطاقةً لكل باقة. السبب تشغيليّ لا جماليّ: السؤال
+   الأول كل صباح «ما الذي يتحرّك هذا الأسبوع؟» لا «ماذا في هذه الباقة؟»،
+   والبطاقات تجيب عن الثاني وتُخفي الأول — عشرون رحلةً في ستّ باقات تصير
+   ستّ لوحاتٍ متفرّقة، وأقربُ رحلةٍ تنطلق غداً قد تكون في آخر الصفحة.
+
+   الجدول يرتّب بالزمن ويجمع بالأسبوع، فيُقرأ الترتيب نفسه مهما زاد
+   العدد: ثلاثون رحلةً تبقى ثلاثين صفّاً في أربعة أقسام. */
+
+/* لون الصفّ والحدّ — من الحالة المعروضة لا المخزّنة. */
+const BOARD_TONE: Record<TripBoardState,{fg:string;bg:string}> = {
+  open:      {fg:"#1E7A44",bg:"#F0FAF3"},
+  few:       {fg:"#B4530C",bg:"#FEF6EF"},
+  full:      {fg:"#BE2626",bg:"#FDF2F2"},
+  closed:    {fg:"#5C554E",bg:"#F7F5F2"},
+  running:   {fg:"#0E7CA8",bg:"#F1F9FD"},
+  ended:     {fg:"#7A7168",bg:"#FAF8F4"},
+  cancelled: {fg:"#7A7168",bg:"#FAF8F4"},
+  archived:  {fg:"#7A7168",bg:"#FAF8F4"},
 };
 
-/* البطاقة حاويةٌ لا زرّاً واحداً: زرُّ «تعديل» داخل زرٍّ أكبر تداخلٌ غير
-   صالح في HTML ويُطلق الفتح مع كل ضغطة تعديل. */
-function TripCard({trip,pkgName,onOpen,onEdit}:{trip:Trip;pkgName:string;onOpen:()=>void;onEdit?:()=>void}) {
-  const state=tripState(trip);
-  const {booked,capacity,available}=seatsOf(trip);
-  const {bd,bg}=TRIP_TONE[state];
-  const until=untilLabel(trip);
-  const editable=!!onEdit&&state!=="cancelled"&&state!=="archived"&&state!=="ended";
+/* شريط الإشغال — الرقم والشكل معاً: النسبة وحدها تُقرأ ولا تُلمح، والشريط
+   وحده يُلمح ولا يُقرأ، والمسح السريع يحتاج الاثنين. */
+function OccupancyBar({pct,fg}:{pct:number;fg:string}) {
   return (
-    <motion.div layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="rounded-2xl overflow-hidden flex flex-col" style={{border:`1.5px solid ${bd}`,background:bg}}>
-      <button onClick={onOpen} className="w-full text-right cursor-pointer p-4 flex flex-col gap-2" style={{background:"transparent",border:"none"}}>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-extrabold text-sm" style={{color:B.black}}>{tripLabel(trip,pkgName)}</span>
-          <span className="font-mono text-xs px-2 py-0.5 rounded-lg" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.muted}}>{trip.id}</span>
-          <StatusBadge status={state} entity="trip"/>
-          <ArrowRight size={14} style={{color:B.muted,marginRight:"auto",transform:"scaleX(-1)"}}/>
-        </div>
-        <div className="flex items-center gap-3 text-xs flex-wrap" style={{color:B.text2}}>
-          <span className="inline-flex items-center gap-1"><CalendarDays size={12} style={{color:B.gold}}/><b style={{color:B.black}}>{trip.departureDate||"—"}</b></span>
-          <span className="inline-flex items-center gap-1"><Clock size={12} style={{color:B.gold}}/>{trip.departureTime||"—"}</span>
-          {trip.busPlate&&<span className="inline-flex items-center gap-1"><Bus size={12} style={{color:B.gold}}/>{trip.busPlate}</span>}
-          {until&&state==="open"&&<span className="font-bold" style={{color:"#8A6A08"}}>{until}</span>}
-        </div>
-        {state==="cancelled"
-          ? <div className="text-xs font-bold" style={{color:B.text2}}>
-              أُلغيت{trip.cancelReason?<> — <span style={{color:B.black}}>{trip.cancelReason}</span></>:null}
-              {trip.cancelledAt&&<span style={{color:B.muted}}> · {shortDate(trip.cancelledAt.slice(0,10))}</span>}
-            </div>
-          : state==="ended"
-          ? <div className="text-xs font-bold" style={{color:B.text2}}>انتهت · سافر <b style={{color:B.black}}>{booked}</b> من {capacity}</div>
-          : <div className="flex items-center gap-2 text-xs">
-              <span className="font-bold" style={{color:B.text2}}>تم الحجز: <b style={{color:B.black}}>{booked}</b> من {capacity}</span>
-              <span style={{color:B.muted}}>·</span>
-              <span className="font-bold" style={{color:state==="full"?"#BE2626":"#1E7A44"}}>المتبقي: {available}</span>
-            </div>}
-      </button>
-      {editable&&(
-        <div className="flex px-4 pb-3 -mt-1">
-          <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text3}}>
-            <Pencil size={11}/>تعديل
-          </button>
-        </div>
-      )}
-    </motion.div>
+    <div className="flex items-center gap-2" style={{minWidth:86}}>
+      <div className="rounded-full overflow-hidden flex-1" style={{height:6,background:"#EDE8DE",minWidth:44}}>
+        <div style={{width:`${pct}%`,height:"100%",background:fg,borderRadius:999}}/>
+      </div>
+      <span className="font-extrabold tabular-nums" style={{fontSize:12,color:fg,fontFamily:"var(--font-app)"}}>{pct}%</span>
+    </div>
   );
 }
 
-/* ─── Mini 3-month trip calendar (visualization) ─── */
-const AR_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
-const AR_WEEK   = ["س","ح","ن","ث","ر","خ","ج"];
-
-function MonthGrid({y,m,depMap,spanSet,onPick}:{y:number;m:number;depMap:Map<string,Trip[]>;spanSet:Set<string>;onPick:(ds:string,deps:Trip[])=>void}) {
-  const firstCol=(new Date(y,m,1).getDay()+1)%7;
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  const cells:(number|null)[]=[];
-  for(let i=0;i<firstCol;i++) cells.push(null);
-  for(let d=1;d<=daysInMonth;d++) cells.push(d);
+/* زرّ «رحلة إضافية» — يظهر حيث يُتّخذ القرار: على صفّ الرحلة الممتلئة
+   نفسها، لا في نموذجٍ فارغ يُملأ من الصفر. */
+function ExtraTripButton({onClick,compact=false}:{onClick:()=>void;compact?:boolean}) {
   return (
-    <div className="rounded-xl p-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-      <div className="text-xs font-bold text-center mb-2" style={{color:B.black}}>{AR_MONTHS[m]} {y}</div>
-      <div className="grid grid-cols-7 gap-1">
-        {AR_WEEK.map((w,i)=><div key={"w"+i} className="text-center" style={{fontSize:9,color:B.muted,fontWeight:700}}>{w}</div>)}
-        {cells.map((d,i)=>{
-          if(d===null) return <div key={"e"+i} style={{height:38}}/>;
-          const ds=ymd(y,m,d);
-          const deps=depMap.get(ds);
-          const inSpan=!deps&&spanSet.has(ds);
-          if(deps){
-            /* اللون والملخّص من الحالة المشتقّة: خانةُ يومٍ مضى كانت
-               تُصبغ أخضرَ «مفتوحة» وتَعِد بمقاعدَ لا تُباع. */
-            const states=deps.map(t=>tripState(t));
-            const col=dayColor(deps);
-            const isOpen=states.includes("open");
-            const remaining=deps.reduce((a,t)=>a+(tripState(t)==="open"?seatsOf(t).available:0),0);
-            const title=deps.map(t=>`رحلة ${t.id} — ${t.departureDate} ${t.departureTime} · ${statusLabel(tripState(t),"trip")} · ${t.bookedSeats}/${t.seats}`).join("\n");
-            const tail=states.includes("full")?"مكتمل":states.includes("running")?"جارية":states.includes("ended")?"انتهت":"ملغاة";
+    <button onClick={e=>{e.stopPropagation();onClick();}} title="إطلاق رحلة إضافية بنفس بيانات هذه الرحلة"
+      className={`inline-flex items-center gap-1.5 rounded-lg font-bold cursor-pointer whitespace-nowrap ${compact?"px-2 py-1":"px-2.5 py-1.5"}`}
+      style={{background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08",fontSize:11.5}}>
+      <Plus size={11}/>{compact?"إضافية":"رحلة إضافية"}
+    </button>
+  );
+}
+
+function ManageButton({onClick}:{onClick:()=>void}) {
+  return (
+    <button onClick={e=>{e.stopPropagation();onClick();}}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold cursor-pointer whitespace-nowrap"
+      style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text3,fontSize:11.5}}>
+      <Settings2 size={11}/>إدارة
+    </button>
+  );
+}
+
+const TH:React.CSSProperties = {padding:"10px 14px",fontWeight:700,textAlign:"right",whiteSpace:"nowrap"};
+const TD:React.CSSProperties = {padding:"11px 14px",whiteSpace:"nowrap"};
+
+const COLS = ["التاريخ","اليوم","الباقة","مدينة الانطلاق","السعة","المحجوز","المتبقي","نسبة الإشغال","الحالة","إدارة الرحلة"];
+
+function TripRow({trip,pkgName,city,onOpen,onExtra}:{
+  trip:Trip;pkgName:string;city:string;onOpen:()=>void;onExtra?:()=>void;
+}) {
+  const state=tripBoardState(trip);
+  const tone=BOARD_TONE[state];
+  const {capacity,booked,available}=seatsOf(trip);
+  const pct=occupancy(trip);
+  const {date,year}=tableDate(trip.departureDate);
+  const dead=state==="cancelled"||state==="archived";
+  /* المتبقي هو الرقم الذي يُتّخذ عليه القرار، فيُلوَّن وحده: أخضرُ متّسع،
+     وبرتقاليٌّ قارب، وأحمرُ صفر. وما لا قرار عليه — ملغاةٌ أو منتهية —
+     يُكتب رمادياً كي لا يَعِد بمقاعدَ لا تُباع. */
+  const remainFg = dead ? B.muted : available<=0 ? "#BE2626" : state==="few" ? "#B4530C" : state==="open" ? "#1E7A44" : B.text2;
+  return (
+    <tr onClick={onOpen} className="trip-row cursor-pointer" style={{borderTop:`1px solid ${B.border}`}}>
+      <td style={{...TD,borderInlineStart:`3px solid ${tone.fg}`,fontWeight:800,color:dead?B.muted:B.black,fontFamily:"var(--font-app)"}}>
+        {date}{year&&<span style={{color:B.muted,fontWeight:600,fontSize:11}}> {year}</span>}
+        {trip.departureTime&&<span className="block" style={{color:B.muted,fontSize:11,fontWeight:600,fontFamily:"inherit"}}>{trip.departureTime}</span>}
+      </td>
+      <td style={{...TD,color:B.text2,fontWeight:600}}>{dayName(trip.departureDate)}</td>
+      <td style={{...TD,whiteSpace:"normal",minWidth:170}}>
+        <span className="font-bold" style={{color:dead?B.text2:B.black}}>{pkgName||"—"}</span>
+        <span className="block" style={{color:B.muted,fontSize:11,fontFamily:"var(--font-app)"}}>{trip.id}</span>
+      </td>
+      <td style={{...TD,color:B.text2,fontWeight:600}}>
+        <span className="inline-flex items-center gap-1.5"><MapPin size={11} style={{color:B.gold}}/>{city||"—"}</span>
+      </td>
+      <td style={{...TD,color:B.text2,fontWeight:700}} className="tabular-nums">{capacity}</td>
+      <td style={{...TD,color:dead?B.muted:B.black,fontWeight:800}} className="tabular-nums">{booked}</td>
+      <td style={{...TD,color:remainFg,fontWeight:800}} className="tabular-nums">{dead?"—":available}</td>
+      <td style={TD}><OccupancyBar pct={pct} fg={dead?B.muted:tone.fg}/></td>
+      <td style={TD}>
+        <StatusBadge status={state} entity="trip"/>
+        {/* قائمة الانتظار ليست عموداً — هي تفسيرٌ للحالة: ثلاثةٌ ينتظرون
+            على رحلةٍ ممتلئة هي أقوى إشارةٍ إلى إطلاق رحلةٍ أخرى. */}
+        {!dead&&trip.waitingSeats>0&&(
+          <span className="block mt-1 font-bold" style={{color:"#8A6A08",fontSize:10.5}}>{trip.waitingSeats} في الانتظار</span>
+        )}
+      </td>
+      <td style={{...TD,paddingBlock:8}} className="col-action">
+        <div className="flex items-center gap-1.5">
+          <ManageButton onClick={onOpen}/>
+          {onExtra&&<ExtraTripButton onClick={onExtra}/>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/* ════════ الجدول ════════
+   رأسٌ واحد وأقسامٌ داخله: الأعمدة تبقى على استقامةٍ واحدة عبر الأسابيع،
+   وجدولٌ لكل أسبوع كان يكسرها ويكرّر الرأس أربع مرّات. */
+function TripsTable({groups,pkgName,cityOf,onOpen,onExtra,mayWrite}:{
+  groups:TripGroup[];pkgName:(id:string)=>string;cityOf:(t:Trip)=>string;
+  onOpen:(t:Trip)=>void;onExtra:(t:Trip)=>void;mayWrite:boolean;
+}) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+      {/* على الجوال: عمودٌ مثبّت للإجراء وتلميحٌ بأن وراء الحافة بقية. */}
+      <div className="tbl-hint items-center gap-1.5 px-4 py-2" style={{background:B.fill,borderBottom:`1px solid ${B.border}`,color:B.muted,fontSize:11}}>
+        <ArrowRight size={11}/>مرّر الجدول أفقياً لرؤية بقية الأعمدة
+      </div>
+      <div className="tbl-scroll">
+        <table style={{width:"100%",minWidth:940,borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{background:B.cream,color:"#7a7168",fontSize:12}}>
+              {COLS.map(h=><th key={h} style={TH} className={h==="إدارة الرحلة"?"col-action":undefined}>{h}</th>)}
+            </tr>
+          </thead>
+          {groups.map(g=>{
+            const live=g.trips.filter(t=>t.status!=="cancelled"&&t.status!=="archived");
+            const cap=live.reduce((a,t)=>a+seatsOf(t).capacity,0);
+            const bk=live.reduce((a,t)=>a+seatsOf(t).booked,0);
+            const av=live.reduce((a,t)=>a+seatsOf(t).available,0);
+            const fullCount=g.trips.filter(t=>tripBoardState(t)==="full").length;
             return (
-              <button key={"d"+i} title={title} onClick={()=>onPick(ds,deps)}
-                className="relative flex flex-col items-center justify-center rounded-lg cursor-pointer leading-none gap-0.5"
-                style={{height:38,background:col,color:"#fff",border:"none"}}>
-                <span style={{fontSize:11,fontWeight:800}}>{d}</span>
-                {isOpen
-                  ? <span style={{fontSize:7.5,fontWeight:700,opacity:0.95}}>{remaining} مقعد</span>
-                  : <span style={{fontSize:7.5,fontWeight:700,opacity:0.9}}>{tail}</span>}
-                {deps.length>1&&<span className="absolute flex items-center justify-center rounded-full"
-                  style={{top:-4,left:-4,width:13,height:13,fontSize:8,fontWeight:800,background:B.gold,color:B.black,border:"1px solid #fff"}}>{deps.length}</span>}
-              </button>
+              <tbody key={g.key}>
+                {/* عنوان الأسبوع صفٌّ في الجدول لا بطاقةً فوقه: القسم يفصل
+                    ولا يقطع، فتبقى الأعمدة مقروءةً من أعلى الصفحة إلى أسفلها. */}
+                <tr>
+                  <td colSpan={COLS.length} style={{background:B.fill,padding:"9px 14px",borderTop:`1px solid ${B.border}`,borderBottom:`1px solid ${B.border}`}}>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-extrabold" style={{color:B.black,fontSize:13}}>{g.label}</span>
+                      <span className="px-2 py-0.5 rounded-lg font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,fontSize:11}}>{g.trips.length} رحلة</span>
+                      {cap>0&&<span className="font-semibold" style={{color:B.muted,fontSize:11.5}}>محجوز <b style={{color:B.text2}}>{bk}</b> من {cap} · متبقٍّ <b style={{color:av>0?"#1E7A44":"#BE2626"}}>{av}</b></span>}
+                      {fullCount>0&&<span className="inline-flex items-center gap-1 font-bold" style={{color:"#BE2626",fontSize:11.5}}><AlertTriangle size={11}/>{fullCount} ممتلئة</span>}
+                    </div>
+                  </td>
+                </tr>
+                {g.trips.map(t=>{
+                  const canExtra = mayWrite && tripBoardState(t)==="full";
+                  return <TripRow key={t.id} trip={t} pkgName={pkgName(t.packageId)} city={cityOf(t)}
+                    onOpen={()=>onOpen(t)} onExtra={canExtra?()=>onExtra(t):undefined}/>;
+                })}
+              </tbody>
             );
-          }
-          return (
-            <div key={"d"+i} className="flex items-center justify-center rounded-lg"
-              style={{height:38,fontSize:10,fontWeight:inSpan?700:500,background:inSpan?"rgba(192,134,44,0.12)":"transparent",color:inSpan?"#8a6a08":B.text2}}>{d}</div>
-          );
-        })}
+          })}
+        </table>
       </div>
     </div>
   );
 }
 
-function TripCalendar({trips,onOpen}:{trips:Trip[];onOpen:(t:Trip)=>void}) {
-  const [open,setOpen]=useState(false);
-  const [picked,setPicked]=useState<{ds:string;deps:Trip[]}|null>(null);
-  /* المرساة شهر أقرب رحلةٍ قادمة لا شهر أقدم رحلةٍ على الإطلاق. كان
-     الثاني يفتح التقويم على «يوليو · أغسطس» ونحن في سبتمبر — وهي
-     ملاحظة الفريق: الموظف يريد ما هو آتٍ لا ما مضى. */
-  const {y:anchorY,m:anchorM}=calendarAnchor(trips);
+/* ════════ التقويم ════════
+   أداةٌ بجانب الجدول لا أساس الصفحة: شهرٌ واحد يُتنقَّل فيه، وضغطُ يومٍ
+   يكشف رحلاته كاملةً بجانبه — لا يفتح نافذةً ولا يُغيّر الجدول. */
+const AR_WEEK = ["س","ح","ن","ث","ر","خ","ج"];
+
+function MonthGrid({y,m,depMap,spanSet,selected,onPick}:{
+  y:number;m:number;depMap:Map<string,Trip[]>;spanSet:Set<string>;selected:string|null;onPick:(ds:string)=>void;
+}) {
+  const firstCol=(new Date(y,m,1).getDay()+1)%7;
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=(()=>{const n=new Date();return ymd(n.getFullYear(),n.getMonth(),n.getDate());})();
+  const cells:(number|null)[]=[];
+  for(let i=0;i<firstCol;i++) cells.push(null);
+  for(let d=1;d<=daysInMonth;d++) cells.push(d);
+  return (
+    <div className="grid grid-cols-7 gap-1">
+      {AR_WEEK.map((w,i)=><div key={"w"+i} className="text-center pb-1" style={{fontSize:10,color:B.muted,fontWeight:700}}>{w}</div>)}
+      {cells.map((d,i)=>{
+        if(d===null) return <div key={"e"+i} style={{height:40}}/>;
+        const ds=ymd(y,m,d);
+        const deps=depMap.get(ds);
+        const isSel=selected===ds;
+        const isToday=ds===todayStr;
+        const ring=isSel?{outline:`2px solid ${B.gold}`,outlineOffset:2}:isToday?{outline:`1.5px dashed ${B.gold}`,outlineOffset:1}:{};
+        if(deps&&deps.length){
+          const states=deps.map(t=>tripBoardState(t));
+          const col=dayColor(deps);
+          const sellable=states.some(s=>s==="open"||s==="few");
+          const remaining=deps.reduce((a,t)=>{const s=tripBoardState(t);return a+(s==="open"||s==="few"?seatsOf(t).available:0);},0);
+          const tail=states.includes("full")?"ممتلئ":states.includes("running")?"جارية":states.includes("ended")?"انتهت":states.includes("closed")?"مغلقة":"ملغاة";
+          return (
+            <button key={"d"+i} onClick={()=>onPick(ds)} aria-pressed={isSel}
+              title={`${deps.length} رحلة يوم ${d} ${AR_MONTHS[m]}`}
+              className="relative flex flex-col items-center justify-center rounded-lg cursor-pointer leading-none gap-0.5"
+              style={{height:40,background:col,color:"#fff",border:"none",...ring}}>
+              <span style={{fontSize:12,fontWeight:800}}>{d}</span>
+              <span style={{fontSize:7.5,fontWeight:700,opacity:0.95}}>{sellable?`${remaining} مقعد`:tail}</span>
+              {deps.length>1&&<span className="absolute flex items-center justify-center rounded-full"
+                style={{top:-4,insetInlineStart:-4,width:14,height:14,fontSize:8.5,fontWeight:800,background:B.gold,color:B.black,border:"1px solid #fff"}}>{deps.length}</span>}
+            </button>
+          );
+        }
+        const inSpan=spanSet.has(ds);
+        return (
+          <button key={"d"+i} onClick={()=>onPick(ds)} aria-pressed={isSel}
+            className="flex items-center justify-center rounded-lg cursor-pointer"
+            style={{height:40,fontSize:11,fontWeight:inSpan?700:500,background:inSpan?"rgba(192,134,44,0.12)":"transparent",
+              color:inSpan?"#8a6a08":B.text2,border:"none",...ring}}>{d}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* صفّ اليوم — ما يحتاجه القرار على سطرٍ واحد: متى، من أين، أيّ باقة،
+   كم بيع وكم بقي، وما الحالة. */
+function DayTripRow({trip,pkgName,city,onOpen,onExtra}:{
+  trip:Trip;pkgName:string;city:string;onOpen:()=>void;onExtra?:()=>void;
+}) {
+  const state=tripBoardState(trip);
+  const tone=BOARD_TONE[state];
+  const {capacity,booked,available}=seatsOf(trip);
+  const dead=state==="cancelled"||state==="archived";
+  return (
+    <div onClick={onOpen} className="day-row rounded-xl px-3 py-2.5 flex items-center gap-3 flex-wrap cursor-pointer"
+      style={{border:`1px solid ${B.border}`,borderInlineStart:`3px solid ${tone.fg}`}}>
+      <span className="inline-flex items-center gap-1 font-extrabold tabular-nums" style={{color:B.black,fontSize:12.5,fontFamily:"var(--font-app)",minWidth:54}}>
+        <Clock size={11} style={{color:B.gold}}/>{trip.departureTime||"—"}
+      </span>
+      <span className="inline-flex items-center gap-1 font-bold" style={{color:B.text2,fontSize:12}}>
+        <MapPin size={11} style={{color:B.gold}}/>{city||"—"}
+      </span>
+      <span className="font-bold flex-1" style={{color:dead?B.text2:B.black,fontSize:12.5,minWidth:120}}>{pkgName||trip.id}</span>
+      <span className="font-bold tabular-nums" style={{color:B.text2,fontSize:12}}>
+        {booked}/{capacity} · متبقٍّ <b style={{color:dead?B.muted:available<=0?"#BE2626":state==="few"?"#B4530C":"#1E7A44"}}>{dead?"—":available}</b>
+      </span>
+      <OccupancyBar pct={occupancy(trip)} fg={dead?B.muted:tone.fg}/>
+      <StatusBadge status={state} entity="trip"/>
+      <div className="flex items-center gap-1.5 ms-auto">
+        <ManageButton onClick={onOpen}/>
+        {onExtra&&<ExtraTripButton onClick={onExtra} compact/>}
+      </div>
+    </div>
+  );
+}
+
+function TripCalendar({trips,horizon,pkgName,cityOf,selected,onSelect,onOpen,onExtra,onLaunchOn,mayWrite}:{
+  trips:Trip[];horizon:Horizon;pkgName:(id:string)=>string;cityOf:(t:Trip)=>string;
+  selected:string|null;onSelect:(ds:string|null)=>void;onOpen:(t:Trip)=>void;onExtra:(t:Trip)=>void;
+  onLaunchOn:(ds:string)=>void;mayWrite:boolean;
+}) {
+  const [open,setOpen]=useState(true);
+  /* المرساة تتبع الفترة: القادمة تفتح على شهر أقرب رحلة، والماضية على
+     شهر آخر رحلةٍ انتهت. تقويمٌ يفتح على شهرٍ لا رحلات فيه لا يُقرأ. */
+  const anchor=(()=>{
+    if(horizon==="upcoming") return calendarAnchor(trips);
+    const last=[...trips].map(t=>tripDeparture(t)).filter(Boolean).sort((a,b)=>b!.getTime()-a!.getTime())[0];
+    const n=new Date();
+    return last?{y:last.getFullYear(),m:last.getMonth()}:{y:n.getFullYear(),m:n.getMonth()};
+  })();
+  const [cur,setCur]=useState(anchor);
+  const shift=(d:number)=>setCur(c=>{let m=c.m+d,y=c.y; while(m>11){m-=12;y++;} while(m<0){m+=12;y--;} return {y,m};});
+  /* اختيارٌ من خارج الشهر المعروض — من مرشّح التاريخ غالباً — يجرّ الشهر
+     إليه: يومٌ محدَّدٌ في لوحٍ وشبكةٌ تعرض شهراً آخر قراءتان متناقضتان. */
+  useEffect(()=>{
+    if(!selected) return;
+    const p=parseYMD(selected);
+    if(p&&(p.y!==cur.y||p.m!==cur.m)) setCur({y:p.y,m:p.m});
+  },[selected]);
+
   const depMap=new Map<string,Trip[]>();
   const spanSet=new Set<string>();
   trips.forEach(t=>{
@@ -747,42 +943,96 @@ function TripCalendar({trips,onOpen}:{trips:Trip[];onOpen:(t:Trip)=>void}) {
     const rt=parseYMD(t.returnDate);
     const start=new Date(dp.y,dp.m,dp.d);
     const end=rt?new Date(rt.y,rt.m,rt.d):start;
-    for(let cur=new Date(start);cur<=end;cur.setDate(cur.getDate()+1))
-      spanSet.add(ymd(cur.getFullYear(),cur.getMonth(),cur.getDate()));
+    for(let c=new Date(start);c<=end;c.setDate(c.getDate()+1)) spanSet.add(ymd(c.getFullYear(),c.getMonth(),c.getDate()));
   });
-  const months=[0,1,2].map(off=>{ let m=anchorM+off,y=anchorY; while(m>11){m-=12;y++;} return {y,m}; });
+  depMap.forEach(list=>list.sort((a,b)=>(a.departureTime||"").localeCompare(b.departureTime||"")));
+
+  /* لوحٌ فارغٌ ينتظر ضغطةً هدرٌ لمساحةٍ ووقت. بلا اختيارٍ صريح يفتح على
+     أقرب يومٍ فيه رحلات — أوّل ما يُسأل عنه عند الدخول أصلاً. والاختيار
+     الصريح يعلوه، وتفريغُه يعيد الافتراض لا الفراغ. */
+  const inCurMonth=(ds:string)=>{ const p=parseYMD(ds); return !!p&&p.y===cur.y&&p.m===cur.m; };
+  const autoDay=(()=>{
+    const days=[...depMap.keys()].filter(inCurMonth).sort();
+    return horizon==="past" ? days[days.length-1] ?? null : days[0] ?? null;
+  })();
+  /* اليوم المعروض يبقى داخل الشهر المعروض دائماً: تصفّحُ شهرٍ آخر يُظهر
+     أقرب يومٍ فيه، لا رحلاتِ شهرٍ غادرناه. */
+  const sel = selected && inCurMonth(selected) ? selected : autoDay;
+  const dayTrips=sel?(depMap.get(sel)??[]):[];
+  /* الإطلاق على يومٍ مضى لا معنى له — والتقويم يعرض أوائل الشهر الحالي
+     وهي أيامٌ مضت. الشرط على السلسلة مباشرةً: YYYY-MM-DD تُقارن معجمياً. */
+  const todayStr=(()=>{const n=new Date();return ymd(n.getFullYear(),n.getMonth(),n.getDate());})();
+  const canLaunchOn = mayWrite && horizon==="upcoming" && !!sel && sel>=todayStr;
+  const monthCount=[...depMap.entries()].filter(([ds])=>{const p=parseYMD(ds);return p&&p.y===cur.y&&p.m===cur.m;}).reduce((a,[,l])=>a+l.length,0);
+
   return (
-    <div className="mt-3 pt-3" style={{borderTop:`1px dashed ${B.border}`}}>
-      <button onClick={()=>setOpen(v=>!v)} className="flex items-center gap-2 mb-2 cursor-pointer" style={{background:"none",border:"none",padding:0}}>
-        <CalendarDays size={13} style={{color:B.gold}}/>
-        <span className="text-xs font-bold" style={{color:B.black}}>التقويم — {months.map(x=>AR_MONTHS[x.m]).join(" · ")}</span>
-        {open?<ChevronUp size={13} style={{color:B.muted}}/>:<ChevronDown size={13} style={{color:B.muted}}/>}
+    <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+      <button onClick={()=>setOpen(v=>!v)} aria-expanded={open}
+        className="w-full flex items-center gap-3 px-5 py-3.5 cursor-pointer text-right"
+        style={{background:B.fill,border:"none",borderBottom:open?`1px solid ${B.border}`:"none"}}>
+        <CalendarDays size={15} style={{color:B.gold,flexShrink:0}}/>
+        <span className="font-extrabold" style={{color:B.black,fontSize:13.5}}>التقويم</span>
+        <span className="font-semibold" style={{color:B.muted,fontSize:11.5}}>اضغط أيّ يوم لعرض رحلاته</span>
+        <span className="ms-auto flex items-center gap-2">
+          {open?<ChevronUp size={15} style={{color:B.muted}}/>:<ChevronDown size={15} style={{color:B.muted}}/>}
+        </span>
       </button>
-      <AnimatePresence>{open&&(
+      <AnimatePresence initial={false}>{open&&(
         <motion.div initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {months.map(({y,m})=><MonthGrid key={y*12+m} y={y} m={m} depMap={depMap} spanSet={spanSet} onPick={(ds,d)=>setPicked({ds,deps:d})}/>)}
-          </div>
-          {picked&&(
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold flex items-center gap-1.5" style={{color:B.black}}><CalendarDays size={13} style={{color:B.gold}}/>رحلات يوم {picked.ds}</span>
-                <button aria-label="إلغاء اختيار اليوم" title="إلغاء اختيار اليوم" onClick={()=>setPicked(null)} className="w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}><X size={11}/></button>
+          <div className="p-4 grid gap-4 md:grid-cols-[300px_minmax(0,1fr)]">
+              {/* الشبكة */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <button onClick={()=>shift(-1)} aria-label="الشهر السابق" title="الشهر السابق"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronRight size={14}/></button>
+                  <div className="text-center">
+                    <div className="font-extrabold" style={{color:B.black,fontSize:13}}>{AR_MONTHS[cur.m]} {cur.y}</div>
+                    <div style={{fontSize:10.5,color:B.muted,fontWeight:600}}>{monthCount?`${monthCount} رحلة`:"لا رحلات"}</div>
+                  </div>
+                  <button onClick={()=>shift(1)} aria-label="الشهر التالي" title="الشهر التالي"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronLeft size={14}/></button>
+                </div>
+                <MonthGrid y={cur.y} m={cur.m} depMap={depMap} spanSet={spanSet} selected={sel} onPick={onSelect}/>
               </div>
-              {picked.deps.map(t=>{
-                const st=tripState(t);
-                const {booked,capacity,available}=seatsOf(t);
-                return (
-                  <button key={t.id} onClick={()=>onOpen(t)} className="w-full text-right rounded-xl p-3 flex items-center justify-between gap-2 cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                    <div className="flex items-center gap-2"><span className="font-mono px-2 py-0.5 rounded-lg text-xs" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>{t.id}</span><StatusBadge status={st} entity="trip"/></div>
-                    <span className="text-xs font-bold" style={{color:B.text2}}>
-                      {st==="cancelled"||st==="archived" ? "—" : st==="ended" ? `سافر ${booked} من ${capacity}` : `${booked}/${capacity} · متبقٍّ ${available}`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+              {/* لوح اليوم — بجانب الشبكة مباشرةً */}
+              <div className="rounded-xl p-3 flex flex-col gap-2 min-w-0" style={{background:B.bg,border:`1px solid ${B.border}`}}>
+                {!sel
+                  ? <div className="flex-1 flex flex-col items-center justify-center text-center py-8 gap-2">
+                      <CalendarDays size={26} style={{color:B.gold,opacity:0.35}}/>
+                      <span className="font-bold" style={{color:B.text2,fontSize:12.5}}>لا رحلات في {AR_MONTHS[cur.m]}</span>
+                      <span style={{color:B.muted,fontSize:11.5}}>اضغط أيّ يوم في التقويم لعرض رحلاته.</span>
+                    </div>
+                  : <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold" style={{color:B.black,fontSize:13}}>
+                          رحلات {dayName(sel)} {tableDate(sel).date}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-lg font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,fontSize:11}}>{dayTrips.length}</span>
+                        {!selected&&<span className="font-semibold" style={{color:B.muted,fontSize:10.5}}>أقرب يومٍ فيه رحلات</span>}
+                      </div>
+                      {dayTrips.length===0
+                        ? <div className="flex-1 flex flex-col items-center justify-center text-center py-7 gap-2.5">
+                            <span style={{color:B.muted,fontSize:12}}>لا رحلات في هذا اليوم.</span>
+                            {canLaunchOn&&(
+                              <button onClick={()=>onLaunchOn(sel)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold cursor-pointer"
+                                style={{background:B.gold,color:B.black,border:"none",fontSize:12}}><Plus size={12}/>إطلاق رحلة في هذا اليوم</button>
+                            )}
+                          </div>
+                        : <div className="flex flex-col gap-2">
+                            {dayTrips.map(t=>(
+                              <DayTripRow key={t.id} trip={t} pkgName={pkgName(t.packageId)} city={cityOf(t)}
+                                onOpen={()=>onOpen(t)}
+                                onExtra={mayWrite&&tripBoardState(t)==="full"?()=>onExtra(t):undefined}/>
+                            ))}
+                            {/* اليوم الذي امتلأت رحلاته كلها هو اليوم الذي يُطلق فيه غيرها. */}
+                            {canLaunchOn&&dayTrips.every(t=>{const s=tripBoardState(t);return s==="full"||s==="closed";})&&(
+                              <button onClick={()=>onLaunchOn(sel)} className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-bold cursor-pointer"
+                                style={{background:"#fff",color:"#8A6A08",border:`1px dashed ${B.gold}`,fontSize:11.5}}><Plus size={11}/>إطلاق رحلة أخرى في هذا اليوم</button>
+                            )}
+                          </div>}
+                    </>}
+              </div>
+          </div>
         </motion.div>
       )}</AnimatePresence>
     </div>
@@ -800,13 +1050,20 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const [search,setSearch]=useState("");
   /* التصفية على القيمة الساكنة لا على كل ضغطة مفتاح. */
   const query = useDebounced(search);
-  const [stateFilter,setStateFilter]=useState<"all"|TripState>("all");
-  const [pkgFilter,setPkgFilter]=useState<string>("all");
+  /* الفترة محورُ الصفحة كلها: الجدول والتقويم والإحصاءات تتبعها معاً.
+     كان الماضي يُعرض مطويّاً أسفل القادم، فيختلط الزمنان في شاشةٍ واحدة. */
+  const [horizon,setHorizon]=useState<Horizon>("upcoming");
+  const [stateFilter,setStateFilter]=useState<"all"|TripBoardState>("all");
+  const [pkgFilter,setPkgFilter]=useState("all");
+  const [cityFilter,setCityFilter]=useState("all");
+  const [dateFilter,setDateFilter]=useState("");
+  const [picked,setPicked]=useState<string|null>(null);
   const [showLaunch,setShowLaunch]=useState(false);
   const [launchPkgId,setLaunchPkgId]=useState<string|undefined>(undefined);
+  const [launchDate,setLaunchDate]=useState<string|undefined>(undefined);
+  const [baseTrip,setBaseTrip]=useState<Trip|undefined>(undefined);
   const [detailId,setDetailId]=useState<string|null>(null);
   const [editId,setEditId]=useState<string|null>(null);
-  const [showEnded,setShowEnded]=useState(false);
   /* لوح المتابعة بعد الإلغاء: يحمل الأثر كما حُسب لحظة الإلغاء — الحجوزات
      لا تتغيّر بإلغاء الرحلة، والتذاكر تُلغى في القاعدة فلا يُعاد حسابها. */
   const [followUp,setFollowUp]=useState<{trip:Trip;reason:string;impact:CancelImpact}|null>(null);
@@ -815,6 +1072,8 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const hotelName=(id:string)=>hotels.find(h=>h.id===id)?.name??"";
   const transportName=(id:string)=>{ const t=transports.find(x=>x.id===id); return t?`${t.name}${t.plate?` — ${t.plate}`:""}`:""; };
   const branchOf=(id:string)=>branches.find(b=>b.id===id);
+  /* المدينة من لقطة الرحلة، وتُستكمل من الفرع للرحلات التي سبقت العمود. */
+  const cityOf=(t:Trip)=>t.departureCity||branchOf(t.branchId)?.city||"";
 
   function toggleStatus(id:string){ setTrips(p=>p.map(t=>t.id===id?{...t,status:t.status==="full"?"open":"full"}:t)); }
   function cancelTrip(trip:Trip,reason:string){
@@ -823,75 +1082,134 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
     setTrips(p=>p.map(t=>t.id===trip.id?{...t,status:"cancelled",cancelReason:reason,cancelledAt:at}:t));
     setFollowUp({trip:{...trip,status:"cancelled",cancelReason:reason,cancelledAt:at},reason,impact});
   }
-  function handleSaveNew(t:Trip){ setTrips(p=>[t,...p]); setShowLaunch(false); toast.success("أُطلقت الرحلة",{description:`${pkgName(t.packageId)} · ${shortDate(t.departureDate)}`}); }
+  function handleSaveNew(t:Trip){ closeLaunch(); setTrips(p=>[t,...p]); toast.success("أُطلقت الرحلة",{description:`${pkgName(t.packageId)} · ${shortDate(t.departureDate)}`}); }
   function handleSaveEdit(t:Trip){ setTrips(p=>p.map(x=>x.id===t.id?t:x)); setEditId(null); toast.success("حُفظت تعديلات الرحلة"); }
 
-  /* المرشّح يعمل على الحالة المشتقّة لا المخزّنة: ضغطُ «مفتوحة» كان
-     يُرجع رحلاتٍ انطلقت لأن عمودها ما زال يقول open. */
-  const filtered=trips.filter(t=>
-    (stateFilter==="all"||tripState(t)===stateFilter)&&
+  function closeLaunch(){ setShowLaunch(false); setLaunchPkgId(undefined); setLaunchDate(undefined); setBaseTrip(undefined); }
+  /* مرشّح الباقة يسبق النموذج: مَن رشّح «عمرة ٣ أيام» ثم ضغط «إطلاق
+     رحلة» يريدها لتلك الباقة — لا لقائمةٍ يعيد الاختيار منها. */
+  function launchBlank(){ closeLaunch(); setLaunchPkgId(pkgFilter!=="all"?pkgFilter:undefined); setShowLaunch(true); }
+  function launchOn(ds:string){ closeLaunch(); setLaunchDate(ds); setShowLaunch(true); }
+  /* الرحلة الإضافية تُبنى على رحلةٍ قائمة: نفس الباقة واليوم والمدينة
+     ونقطة الانطلاق والوقت. المركبة وحدها تُترك فارغة — حافلةٌ واحدة لا
+     تكون في رحلتَين في اليوم نفسه، واختيارُ غيرها هو القرار الوحيد
+     الباقي على الموظف. */
+  function launchExtra(t:Trip){ closeLaunch(); setBaseTrip(t); setShowLaunch(true); }
+
+  const {upcoming,past}=splitByHorizon(trips);
+  const periodTrips = horizon==="past" ? past : upcoming;
+
+  const cities=[...new Set(trips.map(cityOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
+
+  /* المرشّحات على الحالة المعروضة لا المخزّنة: «ممتلئة» لا تُرجع رحلةً
+     أُوقف حجزها وفيها مقاعد، و«مفتوحة» لا تُرجع رحلةً انطلقت أمس. */
+  const matches=(t:Trip)=>
+    (stateFilter==="all"||tripBoardState(t)===stateFilter)&&
     (pkgFilter==="all"||t.packageId===pkgFilter)&&
-    (!query||t.id.toLowerCase().includes(query.toLowerCase())||packages.find(p=>p.id===t.packageId)?.name.includes(query)||t.departurePoint.includes(query)||(t.busPlate||"").includes(query))
-  );
+    (cityFilter==="all"||cityOf(t)===cityFilter)&&
+    (!query||t.id.toLowerCase().includes(query.toLowerCase())||pkgName(t.packageId).includes(query)||cityOf(t).includes(query)||t.departurePoint.includes(query)||(t.busPlate||"").includes(query));
 
-  /* الفصل قبل التجميع: قسم «المنتهية» يُعرض مطويّاً في آخر الصفحة كي
-     لا يزحم التشغيل اليومي — مطلبٌ إداري صريح من الفريق. */
-  const {live:liveTrips,ended:endedTrips}=splitByPhase(filtered);
+  /* التقويم يقرأ كل ما بقي بعد المرشّحات عدا التاريخ: تحديدُ يومٍ يضيّق
+     الجدول ولا يُفرغ الشهر الذي يُقرأ منه التوزيع. */
+  const calendarTrips=periodTrips.filter(matches);
+  const filtered=calendarTrips.filter(t=>!dateFilter||t.departureDate===dateFilter);
+  const groups=groupByWeek(filtered,horizon);
 
-  const grouped = packages.map(pkg=>{
-    const pkgTrips=liveTrips.filter(t=>t.packageId===pkg.id);
-    /* الباقة بلا رحلاتٍ قائمة تبقى مرئية في العرض غير المُرشَّح وحده:
-       بطاقتها تحمل زرّ «إطلاق رحلة» وهي المدخل الطبيعي له. أمّا مع
-       مرشّحٍ أو بحث فبطاقةٌ فارغة ضجيجٌ يخفي ما بُحث عنه — وصار هذا
-       أظهر بعد فصل المنتهية: باقةٌ كل رحلاتها انتهت تعرض إطاراً فارغاً
-       في كل مرّة. */
-    const unfiltered = pkgFilter==="all" && stateFilter==="all" && !query;
-    if(pkgTrips.length===0 && !unfiltered) return null;
-    /* الإجماليات من tripTotals: تستبعد الملغاة (والمنتهية أصلاً مفصولة)
-       من «المتاحة» — وهو نصّ ملاحظة الفريق حرفياً. */
-    const totals=tripTotals(pkgTrips);
-    return {pkg,trips:pkgTrips,totals,next:nextTrip(pkgTrips)};
-  }).filter(Boolean) as {pkg:Pkg;trips:Trip[];totals:ReturnType<typeof tripTotals>;next?:Trip}[];
+  const totals=(()=>{
+    const live=periodTrips.filter(t=>t.status!=="cancelled"&&t.status!=="archived");
+    const capacity=live.reduce((a,t)=>a+seatsOf(t).capacity,0);
+    const booked=live.reduce((a,t)=>a+seatsOf(t).booked,0);
+    const available=live.reduce((a,t)=>a+seatsOf(t).available,0);
+    const by=(s:TripBoardState)=>periodTrips.filter(t=>tripBoardState(t)===s).length;
+    /* العدّ على القائم لا على السجل: رحلةٌ ألغيت ليست «قادمة» ولا
+       «منتهية» — لها بطاقتها في الفترة الماضية ولا تُحشر في غيرها. */
+    return {count:live.length,capacity,booked,available,
+      pct:capacity>0?Math.round((booked/capacity)*100):0,
+      open:by("open"),few:by("few"),full:by("full"),closed:by("closed"),cancelled:by("cancelled")+by("archived")};
+  })();
+  const soon=nextTrip(periodTrips);
 
-  const ungrouped=liveTrips.filter(t=>!packages.find(p=>p.id===t.packageId));
+  const filtersOn = stateFilter!=="all"||pkgFilter!=="all"||cityFilter!=="all"||!!dateFilter||!!query;
+  function clearFilters(){ setStateFilter("all"); setPkgFilter("all"); setCityFilter("all"); setDateFilter(""); setSearch(""); }
+  /* تبديل الفترة يُفرِّغ ما لا معنى له فيها: يومٌ اختير من شهرٍ آخر،
+     وحالةٌ لا تُعرض هنا أصلاً — «ممتلئة» في الماضي مرشّحٌ لا يُرجع شيئاً
+     ويبدو الجدول فارغاً بلا سبب. */
+  function switchHorizon(h:Horizon){ setHorizon(h); setPicked(null); setDateFilter(""); setStateFilter("all"); }
 
-  const stats=tripTotals(trips);
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
   const detailTrip = detailId ? trips.find(t=>t.id===detailId) : undefined;
   const editTrip = editId ? trips.find(t=>t.id===editId) : undefined;
-  const cardEdit=(t:Trip)=>mayWrite?()=>setEditId(t.id):undefined;
+
+  const STATE_OPTS:{value:string;label:string}[] = horizon==="past"
+    ? [{value:"all",label:"كل الحالات"},{value:"ended",label:"منتهية"},{value:"cancelled",label:"ملغاة"}]
+    : [{value:"all",label:"كل الحالات"},{value:"open",label:"مفتوحة"},{value:"few",label:"متبقٍ قليل"},
+       {value:"full",label:"ممتلئة"},{value:"closed",label:"مغلقة"},{value:"running",label:"جارية الآن"},{value:"cancelled",label:"ملغاة"}];
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="الرحلات" crumb="إدارة الرحلات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
+      <PageHeader title="الرحلات" crumb={horizon==="past"?"الرحلات الماضية":"جدول التشغيل"} search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
       <div className="px-4 md:px-8 pt-4 md:pt-5">
-        {/* كل بطاقة تقول ما تعدّه بالضبط: «الرحلات القائمة» ليست «إجمالي
-            الرحلات»، والفرق بينهما هو ما قرأه الفريق تناقضاً. والمنتهية
-            تُعرض رقماً مستقلاً لا تختفي ولا تُخلط. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <StatCard label="رحلات قائمة" value={stats.live} sub={`من ${trips.length} في السجل`} accent/>
-          <StatCard label="تقبل الحجز" value={stats.open} sub={stats.running?`و${stats.running} جارية الآن`:"مقاعدها متاحة"}/>
-          <StatCard label="مكتملة العدد" value={stats.full} sub="لا مقاعد متبقّية"/>
-          <StatCard label="مقاعد الرحلات القائمة" value={stats.capacity} sub="بلا المنتهية والملغاة"/>
-          <StatCard label="محجوزة" value={stats.booked} sub={`${stats.available} متاح للبيع`}/>
-        </div>
-        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              {([["all","الكل"],["open","مفتوحة"],["full","مكتملة"],["running","جارية"],["ended","منتهية"],["cancelled","ملغاة"]] as const).map(([v,l])=>(
-                <button key={v} style={fb(stateFilter===v)} onClick={()=>setStateFilter(v)}>{l}</button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button style={fb(pkgFilter==="all")} onClick={()=>setPkgFilter("all")}>كل الباقات</button>
-              {packages.map(p=><button key={p.id} style={fb(pkgFilter===p.id)} onClick={()=>setPkgFilter(p.id)}>{p.name.slice(0,14)}…</button>)}
-            </div>
+        {/* شريط الفترة — انتقالٌ مستقل لا قسمٌ مطويّ داخل الصفحة. */}
+        {horizon==="past"&&(
+          <div className="flex items-center gap-3 flex-wrap rounded-2xl px-4 py-3 mb-4" style={{background:B.fill,border:`1px dashed ${B.border}`}}>
+            <button onClick={()=>switchHorizon("upcoming")} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold cursor-pointer"
+              style={{background:"#fff",border:`1px solid ${B.border}`,color:B.black,fontSize:12.5}}>
+              <ArrowRight size={13}/>العودة إلى الرحلات القادمة
+            </button>
+            <span className="font-semibold" style={{color:B.text2,fontSize:12}}>
+              تستعرض الآن <b style={{color:B.black}}>الفترة الماضية</b> — الجدول والتقويم كلاهما على ما مضى.
+            </span>
           </div>
-          <div className="flex items-center gap-3">
-            {/* «٣ / ٧» بلا كلمة كان أحد الأرقام الثلاثة المجهولة على هذه
-                الصفحة. الرقم يُسمّى ما يعدّه أو لا يُعرض. */}
-            <span className="text-sm" style={{color:B.muted}}>معروض <b style={{color:B.black}}>{filtered.length}</b> من {trips.length}</span>
-            {mayWrite&&<button onClick={()=>{setLaunchPkgId(undefined);setShowLaunch(true);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {horizon==="past" ? <>
+            <StatCard label="رحلات منتهية" value={totals.count} sub="خرجت من التشغيل" accent/>
+            <StatCard label="مسافرون" value={totals.booked} sub={`من سعة ${totals.capacity}`}/>
+            <StatCard label="نسبة الإشغال" value={`${totals.pct}%`} sub="على الفترة كلها"/>
+            <StatCard label="مقاعد لم تُبَع" value={totals.available} sub="فرصٌ فائتة"/>
+            <StatCard label="ملغاة" value={totals.cancelled} sub="لا تُحتسب في الإشغال"/>
+          </> : <>
+            <StatCard label="رحلات قادمة" value={totals.count} sub={soon?`أقرب رحلة ${shortDate(soon.departureDate)} · ${untilLabel(soon)}`:"لا رحلات قادمة"} accent/>
+            <StatCard label="تقبل الحجز" value={totals.open+totals.few} sub={totals.few?`منها ${totals.few} قاربت الامتلاء`:"مقاعدها متاحة"}/>
+            <StatCard label="ممتلئة" value={totals.full} sub={totals.full?"تحتاج رحلةً إضافية":"لا رحلة مكتملة"}/>
+            <StatCard label="مقاعد متاحة" value={totals.available} sub={`من سعة ${totals.capacity}`}/>
+            <StatCard label="نسبة الإشغال" value={`${totals.pct}%`} sub={`محجوز ${totals.booked} مقعداً`}/>
+          </>}
+        </div>
+        {/* المرشّحات — خمسةٌ لا أكثر: البحث في الترويسة، وهذه الأربعة هنا. */}
+        <div className="flex items-end gap-2.5 mt-5 flex-wrap">
+          <div style={{minWidth:170,flex:"1 1 170px",maxWidth:230}}>
+            <label className="block mb-1 font-bold" style={{fontSize:11,color:B.muted}}>الباقة</label>
+            <AppSelect value={pkgFilter} onChange={setPkgFilter} ariaLabel="تصفية بالباقة"
+              options={[{value:"all",label:"كل الباقات"},...packages.map(p=>({value:p.id,label:p.name}))]}/>
+          </div>
+          <div style={{minWidth:150,flex:"1 1 150px",maxWidth:200}}>
+            <label className="block mb-1 font-bold" style={{fontSize:11,color:B.muted}}>مدينة الانطلاق</label>
+            <AppSelect value={cityFilter} onChange={setCityFilter} ariaLabel="تصفية بمدينة الانطلاق"
+              options={[{value:"all",label:"كل المدن"},...cities.map(c=>({value:c,label:c}))]}/>
+          </div>
+          <div style={{minWidth:150,flex:"1 1 150px",maxWidth:200}}>
+            <label className="block mb-1 font-bold" style={{fontSize:11,color:B.muted}}>الحالة</label>
+            <AppSelect value={stateFilter} onChange={v=>setStateFilter(v as "all"|TripBoardState)} ariaLabel="تصفية بالحالة" options={STATE_OPTS}/>
+          </div>
+          <div style={{minWidth:160,flex:"1 1 160px",maxWidth:200}}>
+            <label className="block mb-1 font-bold" style={{fontSize:11,color:B.muted}}>التاريخ</label>
+            {/* اختيار تاريخٍ يضيّق الجدول ويحدّد اليوم في التقويم معاً. */}
+            <ArabicDatePicker value={dateFilter} onChange={v=>{setDateFilter(v); setPicked(v||null);}} placeholder="كل التواريخ"/>
+          </div>
+          {filtersOn&&(
+            <button onClick={clearFilters} className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold cursor-pointer"
+              style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,fontSize:12,height:42}}><X size={12}/>تفريغ</button>
+          )}
+          <div className="flex items-center gap-2.5 ms-auto" style={{paddingBottom:1}}>
+            <span style={{fontSize:12.5,color:B.muted}}>معروض <b style={{color:B.black}}>{filtered.length}</b> من {periodTrips.length}</span>
+            {horizon==="upcoming"&&(
+              <button onClick={()=>switchHorizon("past")} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold cursor-pointer"
+                style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,fontSize:12.5}}>
+                <History size={13}/>الرحلات الماضية
+                {past.length>0&&<span className="px-1.5 rounded-md" style={{background:B.fill,color:B.muted,fontSize:11}}>{past.length}</span>}
+              </button>
+            )}
+            {mayWrite&&horizon==="upcoming"&&<button onClick={launchBlank} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
               style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.35)"}}>
               <Plus size={15}/>إطلاق رحلة
             </button>}
@@ -899,90 +1217,23 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
         </div>
         <div className="mt-5" style={{height:1,background:B.border}}/>
       </div>
-      <main className="flex-1 px-4 md:px-8 pb-12 pt-6 flex flex-col gap-5">
-        <EntityGate entity="trips" label="الرحلات" skeleton="cards">
-        {grouped.map(({pkg,trips:pkgTrips,totals,next})=>(
-          <div key={pkg.id} className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="px-5 py-4" style={{background:B.fill,borderBottom:`1px solid ${B.border}`}}>
-              <div className="flex items-center gap-4 flex-wrap mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{background:B.primaryDeep,border:"1px solid rgba(192,134,44,0.25)"}}>📦</div>
-                <div className="flex-1">
-                  <div className="font-extrabold" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{pkg.name}</div>
-                  <div className="text-xs mt-0.5" style={{color:B.text2}}>{pkgTrips.length} رحلة قائمة · {pkg.days} أيام · {destBadge(pkg.destination)}</div>
-                </div>
-                {/* أقرب رحلة قادمة — ما يفيد الموظف اليوم. كان مكانها نطاق
-                    أشهرٍ يبدأ من أقدم رحلة في السجل. */}
-                {next
-                  ? <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
-                      <CalendarDays size={12} style={{color:B.gold}}/>
-                      أقرب رحلة <b style={{color:B.black}}>{shortDate(next.departureDate)}</b>
-                      <span style={{color:B.muted}}>· {untilLabel(next)}</span>
-                    </div>
-                  : <div className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08"}}>لا رحلات قادمة</div>}
-                {mayWrite&&<button onClick={()=>{setLaunchPkgId(pkg.id);setShowLaunch(true);}} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}><Plus size={11}/>إطلاق رحلة</button>}
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {[
-                  {l:"سعة المقاعد",v:totals.capacity,bg:"#fff",fg:B.black,border:B.border},
-                  {l:"محجوزة",v:totals.booked,bg:"#E3F3E8",fg:"#1E7A44",border:"#C4E4CE"},
-                  {l:"قائمة الانتظار",v:totals.waiting,bg:"#FBF3D6",fg:"#8A6A08",border:"#F0E3AE"},
-                  {l:"متاحة",v:totals.available,bg:"#EAF1FE",fg:"#1E52C7",border:"#CBDBFB"},
-                ].map(x=>(
-                  <div key={x.l} className="rounded-xl p-3 text-center" style={{background:x.bg,border:`1px solid ${x.border}`}}>
-                    <div className="text-xs font-semibold" style={{color:x.fg,opacity:0.8}}>{x.l}</div>
-                    <div className="text-xl font-extrabold" style={{color:x.fg}}>{x.v}</div>
-                  </div>
-                ))}
-              </div>
-              <TripCalendar trips={pkgTrips} onOpen={t=>setDetailId(t.id)}/>
-            </div>
-            {/* Compact trip cards */}
-            {pkgTrips.length>0&&(
-              <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <AnimatePresence>
-                  {pkgTrips.map(t=><TripCard key={t.id} trip={t} pkgName={pkg.name} onOpen={()=>setDetailId(t.id)} onEdit={cardEdit(t)}/>)}
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
-        ))}
-        {ungrouped.length>0&&(
-          <div className="flex flex-col gap-3">
-            <div className="text-xs font-bold" style={{color:B.muted}}>رحلات أخرى</div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <AnimatePresence>
-                {ungrouped.map(t=><TripCard key={t.id} trip={t} pkgName={pkgName(t.packageId)} onOpen={()=>setDetailId(t.id)} onEdit={cardEdit(t)}/>)}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
-        {/* المنتهية في قسمها: محفوظةٌ ومقروءة، وخارج التشغيل اليومي. */}
-        {endedTrips.length>0&&(
-          <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <button onClick={()=>setShowEnded(v=>!v)} aria-expanded={showEnded}
-              className="w-full flex items-center gap-3 px-5 py-4 cursor-pointer text-right"
-              style={{background:B.fill,border:"none",borderBottom:showEnded?`1px solid ${B.border}`:"none"}}>
-              <Archive size={15} style={{color:B.muted,flexShrink:0}}/>
-              <span className="font-extrabold text-sm" style={{color:B.black}}>الرحلات المنتهية</span>
-              <span className="px-2 py-0.5 rounded-lg text-xs font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.muted}}>{endedTrips.length}</span>
-              <span className="text-xs mr-auto" style={{color:B.muted}}>انتهى موعد عودتها — للاطّلاع لا للتشغيل</span>
-              {showEnded?<ChevronUp size={14} style={{color:B.muted}}/>:<ChevronDown size={14} style={{color:B.muted}}/>}
-            </button>
-            <AnimatePresence>{showEnded&&(
-              <motion.div initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
-                <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {endedTrips.map(t=><TripCard key={t.id} trip={t} pkgName={pkgName(t.packageId)} onOpen={()=>setDetailId(t.id)}/>)}
-                </div>
-              </motion.div>
-            )}</AnimatePresence>
-          </div>
-        )}
-        {filtered.length===0&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col items-center justify-center py-24 rounded-2xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <Plane size={44} style={{opacity:0.2,color:B.gold,marginBottom:12}}/>
-            <p className="font-bold" style={{color:B.black}}>لا توجد رحلات مطابقة</p>
-          </motion.div>
-        )}
+      <main className="flex-1 px-4 md:px-8 pb-12 pt-5 flex flex-col gap-4">
+        <EntityGate entity="trips" label="الرحلات" skeleton="table" cols={10} rows={8}>
+          <TripCalendar key={horizon} trips={calendarTrips} horizon={horizon} pkgName={pkgName} cityOf={cityOf}
+            selected={picked} onSelect={setPicked} onOpen={t=>setDetailId(t.id)} onExtra={launchExtra}
+            onLaunchOn={launchOn} mayWrite={mayWrite}/>
+          {groups.length>0
+            ? <TripsTable groups={groups} pkgName={pkgName} cityOf={cityOf}
+                onOpen={t=>setDetailId(t.id)} onExtra={launchExtra} mayWrite={mayWrite}/>
+            : <div className="flex flex-col items-center justify-center py-20 rounded-2xl gap-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+                <Plane size={40} style={{opacity:0.2,color:B.gold,marginBottom:4}}/>
+                <p className="font-bold" style={{color:B.black}}>
+                  {filtersOn?"لا رحلات مطابقة للمرشّحات":horizon==="past"?"لا رحلات ماضية في السجل":"لا رحلات قادمة"}
+                </p>
+                {filtersOn
+                  ? <button onClick={clearFilters} className="px-4 py-2 rounded-xl font-bold cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontSize:12.5}}>تفريغ المرشّحات</button>
+                  : mayWrite&&horizon==="upcoming"&&<button onClick={launchBlank} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}><Plus size={14}/>إطلاق رحلة</button>}
+              </div>}
         </EntityGate>
       </main>
       <AnimatePresence>
@@ -991,11 +1242,14 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
             transportName={transportName(detailTrip.transportId)} branch={branchOf(detailTrip.branchId)}
             impact={cancelImpact(detailTrip,bookings,tickets)} canEdit={mayWrite}
             onEdit={()=>{setDetailId(null);setEditId(detailTrip.id);}}
+            onExtra={()=>{setDetailId(null);launchExtra(detailTrip);}}
             onToggleStatus={()=>toggleStatus(detailTrip.id)} onCancel={r=>cancelTrip(detailTrip,r)} onClose={()=>setDetailId(null)}/>
         )}
         {showLaunch&&(
-          <TripFormModal mode="launch" packages={packages} branches={branches}
-            prefillPkgId={launchPkgId} onSave={handleSaveNew} onClose={()=>setShowLaunch(false)}/>
+          <TripFormModal key={baseTrip?.id??launchDate??launchPkgId??"blank"}
+            mode="launch" packages={packages} branches={branches}
+            prefillPkgId={launchPkgId} prefillDate={launchDate} baseTrip={baseTrip}
+            onSave={handleSaveNew} onClose={closeLaunch}/>
         )}
         {editTrip&&(
           <TripFormModal mode="edit" initial={editTrip} packages={packages} branches={branches}

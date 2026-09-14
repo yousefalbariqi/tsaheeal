@@ -234,7 +234,7 @@ export function transitionsFor(ctx: FlowCtx): Transition[] {
       gaps.filter(g => g.key !== "seats" && g.key !== "verify").forEach(g => acceptBlockers.push(g.label));
       return [
         {
-          to: "accepted", label: "قبول الطلب وتأكيد المقاعد", tone: "ok",
+          to: "accepted", label: "قبول الطلب واختيار المقعد", tone: "ok",
           blockers: acceptBlockers, opensSeatMap: true,
           effects: [
             "تُقفل المقاعد المؤكَّدة باسم العميل في نفس اللحظة",

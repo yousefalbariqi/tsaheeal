@@ -459,7 +459,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>{(booking.status==="new"||booking.status==="reviewing")?"تأكيد المقاعد قبل القبول":"تعديل المقاعد"}</h2>
+              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>اختيار المقعد</h2>
               <div className="text-xs mt-1" style={{color:"#CDE7E4"}}>{booking.clientName} · رحلة {trip?.departureDate??"—"} — {need} مقعد{booking.seats.length>0?" · راجعها وأكّدها":""}</div>
             </div>
             <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
@@ -509,7 +509,7 @@ function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;t
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
           <button onClick={()=>onConfirm(sel)} disabled={sel.length!==need}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{background:sel.length===need?B.gold:"#EEECEA",color:sel.length===need?B.black:B.muted,border:"none",cursor:sel.length===need?"pointer":"not-allowed"}}>
-            <Check size={14}/>تم تأكيد المقاعد
+            <Check size={14}/>تأكيد اختيار المقعد
           </button>
         </div>
       </motion.div>
@@ -1104,7 +1104,7 @@ function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange
           <button onClick={()=>setSeatOpen(true)} disabled={booking.status==="new"||booking.status==="reviewing"?!allVerified:false}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold"
             style={{background:B.gold,color:B.black,border:"none",opacity:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?0.5:1,cursor:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?"not-allowed":"pointer"}}>
-            <Armchair size={14}/>{booking.seats.length>0?"مراجعة المقاعد وتعديلها":"تأكيد المقاعد"}
+            <Armchair size={14}/>اختيار المقعد
           </button>
         </div>
       </div>

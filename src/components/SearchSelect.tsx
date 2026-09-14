@@ -15,7 +15,12 @@ export interface SearchOption {
   group?: string;    // عنوان مجموعة — يظهر فقط قبل بدء البحث
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[ً-ْـ]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ة/g, "ه").replace(/[ىي]/g, "ي").trim();
+/* تطبيع البحث العربي: التشكيل والتطويل يسقطان، والهمزات تُوحَّد، والتاء
+   المربوطة والألف المقصورة تُقرَّبان — فـ«دمام» يطابق «الدمّام»، ولا
+   يُحرم من يكتب بلا همزة من نتيجته. مُصدَّر ليقرأ كل بحثٍ في الواجهة
+   بالقاعدة نفسها: قاعدتان تعنيان أن حقلاً يجد ما لا يجده الآخر. */
+export const searchNorm = (s: string) => s.toLowerCase().replace(/[ً-ْـ]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ة/g, "ه").replace(/[ىي]/g, "ي").trim();
+const norm = searchNorm;
 
 export function SearchSelect({
   value, onChange, options, placeholder = "اختر…", searchable = true, searchPlaceholder = "ابحث…",

@@ -5,14 +5,12 @@ import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { checkMapUrl, mapEmbedUrl, type MapUrlVerdict } from "@/lib/maps";
 import { phoneError, formatPhone } from "@/lib/phone";
-import { cityOptions, canonicalCity } from "@/data/cities";
 import type { Branch } from "@/types";
 import { StatCard } from "@/components/StatCard";
 import { Spinner } from "@/components/Spinner";
 import { PageHeader } from "@/components/PageHeader";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { AppSelect } from "@/components/AppSelect";
-import { SearchSelect } from "@/components/SearchSelect";
 import { useStore } from "@/store/useStore";
 import { setArchiveReason } from "@/data/repository";
 import { newId } from "@/lib/utils";
@@ -87,7 +85,6 @@ function BranchModal({branch,managers,onSave,onClose}:{
     const e:{[k:string]:string}={};
     if(!form.name.trim())    e.name="اسم الفرع مطلوب";
     if(!form.city.trim())    e.city="المدينة مطلوبة";
-    else if(!canonicalCity(form.city)) e.city="مدينة غير معتمدة — اخترها من القائمة.";
     if(!form.address.trim()) e.address="العنوان التفصيلي مطلوب";
     /* التحقّق من lib/phone لا نمطٌ محلّي: `[+0-9\s]{7,}` كان يقبل
        «+++    » وثمانية أصفار. ورقم الفرع أرضيٌّ غالباً، وهي الحالة
@@ -107,10 +104,7 @@ function BranchModal({branch,managers,onSave,onClose}:{
     if(busy) return;
     if(!validate()) return;
     setBusy(true);
-    /* التطبيع عند الحفظ لا عند الاختيار: من اختار قيمةً قديمة من
-       القائمة يراها كما هي، وتُحفظ معتمدةً — فيُصلَح السجل بمروره. */
-    const city=canonicalCity(form.city)??form.city;
-    try { await onSave({...form,city}); } finally { setBusy(false); }
+    try { await onSave({...form,city:form.city.trim()}); } finally { setBusy(false); }
   }
   const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
   const req=<span style={{color:B.gold}}>*</span>;
@@ -135,13 +129,8 @@ function BranchModal({branch,managers,onSave,onClose}:{
             <Err k="name"/>
           </div>
           <div>
-            {/* ٢٠) القائمة تمنع «الدمام» و«مدينة الدمام» من أن تصيرا
-                مدينتين. القيمة القديمة غير المعتمدة تبقى ظاهرةً في
-                الخيارات — حذفُها كان يُفرغ الحقل بلا أن يمسّه أحد. */}
             <Field label={<>المدينة {req}</>}>
-              <SearchSelect value={form.city} onChange={v=>set("city",v)} ariaLabel="المدينة"
-                placeholder="اختر المدينة" searchPlaceholder="ابحث عن مدينة…"
-                options={cityOptions(form.city)} invalid={!!errors.city}/>
+              <input value={form.city} onChange={e=>set("city",e.target.value)} placeholder="مثال: الدمام" className={inp} style={ist}/>
             </Field>
             <Err k="city"/>
           </div>

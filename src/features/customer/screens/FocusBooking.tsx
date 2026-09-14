@@ -9,6 +9,10 @@ import { availSeats } from "../data";
 import { bookingRoomChoices, splitTotal, type RoomSplit } from "../roomSplit";
 import { hotelCover, pkgCover, transportCover } from "../gallery";
 import { flipRTL, money } from "../ui/tokens";
+import { makeT } from "../i18n";
+import { TravellerTypeGrid } from "../ui/TravellerType";
+import { tiersForTraveller, tierLabel } from "@/data/housing";
+import type { TravellerType } from "@/types";
 
 const addDays = (iso: string, days: number) => {
   const [y, m, d] = iso.split("-").map(Number);
@@ -22,14 +26,17 @@ const shortDate = (iso: string, lang: "ar" | "en") => {
   const locale = lang === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory-nu-latn";
   return new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(d).replace("،", "");
 };
-const roomLabel = (choice: RoomSplit) => choice.rooms.length === 1
-  ? `${choice.type} · ${choice.rooms[0].persons} ${choice.rooms[0].persons === 1 ? "شخص" : "أشخاص"}`
-  : `${choice.type} · ${choice.rooms.length} غرف`;
+/* الاسم من كتالوج السكن لا من تركيبٍ محلّي: «سريران» و«3 أسرّة»
+   تُكتب في موضعٍ واحد فلا تتفارق بين المحرّر وبطاقة العميل. */
+const roomLabel = (choice: RoomSplit, lang: "ar" | "en") => choice.rooms.length === 1
+  ? tierLabel(choice.type, choice.rooms[0].persons, lang)
+  : `${choice.type} · ${choice.rooms.length} ${lang === "ar" ? "غرف" : "rooms"}`;
 
-export function FocusDetails({ pkg, trip, hotel, transport, onBack, persons, setPersons, split, setSplit, onContinue, lang }: {
+export function FocusDetails({ pkg, trip, hotel, transport, onBack, persons, setPersons, split, setSplit, travellerType, setTravellerType, onContinue, lang }: {
   pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport;
   onBack: () => void; persons: number; setPersons: (n: number) => void;
   split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
+  travellerType: TravellerType | ""; setTravellerType: (v: TravellerType) => void;
   onContinue: () => void; lang: "ar" | "en";
 }) {
   const end = returnDate(trip, pkg);
@@ -76,20 +83,30 @@ export function FocusDetails({ pkg, trip, hotel, transport, onBack, persons, set
             يظل الفندق والنقل والتاريخ أمام العميل وهو يختار العدد والسكن. */}
         <FocusConfigure embedded pkg={pkg} trip={trip} hotel={hotel} transport={transport}
           persons={persons} setPersons={setPersons} split={split} setSplit={setSplit}
+          travellerType={travellerType} setTravellerType={setTravellerType}
           onBack={onBack} onContinue={onContinue} lang={lang}/>
       </div>
     </section>
   );
 }
 
-export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPersons, split, setSplit, onBack, onContinue, lang, embedded = false }: {
+export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPersons, split, setSplit, travellerType, setTravellerType, onBack, onContinue, lang, embedded = false }: {
   pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport;
   persons: number; setPersons: (n: number) => void;
   split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
+  travellerType: TravellerType | ""; setTravellerType: (v: TravellerType) => void;
   onBack: () => void; onContinue: () => void; lang: "ar" | "en"; embedded?: boolean;
 }) {
+  const t = makeT(lang);
   const max = Math.max(1, availSeats(trip));
-  const rooms = useMemo(() => bookingRoomChoices(pkg.roomPrices, persons), [pkg.roomPrices, persons]);
+  /* السكن يتبع نوع المسافر: السرير المشترك للرجال وحدهم. والتصفية قبل
+     بناء الخيارات لا بعدها — خيارٌ يُبنى ثم يُخفى يترك «الأرخص» محسوباً
+     على سعرٍ لا يراه صاحبه. */
+  const rooms = useMemo(
+    () => bookingRoomChoices(tiersForTraveller(pkg.roomPrices, travellerType), persons),
+    [pkg.roomPrices, persons, travellerType]);
+  /* اختيارٌ لم يعد معروضاً (بدّل نوعه بعد أن اختار سريراً مشتركاً)
+     يسقط إلى أول المتاح بدل أن يبقى محجوزاً خفيّاً. */
   const chosen = split && rooms.some(room => room.key === split.key) ? split : rooms[0] ?? null;
   useEffect(() => { if (chosen !== split) setSplit(chosen); }, [chosen, split, setSplit]);
   const total = chosen ? splitTotal(chosen, Math.max(1, pkg.nights)) : pkg.marketPrice * persons;
@@ -100,6 +117,14 @@ export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPerson
       <main>
         <article className="ts-focus-configure-trip"><img src={pkgCover(pkg)} alt=""/><div><strong>{lang === "ar" ? `رحلة ${pkg.destination} · ${pkg.days} أيام` : `${pkg.destination} · ${pkg.days} days`}</strong><small><CalendarDays size={14}/>{shortDate(trip.departureDate, lang)}</small></div></article>
 
+        {/* من المسافر؟ — مضمّنٌ في الصفحة لا في نافذة منبثقة: تجربة Focus
+            صفحةٌ واحدة تُمرَّر، وكل اختياراتها (العدد، السكن) ظاهرةٌ فيها.
+            نافذةٌ تقفز على الوصول كانت تحجب الرحلة التي فُتحت لتُقرأ. */}
+        <section className="ts-focus-configure-section">
+          <div className="ts-focus-section-heading"><div><h2>{t("whoTravels")}</h2><small>{t("travellerTypeRequired")}</small></div><Users size={20}/></div>
+          <TravellerTypeGrid value={travellerType} onPick={setTravellerType} t={t}/>
+        </section>
+
         <section className="ts-focus-configure-section ts-focus-travellers">
           <div className="ts-focus-section-heading"><div><h2>{lang === "ar" ? "عدد المعتمرين" : "Travellers"}</h2><small>{lang === "ar" ? `${availSeats(trip)} مقعد متاح` : `${availSeats(trip)} seats available`}</small></div><Users size={20}/></div>
           <div className="ts-focus-counter"><button type="button" disabled={persons <= 1} onClick={() => setPersons(Math.max(1, persons - 1))}><Minus size={18}/></button><strong>{persons}</strong><button type="button" disabled={persons >= max} onClick={() => setPersons(Math.min(max, persons + 1))}><Plus size={18}/></button></div>
@@ -109,7 +134,7 @@ export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPerson
           <div className="ts-focus-section-heading"><div><h2>{lang === "ar" ? "اختر السكن" : "Choose accommodation"}</h2><small>{lang === "ar" ? "السعر يشمل كامل ليالي الإقامة" : "Price includes all stay nights"}</small></div><BedDouble size={20}/></div>
           <div className="ts-focus-room-list">
             {rooms.map(room => { const active = chosen?.key === room.key; const cap = room.rooms[0]?.persons ?? 1; return <button key={room.key} type="button" className={active ? "active" : ""} onClick={() => setSplit(room)}>
-              <img src={hotelCover(hotel, cap)} alt=""/><span className="ts-focus-room-copy"><strong>{roomLabel(room)}</strong><small>{room.type.includes("مشترك") ? (lang === "ar" ? `تتشارك السكن مع ${Math.max(0, cap - 1)} ${cap - 1 === 1 ? "شخص" : "أشخاص"}` : `Shared with up to ${Math.max(0, cap - 1)}`) : (lang === "ar" ? "غرفة خاصة لمجموعتك" : "Private room for your group")}</small><em>+ {money(splitTotal(room, Math.max(1, pkg.nights)))} {lang === "ar" ? "ر.س" : "SAR"}</em></span>{active && <Check size={17}/>}</button>; })}
+              <img src={hotelCover(hotel, cap)} alt=""/><span className="ts-focus-room-copy"><strong>{roomLabel(room, lang)}</strong><small>{room.type.includes("مشترك") ? (lang === "ar" ? `تتشارك السكن مع ${Math.max(0, cap - 1)} ${cap - 1 === 1 ? "شخص" : "أشخاص"}` : `Shared with up to ${Math.max(0, cap - 1)}`) : (lang === "ar" ? "غرفة خاصة لمجموعتك" : "Private room for your group")}</small><em>+ {money(splitTotal(room, Math.max(1, pkg.nights)))} {lang === "ar" ? "ر.س" : "SAR"}</em></span>{active && <Check size={17}/>}</button>; })}
             {rooms.length === 0 && <p className="ts-focus-room-empty">{lang === "ar" ? "لا توجد خيارات سكن مناسبة لهذا العدد." : "No room options for this group size."}</p>}
           </div>
         </section>
@@ -118,7 +143,7 @@ export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPerson
 
         <section className="ts-focus-price-summary"><h2>{lang === "ar" ? "ملخص السعر" : "Price summary"}</h2><div><span>{lang === "ar" ? `الإقامة · ${pkg.nights} ليالٍ` : `Stay · ${pkg.nights} nights`}</span><b>{money(total)} {lang === "ar" ? "ر.س" : "SAR"}</b></div><div><span>{lang === "ar" ? "عدد المعتمرين" : "Travellers"}</span><b>{persons}</b></div><footer><span>{lang === "ar" ? "الإجمالي" : "Total"}</span><strong>{money(total)} {lang === "ar" ? "ر.س" : "SAR"}</strong></footer></section>
       </main>
-      <footer className="ts-focus-configure-cta"><button type="button" disabled={!chosen} onClick={onContinue}>{lang === "ar" ? "إكمال الحجز" : "Continue booking"}<ArrowLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><small>{lang === "ar" ? "ستسجل الدخول قبل تعبئة بيانات المعتمرين" : "Sign in before entering traveller details"}</small></footer>
+      <footer className="ts-focus-configure-cta"><button type="button" disabled={!chosen || !travellerType} onClick={onContinue}>{lang === "ar" ? "إكمال الحجز" : "Continue booking"}<ArrowLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><small>{!travellerType ? t("travellerTypeRequired") : (lang === "ar" ? "ستسجل الدخول قبل تعبئة بيانات المعتمرين" : "Sign in before entering traveller details")}</small></footer>
     </section>
   );
 }

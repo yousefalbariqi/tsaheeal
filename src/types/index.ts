@@ -102,6 +102,8 @@ export interface TripSettings {
 export interface Trip {
   id:string; packageId:string; transportId:string; hotelId:string;
   branchId:string;                       // نقطة الانطلاق من الفروع (اختياري القيمة)
+  /** مدينة الانطلاق لقطةٌ مستقلة؛ المدينة الواحدة قد تضم نقاط انطلاق متعددة. */
+  departureCity?:string;
   busPlate:string; busCode:string;       // رقم لوحة الباص + الرقم التعريفي الداخلي
   departureDate:string; returnDate:string; departureTime:string;
   departurePoint:string; departureMapUrl:string;
@@ -207,6 +209,8 @@ export interface Pilgrim {
 }
 export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"|"awaiting_payment"|"awaiting_trip"|"paid"|"verifying"|"verified"|"confirmed"|"cancelled";
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
+/** اختيارٌ مستقل عن السكن: من يسافر في هذا الطلب. */
+export type TravellerType = "male_solo"|"female_solo"|"family";
 /** غرفة واحدة في توزيع سكن حجز. السعر مثبَّت وقت الحجز لا مقروء من الباقة:
     تعديل الموظف لأسعارها لاحقاً يجب ألّا يجعل الإجمالي المحفوظ غير مفسَّر. */
 export interface BookingRoom { tierId?:string; type:string; persons:number; perNight:number; }
@@ -214,6 +218,7 @@ export interface Booking {
   id:string; tripId:string; packageId?:string;
   clientName:string; clientPhone:string;
   roomType:string; persons:number;
+  travellerType?:TravellerType;
   /** توزيع السكن مفصّلاً. اختياري: الحجوزات الداخلية والقديمة بلا توزيع. */
   rooms?:BookingRoom[];
   total:number; status:BookingStatus;

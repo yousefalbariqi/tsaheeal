@@ -172,6 +172,29 @@
 .ts-focus-next-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }.ts-focus-next-copy strong { color:#553d23; font-family:var(--font-display); font-size:17px; }.ts-focus-next-copy small { color:#8a7256; font-size:12px; font-weight:700; }
 .ts-focus-next-action { display:flex; flex:0 0 auto; align-items:center; gap:2px; color:#9a6d22; font-size:12px; font-weight:800; }
 .ts-focus-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:36px 18px; color:#8a7560; text-align:center; border:1px dashed #d9cbb9; border-radius:18px; background:#fffdf9; }
+.ts-focus-empty svg { color:#c0a373; }
+.ts-focus-empty strong { color:#553d23; font-family:var(--font-display); font-size:17px; font-weight:700; }
+.ts-focus-empty small { max-width:34ch; font-size:12px; font-weight:600; line-height:1.6; }
+.ts-focus-empty-action { min-height:40px; margin-top:6px; padding:0 18px; color:#fff; border:0; border-radius:12px; background:#a8782c; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; }
+.ts-focus-empty-action:hover,.ts-focus-empty-action:focus-visible { background:#8c6423; outline:none; }
+
+/* مدينة الانطلاق — سطرٌ واحد فوق الخط الزمني. مرتفعٌ بصرياً عمّا تحته
+   لأنه يحكم ما يُعرض فيه: من يقرأ «الدمام» يفهم فوراً لماذا اختفت
+   مواعيد الخبر، وتغييره بضغطةٍ في مكانه لا في صفحةٍ أخرى. */
+.ts-focus-depart { display:flex; align-items:center; gap:11px; width:100%; min-height:64px; margin:0 0 14px; padding:10px 13px; color:#513a22; text-align:start; border:1px solid #e5d7c3; border-radius:16px; background:linear-gradient(135deg,#fffdf9,#faf1e2); cursor:pointer; box-shadow:0 6px 16px rgba(72,48,20,.07); font-family:var(--font-app); transition:transform .18s ease,box-shadow .18s ease; }
+.ts-focus-depart:hover,.ts-focus-depart:focus-visible { transform:translateY(-1px); box-shadow:0 12px 22px rgba(72,48,20,.13); outline:none; }
+.ts-focus-depart:focus-visible { box-shadow:0 0 0 3px #fffaf4,0 0 0 6px #a8782c; }
+/* لم تُختر بعد: حدٌّ متقطّع ونصٌّ ذهبي — دعوةٌ لا خبر. */
+.ts-focus-depart.is-empty { border-style:dashed; border-color:#d8c19a; }
+.ts-focus-depart-icon { display:grid; flex:0 0 auto; place-items:center; width:40px; height:40px; border-radius:13px; color:#a8782c; background:#fff; border:1px solid #eedfca; }
+.ts-focus-depart-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:2px; }
+.ts-focus-depart-copy small { color:#8a7256; font-size:11px; font-weight:700; }
+.ts-focus-depart-copy strong { overflow:hidden; color:#553d23; font-family:var(--font-display); font-size:17px; white-space:nowrap; text-overflow:ellipsis; }
+.ts-focus-depart.is-empty .ts-focus-depart-copy strong { color:#9a6d22; }
+.ts-focus-depart-action { display:flex; flex:0 0 auto; align-items:center; gap:2px; color:#9a6d22; font-size:12px; font-weight:800; }
+/* اسم نقطة الانطلاق قد يطول («مجمع الملك عبدالله — طريق الملك فهد»)؛
+   يُقصّ بثلاث نقاط ولا يدفع السعر خارج البطاقة. */
+.ts-focus-trip-depart { overflow:hidden; min-width:0; text-overflow:ellipsis; }
 
 /* الخط الزمني للمغادرات: المساحة للرحلة لا للأيام الفارغة. */
 .ts-focus-timeline-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 4px 12px; }.ts-focus-timeline-head>div:first-child { display:grid; gap:2px; }.ts-focus-timeline-head span { color:#513a22; font-family:var(--font-display); font-size:20px; font-weight:700; }.ts-focus-timeline-head small { color:#947e63; font-size:11px; font-weight:700; }.ts-focus-calendar-switch { display:flex; flex:0 0 auto; padding:3px; border:1px solid #e8ddcd; border-radius:10px; background:#fffdf9; }.ts-focus-calendar-switch button { min-height:27px; padding:0 8px; color:#a19384; border:0; border-radius:7px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:10px; font-weight:800; }.ts-focus-calendar-switch button.active { color:#fff; background:#a8782c; }.ts-focus-calendar-switch button:focus-visible { outline:2px solid #a8782c; outline-offset:2px; }
@@ -783,3 +806,53 @@
   }
   .ts-listing-shell > .ts-listing-grid { padding-bottom:130px !important; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   الورقة/النافذة — قياسها هنا لا في جافاسكربت: استعلام الوسائط
+   يعرف عرض الشاشة قبل أول رسم فلا ترتعش الورقة عند فتحها.
+   zIndex 70 لا 60: زر الواتساب العائم عند 60 ويُرسم بعدها في
+   الشجرة، فكان يطفو فوق النافذة ويغطّي أول خياراتها.
+   ════════════════════════════════════════════════════════════ */
+.ts-sheet-overlay { position:fixed; inset:0; z-index:70; display:flex; align-items:flex-end; justify-content:center; }
+.ts-sheet { display:flex; width:100%; max-height:92dvh; flex-direction:column; overflow:hidden; border-radius:24px 24px 0 0; }
+/* قائمةٌ تُبحث: بينها وبين أعلى الشاشة قليل، فتُقرأ القائمة كاملةً
+   ولا يُطلب من العميل أن يمرّر داخل شريطٍ ارتفاعه أربعة أسطر. */
+.ts-sheet--tall { height:calc(100dvh - 52px); max-height:calc(100dvh - 52px); }
+.ts-sheet-head { display:flex; flex-shrink:0; align-items:center; gap:12px; padding:14px 24px; }
+.ts-sheet-close { display:flex; flex-shrink:0; align-items:center; justify-content:center; width:34px; height:34px; border:none; border-radius:999px; background:none; cursor:pointer; }
+.ts-sheet-title { flex:1; text-align:center; }
+.ts-sheet-head-pad { flex-shrink:0; width:34px; }
+.ts-sheet-body { flex:1; overflow-y:auto; padding:24px; -webkit-overflow-scrolling:touch; }
+.ts-sheet-foot { flex-shrink:0; padding:24px; }
+
+/* ── نافذةٌ في الوسط على الجوال (center) ──
+   الحوافّ مستديرةٌ من جهاتها الأربع لا من أعلاها وحدها: الاستدارة
+   العليا وحدها تقول «أنا ملتصقةٌ بالقاع»، وهي هنا معلّقةٌ في الوسط.
+   والارتفاع يتبع محتواه (max-content) فلا يبقى فراغٌ أبيض تحت ثلاثة
+   خيارات قصيرة. */
+.ts-sheet-overlay--center { align-items:center; padding:20px; }
+.ts-sheet--center { width:100%; max-height:min(80dvh,620px); border-radius:22px; box-shadow:0 24px 60px -18px rgba(40,26,8,.45); }
+
+@media (min-width:640px) {
+  /* نافذةٌ في الوسط بعرضٍ محدود. الورقة الممتدة على شاشةٍ واسعة تضع
+     خياراً واحداً في وسط شريطٍ فارغٍ عرضه متر. */
+  .ts-sheet-overlay { align-items:center; padding:28px; }
+  .ts-sheet { width:min(100%,520px); max-height:min(84vh,680px); border-radius:22px; box-shadow:0 30px 70px -20px rgba(40,26,8,.45); }
+  .ts-sheet--tall { height:min(84vh,680px); max-height:min(84vh,680px); }
+  /* المعرض يحتاج عرضاً: صورةٌ في ٥٢٠ بكسل تُلبَّد بحوافّ سوداء. */
+  .ts-sheet--wide { width:min(100%,880px); }
+}
+
+/* حقل البحث في ورقة المدن — لاصقٌ أعلى القائمة فيبقى في متناول اليد
+   مهما طالت المدن، ويمتدّ إلى حافتي الورقة فلا يظهر ما ينزلق تحته من
+   خلف طرفيه. */
+.ts-dep-search-bar { position:sticky; top:0; z-index:2; margin:0 -24px 6px; padding:2px 24px 10px; background:#fff; }
+.ts-dep-search { display:flex; align-items:center; gap:9px; min-height:48px; padding:0 13px; border:1px solid #E6DFCF; border-radius:14px; background:#FBF9F5; transition:border-color .15s ease,box-shadow .15s ease; }
+.ts-dep-search:focus-within { border-color:#B7893F; background:#fff; box-shadow:0 0 0 3px rgba(183,137,63,.16); }
+.ts-dep-search > svg { flex:0 0 auto; color:#A69D8E; }
+.ts-dep-search:focus-within > svg { color:#B7893F; }
+.ts-dep-search input { min-width:0; flex:1; padding:0; color:#5C421B; border:0; background:transparent; outline:none; font-family:var(--font-app); font-size:16px; }
+.ts-dep-search input::placeholder { color:#A69D8E; }
+.ts-dep-search button { display:grid; flex:0 0 auto; place-items:center; width:26px; height:26px; color:#625B4D; border:0; border-radius:999px; background:#EFEAE0; cursor:pointer; }
+.ts-dep-search button:hover { color:#5C421B; background:#E6DFCF; }
+.ts-sheet-open .ts-wa-fab { display:none; }

@@ -1,7 +1,7 @@
 /* طبقة بيانات صفحة العميل (anon).
    القراءة عبر repo (يقرأ Supabase كـ anon بعد الـMigration، أو seed محلياً).
    الإرسال عبر RPC عام create_public_booking (أو محلياً في وضع seed). */
-import type { Pkg, Trip, Hotel, Transport, Pilgrim, CustomRequest, BookingRoom } from "@/types";
+import type { Pkg, Trip, Hotel, Transport, Pilgrim, CustomRequest, BookingRoom, TravellerType } from "@/types";
 import { repo } from "@/data/repository";
 import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
@@ -72,54 +72,15 @@ export async function fetchCatalog(): Promise<Catalog> {
     : { packages: [], trips: [], hotels: [], transports: [] };
 }
 
-/** المقاعد المحجوزة لرحلة (لتلوينها في الكروكي). */
-export async function fetchTakenSeats(tripId: string): Promise<number[]> {
-  /* بلا مفاتيح Supabase تُكتب الحجوزات محلياً، فالمقاعد المأخوذة تُقرأ من
-     المخزن لا من القاعدة (وإلا ظهرت الرحلة فارغة دائماً). */
-  if (hasRealSession()) {
-    const { data, error } = await supabase.rpc("trip_taken_seats", { p_trip_id: tripId });
-    if (error) { console.error(error); return []; }
-    return (data as number[]) ?? [];
-  }
-  const st = useStore.getState();
-  const taken = new Set<number>();
-  st.bookings.forEach(b => { if (b.tripId === tripId && b.status !== "cancelled" && b.status !== "rejected") b.seats.forEach(s => taken.add(s)); });
-  return [...taken];
-}
-
-/* ── حجز المقعد مؤقتاً (ترحيل 20260917) ──
-   يُنادى بعد كل تغييرٍ في المقاعد المختارة: يستبدل ما للحامل على الرحلة
-   بالمختار الآن ويعيد وقت الانتهاء. قاعدةٌ بلا الترحيل تعيد unsupported
-   فتعمل الشاشة كما كانت بلا حجزٍ مؤقت. */
-export type HoldFail = "seat_taken" | "seat_held" | "unsupported" | "other";
-export async function holdSeats(tripId: string, seats: number[]): Promise<{ expiresAt: string | null; fail?: HoldFail; seat?: number }> {
-  if (!hasRealSession()) return { expiresAt: null, fail: "unsupported" };
-  const { data, error } = await cust().rpc("hold_seats", { p_trip_id: tripId, p_seats: seats });
-  if (error) {
-    const m = String(error.message ?? "");
-    if (String((error as { code?: string }).code ?? "") === "PGRST202" || /Could not find the function/i.test(m)) return { expiresAt: null, fail: "unsupported" };
-    const taken = /seat_taken:(\d+)/.exec(m); if (taken) return { expiresAt: null, fail: "seat_taken", seat: Number(taken[1]) };
-    const held = /seat_held:(\d+)/.exec(m);   if (held)  return { expiresAt: null, fail: "seat_held",  seat: Number(held[1]) };
-    console.error("[holdSeats]", error);
-    return { expiresAt: null, fail: "other" };
-  }
-  return { expiresAt: (data as string | null) ?? null };
-}
-export async function releaseSeatHolds(tripId: string | null): Promise<void> {
-  if (!hasRealSession()) return;
-  const { error } = await cust().rpc("release_seat_holds", { p_trip_id: tripId });
-  if (error && !/Could not find the function/i.test(String(error.message))) console.error("[releaseSeatHolds]", error);
-}
-
 export interface BookingPayload {
   tripId: string; packageId: string;
   clientName: string; clientPhone: string;
   roomType: string; persons: number; total: number;
+  travellerType: TravellerType;
   bookingMode?: "full_package" | "transport_only";
   /** توزيع الغرف — يُحفظ في booking_rooms، و roomType يبقى ملخّصه المقروء. */
   rooms?: BookingRoom[];
-  seats: number[];
-  pilgrims: { name: string; docType?: string; idNumber: string; nationality: string; gender: string; ageGroup?: string; birthDate: string; phone: string; seat?: number }[];
+  pilgrims: { name: string; docType?: string; idNumber: string; nationality: string; gender: string; ageGroup?: string; birthDate: string; phone: string }[];
 }
 
 /** يعيد رقم الطلب عند النجاح، أو يرمي خطأً (بما فيه نقص المقاعد). */
@@ -152,8 +113,8 @@ export async function submitBooking(p: BookingPayload): Promise<string> {
   writeLocalOnly(() => {
   st.setBookings(prev => [{
     id, tripId: p.tripId, packageId: p.packageId, clientName: p.clientName, clientPhone: p.clientPhone,
-    roomType: p.roomType, rooms: p.rooms, persons: p.persons, total: p.total, status: "reviewing", paymentStatus: "none",
-    seats: p.seats ?? [], createdAt: new Date().toISOString().slice(0, 10), submittedAt: new Date().toISOString(), staff: "", source: "public", sentDate: "",
+    roomType: p.roomType, rooms: p.rooms, persons: p.persons, travellerType:p.travellerType, total: p.total, status: "reviewing", paymentStatus: "none",
+    seats: [], createdAt: new Date().toISOString().slice(0, 10), submittedAt: new Date().toISOString(), staff: "", source: "public", sentDate: "",
     pilgrims: p.pilgrims.map(x => ({ ...x, gender: x.gender as "male" | "female", docType: x.docType as Pilgrim["docType"], ageGroup: x.ageGroup as Pilgrim["ageGroup"] })),
   }, ...prev]);
   st.setTrips(prev => prev.map(t => t.id === p.tripId ? { ...t, bookedSeats: t.bookedSeats + p.persons } : t));

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import type { Pkg, Trip, Hotel, Transport, PkgFeature, PkgReview } from "@/types";
+import type { TravellerType } from "@/types";
 import { hotelDisplayName } from "@/lib/hotelName";
 import {
   bookingRoomChoices, splitTotal, splitSummary, splitHeadline, splitDetail, bedsCount,
@@ -27,6 +28,8 @@ import {
 import { availSeats } from "../data";
 import { durationLabel } from "../plural";
 import { ReviewsSection } from "../ui/ReviewsSection";
+import { TravellerIcon, TRAVELLER_PALETTE } from "../ui/TravellerType";
+import { tiersForTraveller } from "@/data/housing";
 import { transportFeatureIcon } from "../../transport/featureIcons";
 
 /* المستفيد يحتاج إشارة وفرة لا جرداً: «متبقٍ 99 مقعداً» رقم لا يقرّر به
@@ -81,6 +84,12 @@ export interface ListingProps {
   total: number;
   onBack: () => void;
   onNext: () => void;
+  /** لباقة مكة والمدينة فقط: العميل يختار المدينة، لا نقطة التجمع. */
+  departureCityRequired?: boolean;
+  departureCity?: string;
+  onDepartureCityClick?: () => void;
+  travellerType: TravellerType | "";
+  onTravellerTypeClick: () => void;
   terms: string;
   t: (k: string) => string;
   lang: string;
@@ -274,14 +283,16 @@ export function Listing(p: ListingProps) {
 
   /* كل صف يظهر كما سُجّل: «سكن مشترك · 3 أشخاص» مثلاً. الرقم سعة الغرفة،
      أما الإجمالي فيضرب سعرها للفرد في عدد معتمري الطلب. */
-  const options = useMemo(() => bookingRoomChoices(pkg.roomPrices, persons), [pkg.roomPrices, persons]);
+  /* نفس قاعدة Focus: السرير المشترك لا يُعرض إلا للرجال. */
+  const options = useMemo(
+    () => bookingRoomChoices(tiersForTraveller(pkg.roomPrices, p.travellerType), persons),
+    [pkg.roomPrices, persons, p.travellerType]);
   /* لا ندمج فئات السكن المشترك: 2 و3 و4 أشخاص خيارات مستقلة. */
   const groups = useMemo(() => options.map(o => [o.key, [o]] as [string, RoomSplit[]]), [options]);
 
-  /* المقاعد انتقلت لشاشة مستقلة بعد بيانات المعتمرين — لكل معتمر مقعده بالاسم. */
   /* السعة تُفحص هنا أيضاً لا في الحارس وحده: الحارس أثر جانبي يعمل بعد
      الرسم، وبين تغيّر العدد وتنفيذه إطارٌ كان الشريط الثابت فيه مفعَّلاً. */
-  const ready = !!trip && (bookingMode === "transport" || !!split);
+  const ready = !!trip && !!p.travellerType && (bookingMode === "transport" || !!split);
 
   /* ── حالة التحرير ──
      لا أكورديون مرقّم ولا خطوةٌ تُطوى فتغيب. العلّة التي أسقطته: التاريخ
@@ -377,8 +388,31 @@ export function Listing(p: ListingProps) {
             <div style={{ ...T.meta, fontWeight: 600 }}>{t("return")}: {tripDates.return}</div>
           </div>
         )}
+        {/* الصفّ يحمل لون النوع المختار ورسمه، لا رمزاً محايداً واحداً:
+            مراجعةٌ سريعة قبل المتابعة تكشف الخطأ بالشكل قبل النص. */}
+        {trip && (() => {
+          const picked = p.travellerType || null;
+          const accent = picked ? TRAVELLER_PALETTE[picked].ink : C.green;
+          const plate = picked ? TRAVELLER_PALETTE[picked].tint : C.fill;
+          return (
+            <button type="button" onClick={p.onTravellerTypeClick} className="w-full flex items-center gap-3 text-start"
+              style={{marginTop:12,padding:"13px 14px",borderRadius:R.card,cursor:"pointer",fontFamily:"inherit",
+                background:picked?plate:C.white,border:`1px solid ${picked?accent:C.border}`,color:C.ink}}>
+              <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{background:picked?C.white:C.fill}}>
+                {picked ? <TravellerIcon type={picked} size={26} bg={C.white}/>
+                        : <Users size={18} style={{color:C.ink2}}/>}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span style={{...T.small,color:C.ink2,display:"block"}}>{t("whoTravels")}</span>
+                <span style={{...T.body,fontWeight:600,display:"block",marginTop:2,color:picked?accent:C.ink}}>{picked?t(picked):t("chooseTravellerType")}</span>
+              </span>
+              <span style={{...T.small,fontWeight:600,color:picked?accent:C.green}}>{picked?t("change"):t("choose")}</span>
+            </button>
+          );
+        })()}
         <div style={{ marginTop: 12 }}>
-          <CTAButton full disabled={!trip}
+          <CTAButton full disabled={!trip || !p.travellerType}
             onClick={() => { focusPeopleAfterDate.current = true; setEditDate(false); }}>
             {tripDates ? t("confirmTrip").replace("{range}", tripDates.range) : t("confirmDate")}
           </CTAButton>
@@ -386,6 +420,11 @@ export function Listing(p: ListingProps) {
           {!trip && (
             <div style={{ ...T.small, fontWeight: 400, color: C.ink3, marginTop: 8, textAlign: "center" }}>
               {t("pickDateFirst")}
+            </div>
+          )}
+          {trip&&!p.travellerType&&(
+            <div style={{ ...T.small, fontWeight: 400, color: C.ink3, marginTop: 8, textAlign: "center" }}>
+              {t("travellerTypeRequired")}
             </div>
           )}
         </div>
@@ -687,6 +726,18 @@ export function Listing(p: ListingProps) {
             <TitleAccent />
             <h2 style={{ ...T.h2, color: C.ink, margin: 0 }}>{t("bookYourTrip")}</h2>
           </div>
+          {p.departureCityRequired && (
+            <button type="button" onClick={p.onDepartureCityClick} className="w-full flex items-center gap-3 text-start"
+              style={{marginBottom:14,padding:"13px 14px",borderRadius:R.card,cursor:"pointer",fontFamily:"inherit",
+                background:p.departureCity?C.greenTint:C.white,border:`1px solid ${p.departureCity?C.green:C.border}`,color:C.ink}}>
+              <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{background:p.departureCity?C.green:C.fill,color:p.departureCity?C.white:C.ink2}}><MapPin size={18}/></span>
+              <span className="flex-1 min-w-0">
+                <span style={{...T.small,color:C.ink2,display:"block"}}>{t("departureCity")}</span>
+                <span style={{...T.body,fontWeight:600,display:"block",marginTop:2}}>{p.departureCity||t("chooseDepartureCity")}</span>
+              </span>
+              <span style={{...T.small,fontWeight:600,color:C.green}}>{p.departureCity?t("change"):t("choose")}</span>
+            </button>
+          )}
           {transportOnly && (
             <div className="grid grid-cols-2" style={{ gap: 10, marginBottom: 14 }}>
               {(["full", "transport"] as const).map(mode => {
@@ -877,7 +928,7 @@ export function Listing(p: ListingProps) {
 
       {/* نافذة صور الفندق/النقل: صورة واحدة مضبوطة النسبة ثم مصغّرات.
           عرض كل الصور عمودياً كان يكبّر صورة المبنى حتى تخرج من مجال النظر. */}
-      <Sheet open={!!full} onClose={() => setFull(null)} title={t("viewPhotos")}>
+      <Sheet open={!!full} onClose={() => setFull(null)} title={t("viewPhotos")} wide>
         {full && (
           <div className="flex flex-col" style={{ gap: 12 }}>
             {full.items[full.i]?.kind === "video" ? (

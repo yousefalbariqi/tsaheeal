@@ -76,3 +76,17 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 @media (max-width: 900px) {
   .pkg-two-col { grid-template-columns: minmax(0, 1fr) !important; }
 }
+
+/* ── صفّ الرحلة في لوحة التشغيل ──
+   الصفّ كلّه قابلٌ للضغط، فيلزمه ردٌّ بصريّ عند المرور — وإلا بدا نصّاً
+   جامداً وفيه زرٌّ وحيد. والخلفية صريحةٌ لا موروثة: عمود «إدارة الرحلة»
+   مثبَّتٌ عند الحافة و`background: inherit` عليه، فصفٌّ شفّاف يجعل بقية
+   الأعمدة تمرّ من تحته عند التمرير الأفقي. */
+.trip-row { background: #fff; transition: background 0.12s ease; }
+.trip-row:nth-child(even) { background: #FDFCFA; }
+.trip-row:hover { background: #FBF7EC; }
+
+/* صفّ اليوم في لوح التقويم — القاعدة نفسها بلا تخطيط: الأسطر متباعدة
+   هناك فلا تحتاج تناوباً يفصلها. */
+.day-row { background: #fff; transition: background 0.12s ease; }
+.day-row:hover { background: #FBF7EC; }

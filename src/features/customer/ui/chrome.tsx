@@ -56,19 +56,29 @@ export function AppBar({ title, onBack, dir, lang, onLang, t }: {
    memo يفيد فعلاً هنا: كل خصائصه ثابتة الهوية (`onNav` من useCallback،
    و`t` من useMemo)، فلا يُرسم إلا حين تتغيّر الشاشة أو اللغة — لا مع كل
    حرف يُكتب في نموذج المعتمرين. */
-export const BottomBar = memo(function BottomBar({ screen, onNav, t }: {
+export const BottomBar = memo(function BottomBar({ screen, home, onNav, t }: {
   screen: Screen;
+  /** الشاشة التي يعنيها تبويب «استكشاف». صارت خاصيّةً لأن للموقع
+      رئيسيتين ما دام القديم محفوظاً: من فتح الاستكشاف القديم يبقى فيه،
+      ومن جاء من الرئيسية الجديدة يعود إليها — فلا يقفز أحدٌ بضغطة
+      تبويبٍ من تجربةٍ إلى أخرى. */
+  home: Screen;
   onNav: (s: Screen, pkgId?: string) => void;
   t: (k: string) => string;
 }) {
+  const tabs: readonly (readonly [Screen, typeof Search, string])[] = [
+    [home, Search, t("explore")],
+    ["track", Heart, t("myBookings")],
+    ["profile", UserRound, t("profile")],
+  ];
   return (
     <div className="ts-mobile-bottom-bar sticky bottom-0 z-30 grid grid-cols-3"
       style={{background:C.white,borderTop:`1px solid ${C.line}`,paddingBlock:8,
               paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))"}}>
-      {([["packages",Search,t("explore")],["track",Heart,t("myBookings")],["profile",UserRound,t("profile")]] as const).map(([sc,Icon,lbl])=>{
+      {tabs.map(([sc,Icon,lbl])=>{
         const on=screen===sc;
         return (
-          <button key={sc} onClick={()=>onNav(sc as Screen)}
+          <button key={sc} onClick={()=>onNav(sc)}
             className="flex flex-col items-center gap-1 cursor-pointer"
             style={{background:"none",border:"none",paddingBlock:4,color:on?C.green:C.ink2}}>
             <Icon size={21} strokeWidth={on?2.2:1.7} fill={on&&sc==="track"?C.green:"none"}/>
@@ -88,14 +98,17 @@ export const BottomBar = memo(function BottomBar({ screen, onNav, t }: {
 
     والوجهة تنقّلٌ لا فلترٌ محلّي: الضغط على «مكة» من شاشة الحجوزات يعيدك
     إلى الرحلات مصفّاةً، فحالتها في CustomerApp لا في شاشة الاستكشاف. */
-export function DesktopNav({ screen, onNav, lang, setLang, t, cities, city, setCity, signedIn, onLogin, onSignup }: {
-  screen: Screen; onNav: (s: Screen, pkgId?: string) => void;
+export function DesktopNav({ screen, home, onNav, lang, setLang, t, cities, city, setCity, signedIn, onLogin, onSignup }: {
+  screen: Screen;
+  /** الشاشة التي يعود إليها الشعار والوجهات — انظر BottomBar. */
+  home: Screen;
+  onNav: (s: Screen, pkgId?: string) => void;
   lang: Lang; setLang: (lang: Lang) => void; t: (k: string) => string;
   cities: string[]; city: string; setCity: (c: string) => void;
   signedIn: boolean; onLogin: () => void; onSignup: () => void;
 }) {
-  const go = (c: string) => { setCity(c); onNav("packages"); };
-  const onPackages = screen === "packages";
+  const go = (c: string) => { setCity(c); onNav(home); };
+  const onPackages = screen === home;
   return <header className="ts-desktop-nav">
     <div className="ts-desktop-nav-inner">
       <button className="ts-brand" onClick={() => go("")} aria-label={t("brand")}>

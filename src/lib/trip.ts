@@ -186,16 +186,20 @@ export function calendarAnchor(trips: Trip[], now: Date = new Date()): { y: numb
 
 /* ═══ العرض ═══════════════════════════════════════════════════════ */
 
-const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+export const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+export const AR_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 /** لون خانة اليوم في التقويم — من الحالة المشتقّة لا من المخزّنة.
 
     كان في utils يقرأ `status` وحده، فيلوّن يوم ٣٠ يوليو أخضرَ «مفتوحة»
-    في سبتمبر. الأسبقية هنا: قائمٌ للبيع، ثم مكتمل، ثم جارٍ، ثم رمادي
-    لِما مضى أو أُلغي. */
+    في سبتمبر. الأسبقية هنا: قائمٌ للبيع، ثم ما قارب الامتلاء، ثم مكتمل،
+    ثم جارٍ، ثم رمادي لِما مضى أو أُلغي أو أُوقف حجزه. واللون من الحالة
+    المعروضة (tripBoardState) كي تقرأ خانةُ التقويم ما يقرأه صفُّ
+    الجدول — لونان لرحلةٍ واحدة أسوأ من لونٍ خشن. */
 export function dayColor(deps: Trip[], now: Date = new Date()): string {
-  const states = deps.map(t => tripState(t, now));
+  const states = deps.map(t => tripBoardState(t, now));
   if (states.includes("open")) return "#1E7A44";
+  if (states.includes("few")) return "#B4530C";
   if (states.includes("full")) return "#BE2626";
   if (states.includes("running")) return "#0E7CA8";
   return "#9a9186";
@@ -343,3 +347,127 @@ export function tripCancelWhatsApp(p: {
 }
 
 const firstName = (name: string): string => (name || "").trim().split(/\s+/)[0] || "عميلنا الكريم";
+
+/* ═══ لوحة التشغيل ════════════════════════════════════════════════
+
+   ما تحتاجه شاشة الرحلات وحدها: الحالة كما تُقرأ في جدولٍ يُمسح
+   بالعين في ثانية، والإشغال رقماً، والأسابيع مجموعةً. كلّه مشتقٌّ
+   هنا لا في الشاشة كي يُقرأ بالقاعدة نفسها في التقويم والجدول. */
+
+/** عتبة «متبقٍ قليل» — نسبةٌ لا رقمٌ ثابت.
+
+    خمسة مقاعدَ في حافلة ٥٠ إنذارٌ مبكّر، وفي حافلة ١٢ ثلثُ الحمولة.
+    والأرضية تمنع العكس: ٢٠٪ من حافلةٍ صغيرة مقعدان — إنذارٌ يأتي بعد
+    فوات وقت إطلاق رحلةٍ ثانية. */
+export const LOW_SEATS_RATIO = 0.2;
+export const LOW_SEATS_FLOOR = 5;
+
+export function lowSeatsThreshold(capacity: number): number {
+  return Math.max(LOW_SEATS_FLOOR, Math.ceil(capacity * LOW_SEATS_RATIO));
+}
+
+/** نسبة الإشغال ٠..١٠٠. سعةٌ صفر تُقرأ صفراً لا قسمةً على صفر. */
+export function occupancy(t: Pick<Trip, "seats" | "bookedSeats">): number {
+  const { capacity, booked } = seatsOf(t);
+  return capacity > 0 ? Math.min(100, Math.round((booked / capacity) * 100)) : 0;
+}
+
+/** حالة الرحلة كما تُعرض في لوحة التشغيل.
+
+    تزيد على TripState حالتَين يفرّق بينهما الموظف ولا يفرّق بينهما
+    الحقل المخزّن:
+
+      • «متبقٍ قليل» — ما زالت مفتوحةً وقاربت الامتلاء. هي اللحظة التي
+        يُقرَّر فيها إطلاق رحلةٍ إضافية، وكانت تُقرأ «مفتوحة» كغيرها
+        حتى يُغلق آخر مقعد.
+
+      • «مغلقة» — أوقف الموظف حجزها وفيها مقاعد. وهذه كانت تُكتب
+        `status = "full"` فتُقرأ «مكتملة العدد» ولها عشرون مقعداً
+        شاغراً: الجدول يقول امتلأت والواقع أنها أُوقفت. التفريق هنا
+        اشتقاقاً — المقاعد هي الفيصل — فلا يحتاج عموداً جديداً في
+        القاعدة. */
+export type TripBoardState = TripState | "few" | "closed";
+
+export function tripBoardState(t: Trip, now: Date = new Date()): TripBoardState {
+  const s = tripState(t, now);
+  if (s !== "open" && s !== "full") return s;
+  const { capacity, available } = seatsOf(t);
+  if (available <= 0) return "full";
+  if (t.status === "full") return "closed";
+  return available <= lowSeatsThreshold(capacity) ? "few" : "open";
+}
+
+/* ═══ الأسابيع ════════════════════════════════════════════════════ */
+
+/** أول الأسبوع — السبت، كما يبدأ أسبوع العمل هنا وكما يرسم التقويم. */
+export function weekStart(d: Date): Date {
+  const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  s.setDate(s.getDate() - ((s.getDay() + 1) % 7));
+  return s;
+}
+
+/** فرق الأسابيع بين رحلةٍ واليوم: ٠ هذا الأسبوع، ١ القادم، ‑١ الماضي. */
+export function weekOffset(dep: Date, now: Date = new Date()): number {
+  return Math.round((weekStart(dep).getTime() - weekStart(now).getTime()) / 604_800_000);
+}
+
+export type Horizon = "upcoming" | "past";
+
+/** فصل الرحلات بالفترة لا بالحالة.
+
+    `splitByPhase` يفصل بالحالة المعروضة، فرحلةٌ ألغيت في يوليو تبقى
+    «ملغاة» لا «منتهية» وتظهر في تشغيل سبتمبر. الفترة سؤالٌ عن التاريخ
+    وحده: ما انتهى موعده ماضٍ ولو أُلغي، وما لم ينتهِ قادمٌ ولو أُلغي —
+    فإلغاءُ رحلةِ الخميس خبرٌ يخصّ هذا الأسبوع. */
+export function splitByHorizon(trips: Trip[], now: Date = new Date()): { upcoming: Trip[]; past: Trip[] } {
+  const upcoming: Trip[] = [], past: Trip[] = [];
+  for (const t of trips) (tripPhase(t, now) === "ended" ? past : upcoming).push(t);
+  return { upcoming, past };
+}
+
+export interface TripGroup { key: string; label: string; trips: Trip[]; }
+
+/** الرحلات مجموعةً بالأسبوع ومرتّبةً بالأقرب فالأبعد.
+
+    التجميع بالأسبوع لا بالباقة: السؤال الأول على هذه الشاشة «ما الذي
+    يتحرّك هذا الأسبوع؟» لا «ماذا في هذه الباقة؟». والفترة الماضية
+    تُقلب: الأقرب إلى اليوم أوّلاً، لأن المراجعة ترجع خطوةً خطوة. */
+export function groupByWeek(trips: Trip[], horizon: Horizon = "upcoming", now: Date = new Date()): TripGroup[] {
+  const dir = horizon === "past" ? -1 : 1;
+  const sorted = [...trips].sort((a, b) => {
+    const ta = tripDeparture(a)?.getTime() ?? Infinity, tb = tripDeparture(b)?.getTime() ?? Infinity;
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return ta - tb;
+    return (ta - tb) * dir;
+  });
+  const order = ["w0", "w1", "w2", "later", "none"] as const;
+  const label: Record<string, string> = horizon === "past"
+    ? { w0: "هذا الأسبوع", w1: "الأسبوع الماضي", w2: "الأسبوع الذي قبله", later: "أقدم", none: "بلا تاريخ" }
+    : { w0: "هذا الأسبوع", w1: "الأسبوع القادم", w2: "الأسبوع الذي بعده", later: "لاحقاً", none: "بلا تاريخ" };
+  const buckets = new Map<string, Trip[]>();
+  for (const t of sorted) {
+    const dep = tripDeparture(t);
+    let key = "none";
+    if (dep) {
+      const off = weekOffset(dep, now) * dir;
+      key = off <= 0 ? "w0" : off === 1 ? "w1" : off === 2 ? "w2" : "later";
+    }
+    (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(t);
+  }
+  return order.filter(k => buckets.get(k)?.length).map(k => ({ key: k, label: label[k], trips: buckets.get(k)! }));
+}
+
+/* ═══ العرض — التاريخ ═════════════════════════════════════════════ */
+
+/** «الأربعاء» — اسم يوم الأسبوع من تاريخٍ مخزَّن. */
+export function dayName(ymdStr: string): string {
+  const p = parseYMD(ymdStr);
+  return p ? AR_DAYS[new Date(p.y, p.m, p.d).getDay()] : "—";
+}
+
+/** «١٧ سبتمبر» وسنةٌ إن خالفت سنة اليوم — الجدول لا يحتمل سنةً تتكرّر
+    في كل صفّ، ولا يحتمل إخفاءها حين تختلف فعلاً. */
+export function tableDate(ymdStr: string, now: Date = new Date()): { date: string; year?: string } {
+  const p = parseYMD(ymdStr);
+  if (!p) return { date: "—" };
+  return { date: `${p.d} ${AR_MONTHS[p.m]}`, year: p.y === now.getFullYear() ? undefined : String(p.y) };
+}

@@ -13,20 +13,21 @@
    أن يُقرأ صفٌّ ناقص فتُرسل حقول فارغة إلى القاعدة. */
 import type { DocType } from "@/data/docTypes";
 import type { RoomSplit } from "./roomSplit";
+import type { TravellerType } from "@/types";
 
 export interface Pax {
   name: string; phone: string; docType: DocType | ""; idNumber: string;
   nationality: string; birthDate: string;
-  gender: "male" | "female"; ageGroup: "adult" | "child"; seat: number | null;
+  gender: "male" | "female"; ageGroup: "adult" | "child";
 }
 
 export const emptyPax = (): Pax => ({
   name: "", phone: "", docType: "", idNumber: "", nationality: "",
-  birthDate: "", gender: "male", ageGroup: "adult", seat: null,
+  birthDate: "", gender: "male", ageGroup: "adult",
 });
 
 const KEY = "tasaheel_booking_draft";
-const VERSION = 2;
+const VERSION = 5;
 /* عمر المسوّدة — تبويب متروك مفتوحاً أياماً لا يعيد أسعاراً ورحلات
    قديمة إلى شاشة المراجعة. الرحلة قد امتلأت أو انطلقت أصلاً. */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -38,9 +39,9 @@ export interface BookingDraft {
   persons: number;
   split: RoomSplit | null;
   bookingMode: "full" | "transport";
+  travellerType: TravellerType | "";
   pax: Pax[];
   agreed: boolean;
-  activePax: number;
   savedAt: number;
 }
 
@@ -68,11 +69,13 @@ export function readDraft(): BookingDraft | null {
       persons: d.persons as number,
       split: (d.split ?? null) as RoomSplit | null,
       bookingMode: d.bookingMode === "transport" ? "transport" : "full",
+      travellerType: d.travellerType === "male_solo" || d.travellerType === "female_solo" || d.travellerType === "family" ? d.travellerType : "",
       /* كل معتمر يُدمج فوق سجل فارغ: حقلٌ أُضيف بعد كتابة المسوّدة
          يأتي بقيمته الافتراضية بدل undefined يصل إلى القاعدة. */
-      pax: (d.pax as Pax[]).map(p => ({ ...emptyPax(), ...p })),
+      /* الحجز يجمع بيانات صاحب الحساب فقط؛ المسودات القديمة متعددة
+         المعتمرين تُختزل إلى صاحب الحجز بدلاً من إبقاء مرافقين ظاهرين. */
+      pax: [{ ...emptyPax(), ...(d.pax as Pax[])[0] }],
       agreed: d.agreed === true,
-      activePax: typeof d.activePax === "number" ? d.activePax : 0,
       savedAt: d.savedAt as number,
     };
   } catch { clearDraft(); return null; }
@@ -93,6 +96,5 @@ export function clearDraft(): void {
     داخلية بلا سبب بعد أن أراد البدء من جديد. */
 export function draftHasInput(pax: Pax[], tripId: string | null, split: RoomSplit | null): boolean {
   if (tripId || split) return true;
-  return pax.some(p =>
-    p.name.trim() || p.idNumber.trim() || p.nationality || p.birthDate || p.seat != null);
+  return pax.some(p => p.name.trim() || p.idNumber.trim() || p.nationality || p.birthDate);
 }

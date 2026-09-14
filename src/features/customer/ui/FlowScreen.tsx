@@ -13,8 +13,8 @@ import { useDir, CTAButton } from "./kit";
 import { Spinner } from "@/components/Spinner";
 
 /** خطوات المسار بعد صفحة التفاصيل — تُعرض كشرائح لا كأرقام. */
-export const FLOW_STEPS = ["stepLogin", "stepData", "stepSeats", "stepConfirm"] as const;
-export type FlowStep = 1 | 2 | 3 | 4;
+export const FLOW_STEPS = ["stepLogin", "stepData", "stepConfirm"] as const;
+export type FlowStep = 1 | 2 | 3;
 
 export function FlowScreen({
   onBack, onClose, title, subtitle, align = "start", step,
@@ -121,7 +121,7 @@ export function FlowScreen({
   );
 }
 
-/** أربع شرائح رفيعة أعلى الشريط السفلي — تقدّم بلا أرقام ولا نص. */
+/** شرائح رفيعة أعلى الشريط السفلي — تقدّم بلا أرقام ولا نص. */
 export function ProgressSegments({ step }: { step: FlowStep }) {
   const dir = useDir();
   /* الترتيب بعكس DOM في RTL لا بـtransform — الأخير يعكس ظلال العناصر

@@ -1128,48 +1128,112 @@ export function StickyBar({ price, note, chip, cta, onCta, ctaDisabled, variant 
    ولا حصر تركيز: من يستعمل لوحة المفاتيح وحدها لا يستطيع إغلاقها، وقارئ
    الشاشة لا يعلن أن حواراً فُتح. الحرس كلّه في useDialogA11y فيسري على
    كل موضع استُعملت فيه بلا تعديل أي منها. */
-export function Sheet({ open, onClose, title, children, footer }: {
+/* عرض الشاشة يُقرأ في جافاسكربت لأن الحركة تختلف بين الشكلين: الورقة
+   تنزلق من أسفل الشاشة، والنافذة تظهر في مكانها — وانزلاقُ نافذةٍ في
+   وسط شاشةٍ واسعة من القاع حركةٌ بلا معنى. أما القياسات فتبقى في CSS:
+   استعلام الوسائط يعرف عرض الشاشة قبل أول رسم، وجافاسكربت لا تعرفه. */
+const WIDE_SHEET = "(min-width: 640px)";
+function useWideViewport(): boolean {
+  const [wide, setWide] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia(WIDE_SHEET).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_SHEET);
+    const onChange = (e: MediaQueryListEvent) => setWide(e.matches);
+    setWide(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return wide;
+}
+
+/* ── ورقةٌ سفلية على الجوال، ونافذةٌ في الوسط على الشاشة الواسعة ──
+
+   كانت ورقةً سفليةً في كل العروض: على شاشة ١٩٢٠ بكسل تصير شريطاً
+   ممتداً بعرض الشاشة كلها، خيارٌ واحد في وسطه وفراغٌ عن يمينه وشماله —
+   ليست ورقةً بل جدار. الشكل يتبع المساحة، والمحتوى واحد. */
+export function Sheet({ open, onClose, title, children, footer, tall = false, wide = false, center = false, dismissible = true }: {
   open: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode;
+  /** سؤالٌ لا يُتخطّى: لا زرَّ إغلاق، ولا نقرةً على الخلفية، ولا Escape.
+      يُستعمل حين يكون الجواب شرطاً لما بعده — الخروج بلا جواب يترك
+      المستفيد في خطوةٍ تالية ببياناتٍ ناقصة تُرفض عند الإرسال، بعد أن
+      يكون قد عبّأ نموذجاً كاملاً. المخرج الوحيد هو الاختيار.
+
+      وهي راية لا حالة دائمة: من اختار مرّةً ثم فتحها ليُغيّر يستطيع
+      التراجع — المنع على الفراغ لا على النافذة. */
+  dismissible?: boolean;
+  /** سؤالٌ قصيرٌ إجباريّ (٣ خيارات بلا قائمة): يُعرض نافذةً في وسط
+      الشاشة على الجوال أيضاً، لا ورقةً ملتصقةً بالقاع. محتوىً بهذا
+      القِصَر يترك الورقة السفلية شريطاً في أسفل الخُمس الأخير من شاشةٍ
+      طولها ٩٥٦ بكسل — والسؤال الذي لا يُكمَل الحجز بدونه لا يُوضع حيث
+      لا تقع عليه العين. الشاشة الواسعة كانت تفعل هذا أصلاً؛ هذه الراية
+      تُسري السلوك على الجوال بدل أن تُحدث نمطاً ثالثاً. */
+  center?: boolean;
+  /** محتوى بصريّ لا نصّي (صورة، فيديو): النافذة الضيّقة تُلَبِّده بحوافّ
+      سوداء. عرضٌ أوسع على الشاشة الواسعة وحدها. */
+  wide?: boolean;
+  /** قائمةٌ طويلة أو تُبحث: تأخذ الشاشة إلا قليلاً بدل أن تُقرأ من ثقب
+      في أسفلها. الارتفاع ثابتٌ لا تابعٌ للنتائج، فلا تقفز الورقة مع كل
+      حرفٍ يُكتب في البحث. */
+  tall?: boolean;
 }) {
-  const a11y = useDialogA11y({ open, onClose, title });
+  /* Escape يمرّ عبر نفس الراية: لو مُنع زرّ الإغلاق وحده لبقي مفتاحٌ
+     واحد يتخطّى السؤال، والحارس الذي له ثغرةٌ ليس حارساً. */
+  const closeIfAllowed = useCallback(() => { if (dismissible) onClose(); }, [dismissible, onClose]);
+  const a11y = useDialogA11y({ open, onClose: closeIfAllowed, title });
+  const wideViewport = useWideViewport();
 
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    /* الصنف على <body> لا خاصيّة تُمرَّر: زر الواتساب العائم مركّبٌ في
+       طرفٍ آخر من الشجرة ولا يعرف بالورقة. تركُه ظاهراً خلف الطبقة
+       المعتمة يضع دائرةً خضراء باهتة فوق أول الخيارات. */
+    document.body.classList.add("ts-sheet-open");
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.classList.remove("ts-sheet-open");
+    };
   }, [open]);
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={onClose}
-          style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end" }}>
+          onClick={closeIfAllowed}
+          className={`ts-sheet-overlay${center ? " ts-sheet-overlay--center" : ""}`}
+          style={{ background: "rgba(0,0,0,.45)" }}>
           <motion.div
             ref={a11y.ref}
             {...a11y.panelProps}
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 30, stiffness: 320 }}
+            className={`ts-sheet${tall ? " ts-sheet--tall" : ""}${wide ? " ts-sheet--wide" : ""}${center ? " ts-sheet--center" : ""}`}
+            /* النافذة في الوسط تظهر مكانها ولا تنزلق من القاع: الانزلاق
+               حركةُ ورقةٍ تُسحب من حافّة الشاشة، ولا حافّة تحت نافذةٍ
+               معلّقةٍ في الوسط. */
+            initial={wideViewport || center ? { opacity: 0, scale: .97, y: 8 } : { y: "100%" }}
+            animate={wideViewport || center ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
+            exit={wideViewport || center ? { opacity: 0, scale: .97, y: 8 } : { y: "100%" }}
+            transition={wideViewport || center ? { duration: .18, ease: "easeOut" } : { type: "spring", damping: 30, stiffness: 320 }}
             onClick={e => e.stopPropagation()}
             style={{
-              width: "100%", maxHeight: "92vh", background: C.white,
-              borderTopLeftRadius: R.sheet, borderTopRightRadius: R.sheet,
-              display: "flex", flexDirection: "column", overflow: "hidden",
+              background: C.white,
               /* الصندوق يقبل التركيز برمجياً (tabIndex=-1) فلا يُرسم له
                  إطار تركيز: الإطار على عنصرٍ ليس هدف تنقّلٍ يُشوّش. */
               outline: "none",
             }}>
-            <div className="flex items-center gap-3" style={{ padding: `14px ${SPACE.page}px`, borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
-              <button onClick={onClose} aria-label="إغلاق"
-                style={{ width: 34, height: 34, borderRadius: R.pill, border: "none", background: "none", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <X size={19} />
-              </button>
-              {title && <span id={a11y.titleId} className="flex-1 text-center" style={{ ...T.h3, color: C.ink }}>{title}</span>}
-              <span style={{ width: 34, flexShrink: 0 }} />
+            <div className="ts-sheet-head" style={{ borderBottom: `1px solid ${C.line}` }}>
+              {dismissible
+                ? <button onClick={onClose} aria-label="إغلاق" className="ts-sheet-close" style={{ color: C.ink }}>
+                    <X size={19} />
+                  </button>
+                /* المكان يُحجز فارغاً: بحذف الزرّ ينزاح العنوان عن مركزه
+                   فتبدو النافذة مائلة، ويقفز حين تعود قابليّة الإغلاق. */
+                : <span className="ts-sheet-head-pad" />}
+              {title && <span id={a11y.titleId} className="ts-sheet-title" style={{ ...T.h3, color: C.ink }}>{title}</span>}
+              <span className="ts-sheet-head-pad" />
             </div>
-            <div className="flex-1 overflow-y-auto" style={{ padding: SPACE.page }}>{children}</div>
-            {footer && <div style={{ padding: SPACE.page, borderTop: `1px solid ${C.line}`, flexShrink: 0 }}>{footer}</div>}
+            <div className="ts-sheet-body">{children}</div>
+            {footer && <div className="ts-sheet-foot" style={{ borderTop: `1px solid ${C.line}` }}>{footer}</div>}
           </motion.div>
         </motion.div>
       )}
