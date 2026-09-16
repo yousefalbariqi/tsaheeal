@@ -68,7 +68,18 @@ export interface Transport {
 export type PkgStatus = "active" | "draft" | "hidden" | "suspended";
 export type PkgDest   = "مكة" | "مكة والمدينة";
 export interface ProgramStage { id:string; order:number; icon:string; day:string; time:string; title:string; desc:string; archived?:boolean; }
-export interface RoomPrice    { id:string; type:string; persons:number; perNight:number; seatCost?:number; }
+/** صفّ سكنٍ في الباقة.
+
+    `type` مشترك أو خاص، و`persons` عدد أسرّة الغرفة — الاثنان حرّان:
+    «مشترك · سريران» و«خاصة · ٦ أسرّة» تركيبتان مشروعتان، فالفنادق
+    تختلف والغرف ليست أربعة دائماً.
+
+    `audience` من تُعرض عليه. كان شرطاً مكتوباً في الكود («المشترك
+    للرجال») فلم يكن يُمكن بيع مشتركٍ للنساء ولا تخصيص غرفةٍ للعوائل
+    وحدها. صار بياناً في الصفّ: الإدارة تبني ما تشاء من التوليفات بلا
+    تعديل كود. وغيابه (null) يعني الجميع — الباقات القديمة لا تنقلب
+    مخفيّةً لأن حقلاً أُضيف بعدها. */
+export interface RoomPrice    { id:string; type:string; persons:number; perNight:number; seatCost?:number; audience?:TravellerType[]; }
 /** رأي الباقة: اسم وتقييم من خمس ونص وصورة اختيارية.
     consent/addedBy/bookingId حقول قديمة للقراءة فقط حتى تمرّ البيانات السابقة. */
 export interface PkgReview    { id:string; name:string; text:string; consent:boolean; image?:string; rating?:number; addedBy?:string; bookingId?:string; }

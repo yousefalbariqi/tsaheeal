@@ -9,7 +9,7 @@ import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate } from "@/components/States";
 import { linkableTransports } from "@/features/transport/readiness";
 import { TabStrip } from "@/components/Tabs";
-import type { Hotel, Transport, PkgStatus, PkgDest, ProgramStage, RoomPrice, PkgReview, PkgFeature, Pkg, TripSettings } from "@/types";
+import type { Hotel, Transport, PkgStatus, PkgDest, ProgramStage, RoomPrice, PkgReview, PkgFeature, Pkg, TripSettings, TravellerType } from "@/types";
 import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
@@ -23,9 +23,16 @@ import { onPickMedia } from "@/lib/mediaUpload";
 import { useEditor } from "@/lib/useEditor";
 import { useInternalSettings } from "@/data/useSettings";
 import { readiness, isSellableTier, type PkgTab, type Readiness } from "./readiness";
+/* ألوان الجمهور هي ألوان بطاقات «من المسافر؟» في واجهة العميل:
+   من يضبط الباقة يرى نفس الإشارة التي يراها المشتري. */
+const AUD_ON:Record<string,{fill:string;line:string;ink:string}>={
+  male_solo:{fill:"#E9F1FA",line:"#2E6DB4",ink:"#2E6DB4"},
+  female_solo:{fill:"#FBECF2",line:"#C2557E",ink:"#C2557E"},
+  family:{fill:"#F7EEDC",line:"#B7893F",ink:"#8C6423"},
+};
 import {
-  readSlots, writeSlots, readSharedBeds, housingLabel, capacityOf,
-  SHARED_BEDS_MIN, SHARED_BEDS_MAX, type HousingKind,
+  HOUSING_KINDS, AUDIENCE, ALL_AUDIENCE, audienceOf, audienceSummary,
+  tierLabel, typeOfKind, kindOf, newTier, BEDS_MIN, BEDS_MAX, type HousingKind,
 } from "@/data/housing";
 import { packageDeleteImpact, packageDeleteBlockers, countAr, tripsCount, bookingsCount, tripsDetail, bookingsDetail, type PackageDeleteImpact } from "./deletion";
 import { setArchiveReason, permanentlyDelete } from "@/data/repository";
@@ -1139,20 +1146,21 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             const totalOf=(r:RoomPrice)=>stayOf(r)+seatOf(r);
             /* الخيارات الأربعة تُشتقّ من roomPrices ولا تُخزَّن بجانبها:
                نسخةٌ ثانيةٌ تُزامَن تتفارق مع الأولى عند أول حفظٍ لم يُحسب. */
-            const sharedBeds=readSharedBeds(form.roomPrices);
-            const housingSlots=readSlots(form.roomPrices);
-            const commitSlots=(next:{kind:HousingKind;id:string;offered:boolean;perNight:number;seatCost?:number}[],beds=sharedBeds)=>
-              set("roomPrices",writeSlots(next,beds));
-            const patchSlot=(kind:HousingKind,patch:Partial<{offered:boolean;perNight:number;id:string}>)=>
-              commitSlots(housingSlots.map(x=>x.kind===kind?{...x,...patch}:x));
-            /* المعرّف يُولَّد لحظة التشغيل لا في كل قراءة — وإلا تبدّل
-               مفتاح الصفّ في كل رسمة وأُعيد بناء حقل السعر أثناء الكتابة. */
-            const toggleSlot=(kind:HousingKind,on:boolean)=>
-              patchSlot(kind,{offered:on,...(on?{id:housingSlots.find(x=>x.kind===kind)?.id||uid()}:{})});
-            const setSlotPrice=(kind:HousingKind,v:number)=>patchSlot(kind,{perNight:Number.isFinite(v)?v:0});
-            /* تغيير عدد الأسرّة يُعيد كتابة الصفوف كلها: سعة المشترك
-               محفوظةٌ في `persons` الخاص بصفّه، فلا موضع آخر لها. */
-            const setSharedBeds=(v:number)=>commitSlots(housingSlots,v);
+            /* الصفوف حرّة تُضاف وتُحذف: النوع والسعة والجمهور قرارات
+               تجارية تتغيّر مع كل فندق، لا ثوابت تُدفن في الكود. */
+            const addRoom=()=>set("roomPrices",[...form.roomPrices,newTier(uid(),selTransport?.seatCost)]);
+            const delRoom=(id:string)=>set("roomPrices",form.roomPrices.filter(r=>r.id!==id));
+            const updRoom=(id:string,patch:Partial<RoomPrice>)=>
+              set("roomPrices",form.roomPrices.map(r=>r.id===id?{...r,...patch}:r));
+            const moveRoom=(i:number,dir:-1|1)=>{const arr=[...form.roomPrices];const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("roomPrices",arr);};
+            /* تبديل جمهورٍ واحد. الجمهور الفارغ يُكتب صراحةً ولا يُترك
+               غائباً: الغياب يعني «للجميع» عند القراءة، فلو تُرك لانقلب
+               صفٌّ مُنع عن الكل إلى معروضٍ للكل. */
+            const toggleAud=(r:RoomPrice,v:TravellerType)=>{
+              const cur=audienceOf(r);
+              const next=cur.includes(v)?cur.filter(x=>x!==v):ALL_AUDIENCE.filter(x=>cur.includes(x)||x===v);
+              updRoom(r.id,{audience:next});
+            };
             const sellable=form.roomPrices.filter(isSellableTier);
             const cheapest=sellable.length?Math.min(...sellable.map(totalOf)):0;
             const announced=form.marketPrice||0;
@@ -1198,8 +1206,10 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <section className="rounded-2xl p-5" style={card}>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     {step(2,BedDouble,"السكن وأسعاره",nights>0
-                      ?"سعر الليلة للفرد في كل نوع سكن. الليالي مأخوذة من مدة الباقة."
+                      ?"نوع الغرفة وعدد أسرّتها وسعر الليلة للفرد، ولمن تُعرض. الليالي مأخوذة من مدة الباقة."
                       :"الباقة بلا مبيت (صفر ليالٍ) — السكن اختياري هنا.")}
+                    <button onClick={addRoom} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة غرفة</button>
                   </div>
                   <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                     <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>
@@ -1212,61 +1222,75 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       </span>
                     )}
                   </div>
-                  {/* أربعة خيارات ثابتة بدل جدولٍ يُضاف إليه ويُحذف منه.
-                      لا عمود «عدد الأشخاص»: العدد صار داخل اسم الخيار،
-                      وهو ما كان يسمح بتسجيل «خاصة · ٧ أشخاص» أو صفّين
-                      لنفس الغرفة بسعرين. الإعداد صار كتابةَ أسعار. */}
+                  {/* الصفّ يحمل قراره كاملاً: نوعه وعدد أسرّته وسعره ومن
+                      تُعرض عليه. «يظهر لـ» عمودٌ لأنه يتغيّر من غرفةٍ إلى
+                      أخرى — مشتركٌ للرجال وآخر للنساء وخاصةٌ للعوائل
+                      وحدها، كلها في باقةٍ واحدة. */}
                   <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-                    <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1.7fr 1fr 1fr",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
-                      {["نوع السكن","سعر الليلة للفرد","إجمالي السكن للفرد"].map((h,i)=>(
-                        <div key={i} className="px-3 py-2.5 text-center first:text-right">{h}</div>
+                    <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1.25fr .7fr .95fr 1.35fr .9fr 64px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
+                      {["النوع","عدد الأسرّة","سعر الليلة للفرد","يظهر لـ","إجمالي السكن","" ].map((h,i)=>(
+                        <div key={i} className="px-2.5 py-2.5 text-center first:text-right">{h}</div>
                       ))}
                     </div>
-                    {housingSlots.map(slot=>{
-                      const on=slot.offered;
-                      const stay=(slot.perNight||0)*nights;
+                    <AnimatePresence>{form.roomPrices.map((r,ri)=>{
+                      const aud=audienceOf(r);
+                      const none=aud.length===0;
                       return (
-                        <div key={slot.kind} className="grid items-center" style={{gridTemplateColumns:"1.7fr 1fr 1fr",borderTop:`1px solid ${B.border}`,background:on?"#fff":B.fill}}>
-                          <div className="px-3 py-2.5 flex items-start gap-2.5">
-                            <input type="checkbox" checked={on} aria-label={`عرض ${housingLabel(slot.kind,sharedBeds)}`}
-                              onChange={e=>toggleSlot(slot.kind,e.target.checked)}
-                              style={{accentColor:B.primary,width:16,height:16,marginTop:2,flexShrink:0,cursor:"pointer"}}/>
-                            <div className="flex flex-col gap-1 min-w-0">
-                              <span className="text-xs font-bold" style={{color:on?B.black:B.muted}}>{housingLabel(slot.kind,sharedBeds)}</span>
-                              {slot.kind==="shared"
-                                ? <div className="flex items-center gap-1.5 flex-wrap">
-                                    {/* «رجال فقط» قاعدةٌ لا خيار: لا يُعرض السرير
-                                        المشترك على امرأةٍ ولا على عائلة. */}
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{background:"#E9F1FA",color:"#2E6DB4"}}>رجال فقط</span>
-                                    {on&&<span className="flex items-center gap-1 text-[10px]" style={{color:B.muted}}>
-                                      عدد الأسرّة
-                                      <NumericInput min={SHARED_BEDS_MIN} max={SHARED_BEDS_MAX} value={sharedBeds}
-                                        onValueChange={v=>setSharedBeds(Number(v))}
-                                        className="border rounded-lg px-1.5 py-1 text-[11px] font-bold text-center focus:outline-none"
-                                        style={{borderColor:B.border,width:46,fontFamily:"var(--font-app)"}}/>
-                                    </span>}
-                                  </div>
-                                : <span className="text-[10px]" style={{color:B.muted}}>يُعرض للجميع</span>}
-                            </div>
-                          </div>
-                          <div className="px-3 py-2.5">
-                            <NumericInput min={0} disabled={!on} value={on?slot.perNight:""} placeholder="—"
-                              onValueChange={v=>setSlotPrice(slot.kind,Number(v))}
-                              className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
-                              style={{borderColor:B.border,color:on?B.gold:B.muted,background:on?"#fff":"transparent",fontFamily:"inherit"}}/>
-                          </div>
-                          <div className="px-3 py-2.5 text-sm font-extrabold text-center" style={{color:on?B.black:B.muted,fontFamily:"var(--font-app)"}}>
-                            {on?sar(stay):"—"}
-                          </div>
+                      <motion.div key={r.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
+                        className="grid items-center" style={{gridTemplateColumns:"1.25fr .7fr .95fr 1.35fr .9fr 64px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
+                        <div className="px-2.5 py-2">
+                          <select className="w-full border rounded-xl px-2.5 py-2 text-xs font-bold focus:outline-none cursor-pointer"
+                            style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}
+                            value={kindOf(r.type)} onChange={e=>updRoom(r.id,{type:typeOfKind(e.target.value as HousingKind)})}>
+                            {HOUSING_KINDS.map(k=><option key={k.value} value={k.value}>{k.label}</option>)}
+                          </select>
                         </div>
-                      );
-                    })}
-                  </div>
-                  {!housingSlots.some(x=>x.offered)&&<div className="flex flex-col items-center py-8" style={{color:ready.housing?"#BE2626":B.muted}}>
+                        <div className="px-2.5 py-2"><NumericInput min={BEDS_MIN} max={BEDS_MAX}
+                          className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
+                          style={{borderColor:B.border,fontFamily:"var(--font-app)"}} value={r.persons}
+                          onValueChange={v=>updRoom(r.id,{persons:Number(v)||1})}/></div>
+                        <div className="px-2.5 py-2"><NumericInput min={0}
+                          className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
+                          style={{borderColor:B.border,color:B.gold,fontFamily:"inherit"}} value={r.perNight}
+                          onValueChange={v=>updRoom(r.id,{perNight:Number(v)||0})}/></div>
+                        <div className="px-2 py-2 flex items-center justify-center gap-1 flex-wrap">
+                          {AUDIENCE.map(a=>{
+                            const on=aud.includes(a.value);
+                            return <button key={a.value} type="button" onClick={()=>toggleAud(r,a.value)}
+                              aria-pressed={on} title={`${on?"إخفاء عن":"عرض لـ"} ${a.label}`}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer"
+                              style={{border:`1px solid ${on?AUD_ON[a.value].line:B.border}`,background:on?AUD_ON[a.value].fill:"#fff",color:on?AUD_ON[a.value].ink:B.muted}}>
+                              {a.short}
+                            </button>;
+                          })}
+                        </div>
+                        <div className="px-2 py-2 text-xs font-extrabold text-center" style={{color:B.black,fontFamily:"var(--font-app)"}}>{sar(stayOf(r))}</div>
+                        <div className="px-1.5 py-2 flex items-center justify-center gap-1">
+                          <div className="flex flex-col gap-0.5">
+                            <button onClick={()=>moveRoom(ri,-1)} disabled={ri===0} className="w-5 h-3.5 flex items-center justify-center rounded cursor-pointer"
+                              style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===0?0.35:1}} aria-label="تقديم" title="تقديم"><ChevronUp size={9}/></button>
+                            <button onClick={()=>moveRoom(ri,1)} disabled={ri===form.roomPrices.length-1} className="w-5 h-3.5 flex items-center justify-center rounded cursor-pointer"
+                              style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,opacity:ri===form.roomPrices.length-1?0.35:1}} aria-label="تأخير" title="تأخير"><ChevronDown size={9}/></button>
+                          </div>
+                          <button aria-label="حذف" title="حذف" onClick={()=>delRoom(r.id)} className="w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer"
+                            style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={10}/></button>
+                        </div>
+                        {/* صفٌّ لا يراه أحد يُقال صراحةً: بلا هذا يبقى مسجّلاً
+                            بسعره ولا يظهر للعميل، فيُبحث عن العطب في الحجز. */}
+                        {none&&<div className="col-span-6 px-3 pb-2 text-[10px] font-bold" style={{color:"#BE2626"}}>
+                          لا يُعرض لأحد — فعّل جمهوراً واحداً على الأقل.
+                        </div>}
+                        <div className="col-span-6 px-3 pb-2 text-[10px]" style={{color:B.muted}}>
+                          {tierLabel(r.type,r.persons)} <span style={{opacity:.7}}>— {audienceSummary(r)}</span>
+                        </div>
+                      </motion.div>);
+                    })}</AnimatePresence>
+                    {form.roomPrices.length===0&&<div className="flex flex-col items-center py-10" style={{color:ready.housing?"#BE2626":B.muted}}>
                       <Building2 size={22} style={{opacity:0.35,marginBottom:6}}/>
-                      <p className="text-xs font-bold">لم يُفعَّل أي نوع سكن</p>
-                      <p className="text-[11px] mt-1">{ready.housing?"فعّل نوعاً واحداً على الأقل قبل النشر — الباقة تشمل سكناً.":"الباقة بلا مبيت — السكن اختياري."}</p>
+                      <p className="text-xs font-bold">لم تُضف أنواع سكن بعد</p>
+                      <p className="text-[11px] mt-1">{ready.housing?"مطلوب نوع واحد على الأقل قبل النشر — الباقة تشمل سكناً.":"الباقة بلا مبيت — السكن اختياري."}</p>
                     </div>}
+                  </div>
                 </section>
 
                 {/* ③ المواصلات — قسم مستقل لا عمودٌ داخل جدول الغرف */}
@@ -1288,10 +1312,10 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       </div>
                       {form.roomPrices.map(r=>(
                         <div key={r.id} className="grid items-center" style={{gridTemplateColumns:"1fr 140px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
-                          <div className="px-3 py-2 text-xs font-bold" style={{color:B.text2}}>{r.type} <span style={{color:B.muted,fontWeight:400}}>· {r.persons} أشخاص</span></div>
+                          <div className="px-3 py-2 text-xs font-bold" style={{color:B.text2}}>{tierLabel(r.type,r.persons)}</div>
                           <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
                             style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"var(--font-app)"}} value={seatOf(r)}
-                            onValueChange={v=>updRoom(r.id,"seatCost",Number(v))}/></div>
+                            onValueChange={v=>updRoom(r.id,{seatCost:Number(v)})}/></div>
                         </div>
                       ))}
                     </div>

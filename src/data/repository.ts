@@ -179,7 +179,7 @@ const packageFrom = (r: any): Pkg => ({
   transportId: r.transport_id ?? "", hotelId: r.hotel_id ?? "", notes: r.notes,
   features: sortBy(r.package_features).map(mIconFeat),
   program: sortBy(r.package_program_stages).map((p: any) => ({ id: p.item_id, order: p.stage_order, icon: p.icon, day: p.day, time: p.time, title: p.title, desc: p.descr, archived: p.archived ?? undefined })),
-  roomPrices: sortBy(r.package_room_prices).map((rp: any) => ({ id: rp.item_id, type: rp.type, persons: rp.persons, perNight: rp.per_night, seatCost: rp.seat_cost ?? undefined })),
+  roomPrices: sortBy(r.package_room_prices).map((rp: any) => ({ id: rp.item_id, type: rp.type, persons: rp.persons, perNight: rp.per_night, seatCost: rp.seat_cost ?? undefined, audience: Array.isArray(rp.audience) ? rp.audience : undefined })),
   reviews: sortBy(r.package_reviews).map(mReview),
   policies: sortBy(r.package_policies).map((x: any) => x.value),
   gallery: sortBy(r.package_gallery).map((x: any) => x.value),
