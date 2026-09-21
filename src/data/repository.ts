@@ -213,7 +213,10 @@ const bookingFrom = (r: any): Booking => ({
     roomCount: Number(r.accommodation_rooms), nights: Number(r.accommodation_nights), accommodationTotal: Number(r.accommodation_total),
   } : undefined,
   total: r.total, status: r.status, paymentStatus: r.payment_status, payMethod: r.pay_method ?? undefined, txnNo: r.txn_no ?? undefined, payDate: r.pay_date ?? undefined,
-  seats: sortBy(r.booking_seats).map((s: any) => s.seat_no),
+  /* مقعد الخصوصية يُقفل في الكروكي لكنه لا يصير راكباً ثانياً في
+     الكشف أو التذكرة؛ لذلك يبقى خارج seats وله حقلٌ صريح. */
+  seats: sortBy((r.booking_seats ?? []).filter((s: any) => s.seat_type !== "privacy")).map((s: any) => s.seat_no),
+  privacySeats: sortBy((r.booking_seats ?? []).filter((s: any) => s.seat_type === "privacy")).map((s: any) => s.seat_no),
   /* undefined لا [] عند الغياب: upsert_booking لا يمسّ الغرف إلا إذا حمل
      المستند مفتاح rooms، ومصفوفة فارغة كانت ستُقرأ «امسح التوزيع». */
   rooms: r.booking_rooms?.length

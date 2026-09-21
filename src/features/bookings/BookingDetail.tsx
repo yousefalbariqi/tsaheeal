@@ -38,7 +38,7 @@ import { isSellable, seatsOf } from "@/lib/trip";
 import { AppSelect } from "@/components/AppSelect";
 import { NationalitySelect } from "@/components/NationalitySelect";
 import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
-import { BusSeatGrid } from "@/components/BusSeatGrid";
+import { BusSeatGrid, privacySeatPartner } from "@/components/BusSeatGrid";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { Spinner } from "@/components/Spinner";
@@ -73,6 +73,14 @@ function bookedSeatGender(booking: Booking, index: number): "male" | "female" | 
     return null;
   }
   return index === 0 ? booking.pilgrims[0]?.gender ?? null : null;
+}
+
+/** الخصوصية تخص الأنثى التي لا مرافق معها في هذا الحجز فقط. */
+function isSoloFemale(booking: Booking): boolean {
+  if (Math.max(1, booking.persons || 1) !== 1) return false;
+  const c = booking.travellerCounts;
+  if (c) return Number(c.men ?? 0) === 0 && Number(c.women ?? 0) === 1 && Number(c.children ?? 0) === 0;
+  return booking.pilgrims[0]?.gender === "female";
 }
 
 /* ════════ قِطَعٌ صغيرة ════════════════════════════════════════════ */
@@ -368,6 +376,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   };
   const closed = closedAs(booking.status);
   const need = Math.max(1, booking.persons || 1);
+  const needsPrivacySeat = isSoloFemale(booking);
+  const seatsNeeded = need + (needsPrivacySeat ? 1 : 0);
+  const savedPrivacySeats = booking.privacySeats ?? [];
   const savedCounts = booking.travellerCounts;
   const savedCountTotal = savedCounts
     ? Number(savedCounts.men ?? 0) + Number(savedCounts.women ?? 0) + Number(savedCounts.children ?? 0)
@@ -385,7 +396,8 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   /* المقعد مقفولٌ فعلاً لا مجرّد مختار: القفل يمرّ بـaccept_booking
      فينقل الحالة، والحالة وحدها دليلُ أنه لم يعد يُباع لغيره. */
   const seatsLocked = !["new", "reviewing", "needs_edit", "awaiting_trip"].includes(booking.status)
-    && booking.seats.length === need;
+    && booking.seats.length === need
+    && savedPrivacySeats.length === (needsPrivacySeat ? 1 : 0);
   const paid = booking.status === "confirmed" || booking.paymentStatus === "verified";
 
   const gaps = blockingGaps(flowCtx).filter(g => !["seats", "verify", "pay"].includes(g.key));
@@ -429,7 +441,8 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const occupancy = useMemo(() => {
     const seats = new Set<number>();
     const genders = new Map<number, "male" | "female">();
-    if (!shownTrip) return { seats, genders };
+    const privacy = new Set<number>();
+    if (!shownTrip) return { seats, genders, privacy };
     allBookings.forEach(b => {
       if (b.tripId !== shownTrip.id || b.status === "cancelled" || b.status === "rejected") return;
       if (b.id === booking.id) return;
@@ -438,8 +451,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
         const gender = bookedSeatGender(b, i);
         if (gender) genders.set(sn, gender);
       });
+      (b.privacySeats ?? []).forEach(sn => { seats.add(sn); privacy.add(sn); });
     });
-    return { seats, genders };
+    return { seats, genders, privacy };
   }, [allBookings, shownTrip, booking.id]);
 
   const seatStats = useMemo(() => {
@@ -463,13 +477,16 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
         if (owner === "male") { m++; known++; }
         if (owner === "female") { f++; known++; }
       }
+      /* مقعد الخصوصية محسوب في booked_seats لكنه ليس راكباً مجهول
+         التوزيع؛ وإلا ظهر تحذير «بلا توزيع» لكل معتمرة منفردة. */
+      known += (b.privacySeats ?? []).length;
     });
     return { capacity, booked, available, m, f, children, known };
   }, [allBookings, shownTrip]);
 
   const startPicking = () => {
     setTabId(trip?.id ?? null);
-    setSel(booking.seats.filter(s => !occupancy.seats.has(s)));
+    setSel([...booking.seats, ...savedPrivacySeats].filter(s => !occupancy.seats.has(s)));
     setPicking(true);
     setTimeout(() => croquisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   };
@@ -480,10 +497,27 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
        شرطُ الزرّ: لا اختيار قبل التحقق، ولا على رحلةٍ غير رحلة الطلب. */
     if (!picking) {
       if (seatStep !== "ready" || !isOwnTrip) return;
+      if (needsPrivacySeat && !privacySeatPartner(shownTrip?.seats ?? 0, n)) {
+        toast.error("اختر مقعداً ضمن زوج متجاور؛ الصف الخلفي لا يصلح لمقعد الخصوصية.");
+        return;
+      }
       setSel([n]); setPicking(true);
       return;
     }
-    setSel(prev => prev.includes(n) ? prev.filter(x => x !== n) : (prev.length >= need ? prev : [...prev, n]));
+    if (needsPrivacySeat) {
+      setSel(prev => {
+        if (prev.includes(n)) return prev.filter(x => x !== n);
+        if (prev.length === 0) return [n];
+        if (prev.length >= 2) return prev;
+        if (privacySeatPartner(shownTrip?.seats ?? 0, prev[0]) !== n) {
+          toast.error("المقعد الثاني يجب أن يكون المجاور لمقعد المعتمرة.");
+          return prev;
+        }
+        return [...prev, n];
+      });
+      return;
+    }
+    setSel(prev => prev.includes(n) ? prev.filter(x => x !== n) : (prev.length >= seatsNeeded ? prev : [...prev, n]));
   };
 
   /* ── الأفعال ── */
@@ -500,14 +534,23 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
 
   /** القفل والقبول في معاملةٍ واحدة (accept_booking). */
   const lockSeats = async () => {
-    if (busy || sel.length !== need) return;
+    if (busy || sel.length !== seatsNeeded) return;
     setBusy("seats");
-    /* مقاعدُ مقفولةٌ أصلاً: هذا تغييرٌ لا قبول — يُحفظ بلا accept. */
+    /* إعادة التخصيص تمرّ بالحارس نفسه؛ الكتابة المباشرة قد تبيع مقعد
+       الخصوصية أو تحوّله إلى راكبٍ وهمي. */
     if (seatsLocked) {
+      const r = await acceptBooking(booking.id, sel);
+      setBusy(null);
+      if (!r.unsupported) {
+        if (r.error) { toast.error(r.error); return; }
+        setPicking(false); await onRefresh(); bump();
+        toast.success(needsPrivacySeat
+          ? `نُقل مقعد المعتمرة إلى ${sel[0]} وفُرّغ ${sel[1]} للخصوصية.`
+          : `حُفظت المقاعد ${sel.join("، ")}`);
+        return;
+      }
       onSeatsChange(booking.id, sel);
-      void logDocEvent("booking", booking.id, "note", { note: `تغيير المقاعد: ${sel.join("، ")}` }).then(bump);
-      setBusy(null); setPicking(false);
-      toast.success(`حُفظت المقاعد ${sel.join("، ")}`);
+      setPicking(false);
       return;
     }
     const r = await acceptBooking(booking.id, sel);
@@ -515,7 +558,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
       setBusy(null);
       if (r.error) { toast.error(r.error); return; }
       setPicking(false); await onRefresh(); bump();
-      toast.success(`قُفلت المقاعد ${sel.join("، ")}`);
+      toast.success(needsPrivacySeat
+        ? `قُفل المقعد ${sel[0]} وفُرّغ المقعد المجاور ${sel[1]} للخصوصية.`
+        : `قُفلت المقاعد ${sel.join("، ")}`);
       return;
     }
     /* قاعدةٌ بلا ترحيل 20260910 — الكتابة المباشرة كما كانت. */
@@ -593,7 +638,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   };
 
   const menuItems = [
-    ...(seatsLocked && !closed ? [{ label: "تغيير المقاعد", onClick: startPicking }] : []),
+    ...(seatsLocked && booking.status === "accepted" ? [{ label: "تغيير المقاعد", onClick: startPicking }] : []),
     ...(booking.payToken && !paid
       ? [{ label: "نسخ رابط الدفع", onClick: () => { copyText(payLinkFor(booking.id, booking.payToken)); toast.success("نُسخ رابط الدفع"); } }]
       : []),
@@ -614,7 +659,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
     { l: "المغادرة", v: `${trip?.departureDate ?? "—"}${trip?.departureTime ? ` · ${trip.departureTime}` : ""}`, mono: true },
     { l: "العودة", v: trip?.returnDate ?? "—", mono: true },
     { l: "المبلغ", v: `${sarNumber(booking.total)} ر.س`, mono: true, tone: B.gold },
-    ...(seatsLocked ? [{ l: "المقاعد", v: booking.seats.join("، "), mono: true }] : []),
+    ...(seatsLocked ? [{ l: "المقاعد", v: needsPrivacySeat
+      ? `${booking.seats[0] ?? "—"} · خصوصية ${savedPrivacySeats[0] ?? "—"}`
+      : booking.seats.join("، "), mono: true }] : []),
     ...(booking.discountPercent ? [{ l: "خصم معتمد", v: `${booking.discountPercent}%`, tone: "#8A6A08" }] : []),
   ];
 
@@ -701,7 +748,11 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
           <div className="flex items-center gap-2.5 flex-wrap">
             <WorkButton state={verifyStep} icon={Check} label="تم التحقق" doneLabel="متحقق" onClick={runVerify} />
             <WorkButton state={seatStep} icon={Armchair} busy={busy === "seats"}
-              label="اختيار المقاعد" doneLabel={`المقاعد ${booking.seats.join("، ")}`} onClick={startPicking} />
+              label={needsPrivacySeat ? "اختيار مقعدي الخصوصية" : "اختيار المقاعد"}
+              doneLabel={needsPrivacySeat
+                ? `مقعدها ${booking.seats[0] ?? "—"} · خصوصية ${savedPrivacySeats[0] ?? "—"}`
+                : `المقاعد ${booking.seats.join("، ")}`}
+              onClick={startPicking} />
             {payStep === "ready" && (
               <div style={{ width: 150 }}>
                 <AppSelect value={payMethod} onChange={setPayMethod} options={payOptions.map(m => ({ value: m, label: m }))} />
@@ -770,6 +821,11 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
             )}
 
             <div className="p-5">
+              {isOwnTrip && needsPrivacySeat && (
+                <div className="mb-4 rounded-xl px-3.5 py-3 text-xs font-bold" style={{ background: "#F3EAFE", border: "1px solid #D9C4F3", color: "#6F3AA8" }}>
+                  هذه معتمرة منفردة: اختر مقعدين متجاورين. الأول لها، والثاني يُفرّغ للخصوصية ولا يُباع لراكب آخر.
+                </div>
+              )}
               {isOwnTrip && savedCounts && savedCountTotal === need && (
                 <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold" style={{ color: B.text2 }}>
                   <span>رتّب المقاعد بالترتيب: <b style={{ color: "#1E52C7" }}>{savedCounts.men} ذكور</b> أولاً، ثم <b style={{ color: "#B4266E" }}>{savedCounts.women} إناث</b>.</span>
@@ -781,10 +837,14 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                 occupied={occupancy.seats}
                 /* الطلب الملغى حُرِّرت مقاعده فعلاً: إبرازها ذهبيةً يقول
                    إنها محجوزةٌ له وهي معروضةٌ للبيع. */
-                selected={picking ? sel : (isOwnTrip && !closed ? booking.seats : [])}
-                need={need}
+                selected={picking ? sel : (isOwnTrip && !closed ? [...booking.seats, ...savedPrivacySeats] : [])}
+                need={seatsNeeded}
                 onToggle={toggleSeat}
                 occGender={n => occupancy.genders.get(n) ?? null}
+                privacySeats={occupancy.privacy}
+                selectedPrivacySeats={needsPrivacySeat
+                  ? new Set([picking ? sel[1] : savedPrivacySeats[0]].filter((s): s is number => s != null))
+                  : undefined}
                 selGender={n => {
                   const list = picking ? sel : booking.seats;
                   return bookedSeatGender(booking, list.indexOf(n));
@@ -799,18 +859,18 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                   {sel.length ? `المقاعد ${sel.join("، ")}` : "اضغط على مقعدٍ متاح"}
                 </span>
                 <span className="px-2.5 py-1 rounded-full text-xs font-bold"
-                  style={{ background: sel.length === need ? "#E3F3E8" : "#fff", color: sel.length === need ? "#1E7A44" : B.muted, border: `1px solid ${sel.length === need ? "#C4E4CE" : B.border}` }}>
-                  {sel.length} / {need}
+                  style={{ background: sel.length === seatsNeeded ? "#E3F3E8" : "#fff", color: sel.length === seatsNeeded ? "#1E7A44" : B.muted, border: `1px solid ${sel.length === seatsNeeded ? "#C4E4CE" : B.border}` }}>
+                  {sel.length} / {seatsNeeded}
                 </span>
                 <div className="flex items-center gap-2 mr-auto">
                   <button onClick={() => { setPicking(false); setSel([]); }}
                     className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
                     style={{ background: "#fff", color: B.text2, border: `1px solid ${B.border}` }}>إلغاء</button>
-                  <button onClick={() => void lockSeats()} disabled={sel.length !== need || !!busy}
+                  <button onClick={() => void lockSeats()} disabled={sel.length !== seatsNeeded || !!busy}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold"
                     style={{
-                      background: sel.length === need ? B.gold : "#EEECEA", color: sel.length === need ? B.black : B.muted,
-                      border: "none", cursor: sel.length === need && !busy ? "pointer" : "not-allowed",
+                      background: sel.length === seatsNeeded ? B.gold : "#EEECEA", color: sel.length === seatsNeeded ? B.black : B.muted,
+                      border: "none", cursor: sel.length === seatsNeeded && !busy ? "pointer" : "not-allowed",
                     }}>
                     {busy === "seats" ? <Spinner size={13} color={B.black} track="rgba(27,23,18,0.25)" /> : <Check size={14} />}
                     {seatsLocked ? "حفظ المقاعد" : "قفل المقاعد"}

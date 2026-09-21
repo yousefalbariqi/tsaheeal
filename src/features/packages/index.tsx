@@ -1223,7 +1223,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             /* سعر النقل للباقة كلّها: ما كتبه الموظف، وإلا تكلفة مقعد
                المركبة المرتبطة. رقمٌ واحد يقرؤه الجدول والملخّص معاً. */
             const seatPrice=Math.max(0,form.seatCostOverride ?? selTransport?.seatCost ?? 0);
-            const stayOf=(r:RoomPrice)=>r.perNight||0;
+            /* يعرض الملخّص إجمالي السكن الكامل، لا سعر ليلة واحدة. */
+            const lodgingNights=Math.max(0,Math.trunc(form.nights)||0);
+            const stayOf=(r:RoomPrice)=>(r.perNight||0)*lodgingNights;
             const totalOf=(r:RoomPrice)=>stayOf(r)+seatPrice;
             /* الخيارات الأربعة تُشتقّ من roomPrices ولا تُخزَّن بجانبها:
                نسخةٌ ثانيةٌ تُزامَن تتفارق مع الأولى عند أول حفظٍ لم يُحسب. */
@@ -1287,7 +1289,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <section className="rounded-2xl p-5" style={card}>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     {step(2,BedDouble,"السكن وأسعاره",form.nights>0
-                      ?"نوع الغرفة وعدد أسرّتها وسعر الليلة للغرفة، ولمن تُعرض. يحدد العميل عدد الغرف عند الحجز."
+                      ?`نوع الغرفة وعدد أسرّتها وسعر الليلة للغرفة، ولمن تُعرض. ملخص السعر يضربها في ${form.nights} ليالٍ.`
                       :"الباقة بلا مبيت (صفر ليالٍ) — السكن اختياري هنا.")}
                     <button onClick={addRoom} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
                       style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة غرفة</button>
@@ -1305,7 +1307,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       وحدها، كلها في باقةٍ واحدة. */}
                   <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
                     <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1.25fr .7fr .95fr 1.35fr .9fr 64px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
-                      {["النوع","عدد الأسرّة","سعر الغرفة","يظهر لـ","إجمالي السكن","" ].map((h,i)=>(
+                      {["النوع","عدد الأسرّة","سعر الليلة","يظهر لـ",`إجمالي ${lodgingNights} ليالٍ`,"" ].map((h,i)=>(
                         <div key={i} className="px-2.5 py-2.5 text-center first:text-right">{h}</div>
                       ))}
                     </div>
@@ -1420,7 +1422,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                         <div key={r.id} className="rounded-xl px-3.5 py-2.5" style={{border:`1px solid ${B.border}`}}>
                           <div className="text-xs font-bold mb-1.5" style={{color:B.black}}>{r.type}</div>
                           <div className="flex items-center justify-between text-xs" style={{color:B.text2}}>
-                            <span>السكن <span style={{color:B.muted}}>(غرفة واحدة · ليلة واحدة)</span></span>
+                            <span>السكن <span style={{color:B.muted}}>(غرفة واحدة · {lodgingNights} ليالٍ)</span></span>
                             <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(stayOf(r))}</span>
                           </div>
                           <div className="flex items-center justify-between text-xs mt-1" style={{color:B.text2}}>

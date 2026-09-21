@@ -72,8 +72,10 @@ export function FocusConfigure({ pkg, trip, hotel, transport, persons, traveller
   const rooms = useMemo(() => bookingRoomChoices(tiers, persons), [tiers, persons]);
   const chosen = split && rooms.some(room => room.key === split.key) ? split : rooms[0] ?? null;
   useEffect(() => { if (chosen !== split) setSplit(chosen); }, [chosen, split, setSplit]);
-  const price = chosen ? packagePrice(chosen, persons, pkg.seatCostOverride ?? transport?.seatCost ?? 0, pkg.nights) : null;
-  const total = price?.total ?? pkg.marketPrice * persons;
+  const needsPrivacySeat = persons === 1 && travellerCounts.men === 0 && travellerCounts.women === 1;
+  const transportUnits = persons + (needsPrivacySeat ? 1 : 0);
+  const price = chosen ? packagePrice(chosen, persons, pkg.seatCostOverride ?? transport?.seatCost ?? 0, pkg.nights, transportUnits) : null;
+  const total = price?.total ?? pkg.marketPrice * persons + (needsPrivacySeat ? (pkg.seatCostOverride ?? transport?.seatCost ?? 0) : 0);
   const hotelName = hotel ? hotelDisplayName(hotel.name) : (lang === "ar" ? "سكن الرحلة" : "Accommodation");
   return <section className={`ts-focus-configure${embedded ? " embedded" : ""}`} aria-labelledby="focus-configure-title" id={embedded ? "booking-start" : undefined}>
     {!embedded && <header className="ts-focus-configure-head"><button type="button" onClick={onBack} aria-label={lang === "ar" ? "رجوع" : "Back"}><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><h1 id="focus-configure-title">{lang === "ar" ? "ابدأ الحجز" : "Start booking"}</h1><span/></header>}

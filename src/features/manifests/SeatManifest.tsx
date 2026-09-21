@@ -113,12 +113,15 @@ function Croquis({ m, onOpenBooking }: { m: Manifest; onOpenBooking: (id: string
           <span className="rounded" style={{ width: 14, height: 14, background: "#fff", border: `1px solid ${B.border}` }} />
           شاغر <b style={{ color: B.text3 }}>{m.summary.free}</b>
         </span>
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: B.text2 }}>
+          <span className="rounded" style={{ width: 14, height: 14, background: "#F3EAFE", border: "1px solid #D9C4F3" }} />مفرّغ للخصوصية
+        </span>
       </div>
     </div>
   );
 }
 
-function Seat({ s, onOpen }: { s: { num: number; rider: ManifestRider | null }; onOpen: (id: string) => void }) {
+function Seat({ s, onOpen }: { s: { num: number; rider: ManifestRider | null; privacy: boolean }; onOpen: (id: string) => void }) {
   const r = s.rider;
   const tone = r ? TONE[r.gender] : null;
   const body = (
@@ -126,6 +129,7 @@ function Seat({ s, onOpen }: { s: { num: number; rider: ManifestRider | null }; 
       <span className="flex items-center justify-between w-full" style={{ lineHeight: 1 }}>
         <span style={{ fontSize: 11.5, fontWeight: 800, color: tone?.fg ?? B.placeholder }}>{s.num}</span>
         {r && <span style={{ fontSize: 10, fontWeight: 800, color: tone!.fg }}>{genderGlyph(r.gender)}</span>}
+        {s.privacy && <span style={{ fontSize: 9, fontWeight: 800, color: "#6F3AA8" }}>خصوصية</span>}
       </span>
       {r && <>
         <span className="block w-full truncate" style={{ fontSize: 10, fontWeight: 700, color: B.black, marginTop: 3 }}>{firstTwo(r.name)}</span>
@@ -135,10 +139,10 @@ function Seat({ s, onOpen }: { s: { num: number; rider: ManifestRider | null }; 
   );
   const box: React.CSSProperties = {
     width: 92, minHeight: 54, padding: "5px 6px", borderRadius: 10,
-    border: `1px solid ${tone?.bd ?? B.border}`, background: tone?.bg ?? "#fff",
+    border: `1px solid ${s.privacy ? "#D9C4F3" : tone?.bd ?? B.border}`, background: s.privacy ? "#F3EAFE" : tone?.bg ?? "#fff",
     display: "flex", flexDirection: "column", alignItems: "flex-start", textAlign: "right",
   };
-  if (!r) return <span style={{ ...box, background: "#FCFBF8" }}>{body}</span>;
+  if (!r) return <span style={{ ...box, background: s.privacy ? "#F3EAFE" : "#FCFBF8" }}>{body}</span>;
   return (
     <button onClick={() => onOpen(r.bookingId)} style={{ ...box, cursor: "pointer" }}
       title={`${r.name} · ${TONE[r.gender].label} · مقعد ${s.num} · ${r.bookingId}`}>

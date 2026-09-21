@@ -98,7 +98,12 @@ Deno.serve(async (request) => {
       .filter(Boolean);
     if (!recipients.length) throw new Error("STAFF_NOTIFICATION_RECIPIENTS has no valid recipients");
 
-    const replyTo = Deno.env.get("NOTIFICATION_REPLY_TO")?.trim();
+    /* Resend يقبل عنواناً واحداً أو مصفوفة عناوين؛ ملف البيئة أسهل كقائمة
+       مفصولة بفواصل، لذلك نحوّلها هنا بدلاً من تمريرها كنص واحد. */
+    const replyTo = (Deno.env.get("NOTIFICATION_REPLY_TO") ?? "")
+      .split(",")
+      .map(email => email.trim())
+      .filter(Boolean);
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -108,7 +113,7 @@ Deno.serve(async (request) => {
       body: JSON.stringify({
         from: required("NOTIFICATION_FROM"),
         to: recipients,
-        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(replyTo.length ? { reply_to: replyTo } : {}),
         subject: `[${record.id}] ${title} — تساهيل`,
         html: page(
           title,

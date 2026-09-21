@@ -267,6 +267,8 @@ export interface Booking {
   roomType:string; persons:number;
   travellerType?:TravellerType;
   travellerCounts?:BookingTravellerCounts;
+  /** مقعدٌ مفرّغ بجوار أنثى تسافر وحدها. محجوز في السعة، لا راكبٌ آخر. */
+  privacySeats?:number[];
   /** توزيع السكن مفصّلاً. اختياري: الحجوزات الداخلية والقديمة بلا توزيع. */
   rooms?:BookingRoom[];
   pricing?:BookingPricing;

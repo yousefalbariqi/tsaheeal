@@ -411,9 +411,12 @@ export function CustomerApp(){
      بيانات السكن المقيدة تحتاجه لإظهار الخيارات الصحيحة. */
   const needsTravellerType=!!pkg&&needsTravellerTypeForAccommodation(pkg);
   const rooms=pkg?.roomPrices??[];
-  /* التسعير: كل مقعد × عدد المعتمرين، ثم سعر الغرفة المختارة مرة واحدة. */
-  const fullPrice=split ? packagePrice(split,persons,pkg?.seatCostOverride ?? transport?.seatCost ?? 0,pkg?.nights ?? 1) : null;
-  const total=fullPrice?.total ?? (trip?.price??0)*persons;
+  /* الأنثى المنفردة تدفع مقعدها ومقعد الخصوصية المجاور؛ الحجز المختلط
+     لا يتغير. القاعدة تعيد الحساب نفسه ولا تثق بهذه اللقطة وحدها. */
+  const needsPrivacySeat = persons === 1 && travellerCounts.men === 0 && travellerCounts.women === 1;
+  const transportUnits = persons + (needsPrivacySeat ? 1 : 0);
+  const fullPrice=split ? packagePrice(split,persons,pkg?.seatCostOverride ?? transport?.seatCost ?? 0,pkg?.nights ?? 1,transportUnits) : null;
+  const total=fullPrice?.total ?? (trip?.price??0)*persons + (needsPrivacySeat ? (pkg?.seatCostOverride ?? transport?.seatCost ?? 0) : 0);
 
   /* ── مزامنة الباقة مع المسار ──
      المسار قد يتغيّر بلا نقرة: زر الرجوع، رابط مُلصق، إعادة تحميل.
@@ -1057,7 +1060,7 @@ export function CustomerApp(){
             <span style={{...T.small,fontWeight:600,color:C.ink2}}>{t("priceBreakdown")}</span>
             {split&&fullPrice&&(
               <div className="flex items-center justify-between" style={{...T.body}}>
-                <span style={{color:C.ink2}}>إجمالي المواصلات (ذهاب وعودة)</span>
+                <span style={{color:C.ink2}}>إجمالي المواصلات (ذهاب وعودة{needsPrivacySeat ? " · يشمل مقعد الخصوصية" : ""})</span>
                 <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(fullPrice.transport)} {t("currency")}</span>
               </div>
             )}

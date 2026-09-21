@@ -187,7 +187,7 @@ export function TripPrintPages({ m, pkgName, vehicle, branch, printedAt }: {
             {rows.map((row, ri) => (
               <tr key={ri}>
                 {row.map((s, si) => (
-                  <PrintSeat key={s.num} seat={s.num} rider={s.rider}
+                  <PrintSeat key={s.num} seat={s.num} rider={s.rider} privacy={s.privacy}
                     gap={row.length === 4 && si === 1} wide={row.length === 5} />
                 ))}
                 {/* صفوف الأربعة تُملأ إلى خمسة أعمدة حتى تستقيم الشبكة
@@ -201,6 +201,7 @@ export function TripPrintPages({ m, pkgName, vehicle, branch, printedAt }: {
           <span><span style={{ display: "inline-block", width: 9, height: 9, background: TONE.male.bg, border: `1px solid ${TONE.male.bd}` }} /> ذكر</span>
           <span><span style={{ display: "inline-block", width: 9, height: 9, background: TONE.female.bg, border: `1px solid ${TONE.female.bd}` }} /> أنثى</span>
           <span><span style={{ display: "inline-block", width: 9, height: 9, background: "#fff", border: "1px solid #B9B2A6" }} /> شاغر ({m.summary.free})</span>
+          <span><span style={{ display: "inline-block", width: 9, height: 9, background: "#F3EAFE", border: "1px solid #D9C4F3" }} /> مفرّغ للخصوصية</span>
         </div>
         <div style={{ fontSize: 8, color: "#666", marginTop: 6 }}>{footer}</div>
       </div>
@@ -208,12 +209,12 @@ export function TripPrintPages({ m, pkgName, vehicle, branch, printedAt }: {
   );
 }
 
-function PrintSeat({ seat, rider, gap, wide }: { seat: number; rider: ManifestRider | null; gap: boolean; wide: boolean }) {
+function PrintSeat({ seat, rider, privacy, gap, wide }: { seat: number; rider: ManifestRider | null; privacy: boolean; gap: boolean; wide: boolean }) {
   const tone = rider ? TONE[rider.gender] : null;
   return (
     <td className="seat-cell" style={{
-      border: `1px solid ${tone?.bd ?? "#B9B2A6"}`,
-      background: tone?.bg ?? "#fff",
+      border: `1px solid ${privacy ? "#D9C4F3" : tone?.bd ?? "#B9B2A6"}`,
+      background: privacy ? "#F3EAFE" : tone?.bg ?? "#fff",
       padding: "2px 4px", height: 46, verticalAlign: "top",
       width: wide ? "19.6%" : "24%",
       borderInlineEnd: gap ? "3px double #8A8175" : undefined,
@@ -221,6 +222,7 @@ function PrintSeat({ seat, rider, gap, wide }: { seat: number; rider: ManifestRi
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: tone?.fg ?? "#999" }}>{seat}</span>
         {rider && <span style={{ fontSize: 9, fontWeight: 800, color: tone!.fg }}>{genderGlyph(rider.gender)}</span>}
+        {privacy && <span style={{ fontSize: 7.5, fontWeight: 800, color: "#6F3AA8" }}>خصوصية</span>}
       </div>
       {rider && (
         <div style={{ lineHeight: 1.25 }}>

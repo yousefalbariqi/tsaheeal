@@ -139,6 +139,8 @@ export interface Manifest {
   parties: ManifestParty[];
   /** مقعد ← راكبه. المصدر الذي يقرؤه الكروكي. */
   bySeat: Map<number, ManifestRider>;
+  /** مقاعد مفرّغة للخصوصية؛ محجوزة بلا راكب. */
+  privacySeats: Set<number>;
   summary: ManifestSummary;
 }
 
@@ -171,13 +173,14 @@ export function buildManifest(trip: Trip, bookings: Booking[]): Manifest {
   /* أوّل مَن نزل على المقعد يبقى فيه: قيد القاعدة يمنع الازدواج
      (20260813)، وهذا حارسٌ للعرض إن قُرئ صفٌّ قديم قبل تنظيفه. */
   for (const r of riders) if (!bySeat.has(r.seat!)) bySeat.set(r.seat!, r);
+  const privacySeats = new Set(mine.flatMap(b => b.privacySeats ?? []).filter(n => !bySeat.has(n)));
 
   const capacity = Math.max(0, trip.seats || 0);
   const summary: ManifestSummary = {
     capacity,
     seated: riders.length,
     unseated: waiting.length,
-    free: Math.max(0, capacity - bySeat.size),
+    free: Math.max(0, capacity - bySeat.size - privacySeats.size),
     male: riders.filter(r => r.gender === "male").length,
     female: riders.filter(r => r.gender === "female").length,
     children: riders.filter(r => r.ageGroup === "child").length,
@@ -185,15 +188,15 @@ export function buildManifest(trip: Trip, bookings: Booking[]): Manifest {
     scattered: parties.filter(p => !p.unseated && !p.contiguous).length,
   };
 
-  return { trip, riders, waiting, parties, bySeat, summary };
+  return { trip, riders, waiting, parties, bySeat, privacySeats, summary };
 }
 
 /** صفوف الكروكي وما في كل مقعد — الهندسة من `buildBusRows` نفسها التي
     تُرسم بها شاشة اختيار المقاعد، فلا يكون للحافلة شكلان. */
-export interface CroquisSeat { num: number; rider: ManifestRider | null; }
+export interface CroquisSeat { num: number; rider: ManifestRider | null; privacy: boolean; }
 export function croquisRows(m: Manifest): CroquisSeat[][] {
   return buildBusRows(m.summary.capacity).map(row =>
-    row.map(num => ({ num, rider: m.bySeat.get(num) ?? null })));
+    row.map(num => ({ num, rider: m.bySeat.get(num) ?? null, privacy: m.privacySeats.has(num) })));
 }
 
 /* ═══ لوحة الإطلاقات ═══════════════════════════════════════════════ */

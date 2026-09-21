@@ -96,9 +96,11 @@ export function packagePrice(
   persons: number,
   transportPrice = 0,
   nights = 1,
+  /** الأنثى المنفردة تشتري مقعدها ومقعد الخصوصية المجاور. */
+  transportUnits = persons,
 ): PackagePriceBreakdown {
   const seatPrice = Math.max(0, transportPrice || 0);
-  const transport = Math.max(0, persons) * seatPrice;
+  const transport = Math.max(0, transportUnits) * seatPrice;
   const roomCount = roomCountOf(split);
   const safeNights = Math.max(1, Math.trunc(nights) || 1);
   const accommodation = splitTotal(split, safeNights);
