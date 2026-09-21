@@ -15,14 +15,15 @@
    معتمَداً. واتساب يبقى خلف راية حتى يُعتمد قالب رسالة الرمز. */
 import type { Session } from "@supabase/supabase-js";
 import { customerSupabase, isCustomerAuthEnabled, CUSTOMER_STORAGE_KEY } from "@/supabase/customerClient";
-import { waNormalize } from "@/lib/utils";
+import { publicOrigin, waNormalize } from "@/lib/utils";
 
 export type OtpChannel = "sms" | "whatsapp";
 
 /** لكل حالة رسالة عربية مختلفة — «فشل» واحدة لا تُرشد المستخدم لشيء. */
 export type AuthErrorKind =
   | "invalid_phone" | "rate_limited" | "wrong_code" | "expired"
-  | "provider_disabled" | "signups_disabled" | "network" | "same_phone" | "setup_required" | "unknown";
+  | "provider_disabled" | "signups_disabled" | "network" | "same_phone" | "setup_required"
+  | "email_invalid" | "unknown";
 
 export interface AuthFail { ok: false; kind: AuthErrorKind; retryAfterSec?: number; raw?: string }
 export interface SendOk   { ok: true; channel: OtpChannel; cooldownSec: number }
@@ -125,6 +126,7 @@ export function authErrorMessage(f: AuthFail, t: (k: string) => string): string 
     case "network":           return t("errNetwork");
     case "same_phone":        return t("errSamePhone");
     case "setup_required":    return "تجهيز تسجيل الدخول غير مكتمل — طبّق ترحيل قاعدة البيانات ثم أعد المحاولة";
+    case "email_invalid":     return "صيغة البريد غير صحيحة";
     default:                  return t("errUnknown");
   }
 }
@@ -203,7 +205,20 @@ export async function signInWithCustomerPassword(phone: string, password: string
   return { ok: true, session: await bootstrapSession(data.session) };
 }
 
-export async function signUpCustomer(phone: string, email: string, password: string): Promise<{ ok: true; session: CustomerSession } | AuthFail> {
+/** هل يستطيع هذا الحساب استعادة كلمته بالبريد؟ المرآة في القاعدة
+    (20261002) تتخطّى بريداً يحمله حسابٌ آخر، فالجواب يُقرأ من
+    auth.users نفسها لا من الملف — والملف يحفظ البريد في الحالتين. */
+export async function emailRecoveryReady(profileEmail: string): Promise<boolean> {
+  if (!isCustomerAuthEnabled) return false;
+  const want = profileEmail.trim().toLowerCase();
+  if (!want) return false;
+  const { data, error } = await customerSupabase!.auth.getUser();
+  if (error) return false;
+  return (data.user?.email ?? "").toLowerCase() === want;
+}
+
+export async function signUpCustomer(phone: string, email: string, password: string):
+  Promise<{ ok: true; session: CustomerSession; recoveryWarning?: string } | AuthFail> {
   if (!isSaudiMobile(phone)) return { ok: false, kind: "invalid_phone" };
   if (!isCustomerAuthEnabled) return notReady();
   /* GoTrue يقبل هوية دخول واحدة فقط في signUp: phone أو email، لا كليهما.
@@ -222,7 +237,13 @@ export async function signUpCustomer(phone: string, email: string, password: str
     .update({ email: email.trim() })
     .eq("id", session.userId);
   if (profileError) console.error("[auth] تعذّر حفظ بريد الحساب الجديد:", profileError);
-  return { ok: true, session: {
+  /* البريد محفوظ في الملف للمراسلة دائماً، لكن الاستعادة تحتاج أن يصل
+     auth.users — ولا يصله بريدٌ يحمله حسابٌ آخر. من يقع في هذا يُقال له
+     الآن، لا يوم ينسى كلمته ويطلب رسالةً لا تأتي أبداً. */
+  const recoveryWarning = !profileError && !(await emailRecoveryReady(email))
+    ? "هذا البريد مسجّل في حساب آخر، فلن يصلك عليه رابط استعادة كلمة المرور. احفظ كلمتك أو تواصل معنا."
+    : undefined;
+  return { ok: true, recoveryWarning, session: {
     ...session,
     profile: session.profile ? { ...session.profile, email: email.trim() } : session.profile,
   } };
@@ -409,4 +430,58 @@ export async function saveProfile(p: { firstName: string; lastName: string; birt
     .eq("id", uid).select("*").single();
   if (error) return mapAuthError(error);
   return { ok: true, profile: mapProfile(data as Record<string, unknown>)! };
+}
+
+/* ═══════════════ استعادة كلمة المرور ═══════════════
+
+   المستفيد هويّتُه جواله، والبريد مرآةٌ في auth.users يضعها ترحيل
+   20261002 — بدونه لا يجد GoTrue حساباً بهذا البريد فلا يرسل شيئاً
+   ولا يُبلّغ بخطأ (وهو سلوكه المقصود: لا يكشف من عنده حساب ومن لا).
+
+   ولهذا السبب نفسه لا نسأل عن الرقم هنا بل عن البريد: ردّ الخادم واحد
+   في الحالتين، فلا يصير الحقل أداةً لمعرفة بريد صاحب رقمٍ ما. */
+
+/** مسار العودة من الرسالة. مسارٌ خاصّ لا الجذر: يجعل الشاشة صريحةً في
+    شريط العنوان، ويفصل الحالة عن أي زيارة عادية للرئيسية. */
+export const RECOVERY_PATH = "/recover";
+
+/** يطلب رسالة استعادة. ينجح ظاهرياً حتى لو لم يكن للبريد حساب. */
+export async function sendCustomerRecovery(email: string): Promise<{ ok: true } | AuthFail> {
+  if (!isCustomerAuthEnabled) return notReady();
+  const to = email.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, kind: "email_invalid" };
+  const { error } = await customerSupabase!.auth.resetPasswordForEmail(to, {
+    redirectTo: `${publicOrigin()}${RECOVERY_PATH}`,
+  });
+  if (error) return mapAuthError(error);
+  return { ok: true };
+}
+
+/** يبدّل رمز العودة (?code=) بجلسة. يُنادى مرّةً عند فتح /recover.
+    يعيد null إن لم يكن في العنوان رمزٌ أصلاً — أي أن الصفحة فُتحت
+    مباشرةً لا من الرسالة. */
+export async function consumeRecoveryCode(): Promise<{ ok: true; session: CustomerSession } | AuthFail | null> {
+  if (!isCustomerAuthEnabled) return notReady();
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  /* GoTrue قد يعيد الخطأ في العنوان بدل الرمز — رابطٌ استُهلك أو انتهى. */
+  const urlError = params.get("error_code") ?? params.get("error");
+  if (!code) return urlError ? { ok: false, kind: "expired", raw: urlError } : null;
+
+  const { data, error } = await customerSupabase!.auth.exchangeCodeForSession(code);
+  /* الرمز يُستهلك مرّة واحدة، فيُمسح من العنوان فوراً: بقاؤه يجعل
+     تحديث الصفحة يُعيد المحاولة برمزٍ محروق فيظهر خطأٌ كاذب، ويُسرّبه
+     في سجل المتصفح وفي أي رابط يُشارَك. */
+  window.history.replaceState({}, "", RECOVERY_PATH);
+  if (error || !data.session) return error ? mapAuthError(error) : { ok: false, kind: "expired" };
+  return { ok: true, session: await bootstrapSession(data.session) };
+}
+
+/** يضبط كلمة المرور الجديدة للجلسة القائمة (جلسة الاستعادة). */
+export async function setCustomerPassword(password: string): Promise<{ ok: true } | AuthFail> {
+  if (!isCustomerAuthEnabled) return notReady();
+  const { error } = await customerSupabase!.auth.updateUser({ password });
+  if (error) return mapAuthError(error);
+  return { ok: true };
 }

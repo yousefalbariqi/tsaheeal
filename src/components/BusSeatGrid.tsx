@@ -63,7 +63,7 @@ export function BusSeatGrid({
         style={{ width: 42, height: 42, border: `1px solid ${bd}`, background: bg, color: fg, boxShadow: ring, cursor, padding: 0, lineHeight: 1.02 }}>
         <span style={{ fontSize: 13, fontWeight: 800 }}>{num}</span>
         {gender && <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{genderGlyph(gender)}</span>}
-        {isSel && <span className="absolute flex items-center justify-center rounded-full" style={{ top: -6, insetInlineStart: -6, width: 16, height: 16, background: "#B4266E", color: "#fff", fontSize: 10, fontWeight: 800 }}>×</span>}
+        {isSel && <span className="absolute flex items-center justify-center rounded-full" style={{ top: -6, insetInlineStart: -6, width: 16, height: 16, background: B.gold, color: B.black, fontSize: 10, fontWeight: 800 }}>×</span>}
       </button>
     );
   };
@@ -83,7 +83,7 @@ export function BusSeatGrid({
       </div>
       {showLegend && (
         <div className="flex flex-wrap gap-3 justify-center pt-3" style={{ borderTop: `1px solid ${B.border}` }}>
-          {[["#fff", B.border, "متاح"], ["#EEECEA", "#D6CFC6", "محجوز"]].map(([bg, bd, l]) => (
+          {[["#fff", B.border, "متاح"], ["#EAF1FE", "#CBDBFB", "ذكر"], ["#FBE9F1", "#F3CADF", "أنثى"], ["#EEECEA", "#D6CFC6", "محجوز بلا توزيع"]].map(([bg, bd, l]) => (
             <span key={l} className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: B.text2 }}>
               <span className="rounded" style={{ width: 14, height: 14, background: bg as string, border: `1px solid ${bd}` }} />{l}
             </span>

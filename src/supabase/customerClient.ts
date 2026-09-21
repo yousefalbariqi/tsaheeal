@@ -23,6 +23,13 @@ export const customerSupabase: SupabaseClient | null =
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false, // لا روابط سحرية هنا — يمنع تنازع العميلين على الـURL
+          /* PKCE لا Implicit، ورابط استعادة كلمة المرور هو السبب: في
+             Implicit يعود الرابط بـ#access_token في العنوان، وعميل
+             الموظف (client.ts، بـdetectSessionInUrl افتراضياً) محمَّل على
+             كل مسار — data.ts يستورده — فيبتلع الرمز ويكتبه في خانة
+             جلسته. في PKCE يعود بـ?code، ولا يلمسه إلا العميل الذي يملك
+             مُتحقّقه في تخزينه، وهو هذا. */
+          flowType: "pkce",
         },
       })
     : null;

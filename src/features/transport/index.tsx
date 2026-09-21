@@ -5,7 +5,7 @@ import {
   ImagePlus, Film, Star, ChevronUp, ChevronDown, Check, Bus, Download, FileUp,
 } from "lucide-react";
 import { B } from "@/lib/theme";
-import { SAR, sarNumber } from "@/lib/money";
+import { SAR } from "@/lib/money";
 import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate } from "@/components/States";
 import { TabStrip } from "@/components/Tabs";
@@ -189,7 +189,7 @@ type TransportEditorDraft = {
 
 const TRANSPORT_DRAFT_KEY = "tsaheel.transport-editor-draft.v1";
 const copyDraftValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const newTransport = (): Transport => ({ id:newId("TRN"),name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,model:"",year:"",plate:"",driver:"",supervisor:"",status:"inactive",notes:"",features:[],reviews:[],media:[] });
+const newTransport = (): Transport => ({ id:newId("TRN"),name:"",mode:"bus",vehicleType:"حافلة عادية",seats:49,seatCost:0,fleetCount:1,model:"",year:"",plate:"",driver:"",supervisor:"",status:"inactive",notes:"",features:[],reviews:[],media:[] });
 const normalizeTransportStatus = (transport: Transport): Transport =>
   (transport.status as string) === "draft" ? { ...transport, status: "inactive" } : transport;
 const createTransportDraft = (transport: Transport | null): TransportEditorDraft => {
@@ -217,6 +217,7 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
 }) {
   const isEdit=draft.editId!==null;
   const [tab,setTab]=useState<TrTab>(draft.tab);
+  const [featureIconTarget,setFeatureIconTarget]=useState<string|null>(null);
   const [form,setForm]=useState<Transport>(()=>copyDraftValue(draft.form));
   const formRef=useRef(form);
   const [reviewImport,setReviewImport]=useState<ImportedTransportReview[]|null>(null);
@@ -243,11 +244,21 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
     const frame=requestAnimationFrame(()=>{ if(bodyRef.current) bodyRef.current.scrollTop=scrollByTabRef.current[tab]??0; });
     return ()=>cancelAnimationFrame(frame);
   },[tab]);
-  const toggleFeature=(id:string,label:string)=>{
-    const exists=form.features.some(feature=>feature.icon===id);
-    set("features",exists
-      ? form.features.filter(feature=>feature.icon!==id)
-      : [...form.features,{id:uid(),icon:id,text:label}]);
+  /* التجهيزات تُدار كسطورٍ لا كشبكة مضيئة — نفس نمط مرافق الفندق.
+
+     الشبكة الوحيدة كانت تكذب: تعدّ سبعاً وتُضيء خمساً، لأن التجهيزات
+     المحفوظة قديماً نصٌّ بلا رمز فلا يجد لها المعرض ما يُضيئه؛ ولا سبيل
+     لحذفها ولا لتصحيح لفظها. والسطر يُظهر ما هو محفوظ فعلاً: رمزٌ
+     يُبدَّل، ونصٌّ يُكتب كما يقرؤه المعتمر، وزرُّ حذف. */
+  const addFeat=(icon:string,label:string)=>set("features",[...formRef.current.features,{id:uid(),icon,text:label}]);
+  const delFeat=(id:string)=>set("features",formRef.current.features.filter(feature=>feature.id!==id));
+  const updFeat=(id:string,text:string)=>set("features",formRef.current.features.map(feature=>feature.id===id?{...feature,text}:feature));
+  const chooseFeatIcon=(id:string,icon:string)=>set("features",formRef.current.features.map(feature=>feature.id===id?{...feature,icon}:feature));
+  const moveFeat=(id:string,dir:-1|1)=>{
+    const next=[...formRef.current.features];
+    const from=next.findIndex(feature=>feature.id===id); const to=from+dir;
+    if(from<0||to<0||to>=next.length) return;
+    [next[from],next[to]]=[next[to],next[from]]; set("features",next);
   };
   const addReview=()=>set("reviews",[...form.reviews,{id:uid(),name:"",text:"",consent:false,rating:5}]);
   const delReview=(id:string)=>set("reviews",form.reviews.filter(r=>r.id!==id));
@@ -282,28 +293,22 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
   const req=<span style={{color:B.gold}}>*</span>;
-  const ready=transportReadiness(form);
   /* الحفظ يُمنع لسببين فقط — اسمٌ فارغ، وسعةٌ تحت المحجوز. الباقي يُمنع
      التفعيلَ لا الحفظ: الموظف يدّخر عملاً نصف مكتمل ويعود إليه. */
   const seatsTooLow=form.mode==="bus"&&form.seats<seatFloor;
   const saveBlock=!form.name.trim() ? "الاسم مطلوب" : seatsTooLow ? `السعة لا تنزل تحت ${seatFloor}` : "";
   const canSave=!saveBlock;
 
-  /* ── الشرط يحرس الدخول إلى «نشطة» لا البقاء فيها ──
+  /* ── التشغيل يُدار من البطاقة لا من داخل الملف ──
 
-     المركبات العاملة اليوم أُدخلت قبل هذه الحقول، فكلها ناقصة الوثائق
-     بحكم تاريخها. لو حرس الشرطُ البقاءَ أيضاً لكان أوّل تعديلٍ على حافلةٍ
-     تعمل — تصحيح اسمٍ، إضافة صورة — يُوقفها فتختفي من الباقات
-     ومن إطلاق الرحلات، والموظف لم يطلب ذلك ولم يُخبَر به.
-
-     فالنقص يُعرض على المركبة القائمة ولا يُوقفها؛ ويمنع تفعيل ما لم
-     يُفعَّل بعد. والقاعدة تُبلّغ عن القائمات الناقصات في تقرير الترحيل
-     ليُصلَحن بقرارٍ لا بمفاجأة. */
-  const wasActive=draft.baseline.status==="active";
-  const activateBlocked=!ready.canActivate&&!wasActive;
+     التفعيل والإيقاف قرارُ أسطولٍ لا حقلُ نموذج: الموظف يرى الحافلات
+     صفّاً في الصفحة فيوقف واحدةً أو يُعيدها، وحارسُ الجاهزية هناك قائم
+     — يرفض التفعيل ويسمّي النواقص. فتكرارُه هنا كان يجعل النموذج
+     يسأل سؤالاً لا يخصّه: الموظف جاء ليعرّف مركبةً تُربط بباقة، لا
+     ليقرّر تشغيلها الساعة. والحالة تُحفظ كما جاءت. */
   function handleSave(){
     if(!canSave) return;
-    onSave(form.status==="active"&&activateBlocked?{...form,status:"inactive"}:form);
+    onSave(form);
   }
   const gaps=gapsByTab(form);
   /* ٢٧) العدد داخل اسم التبويب لا في مكانٍ آخر: «المواصفات ٣» يقول ما
@@ -314,7 +319,9 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   const TABS:{id:TrTab;label:string}[]=[
     {id:"info",    label:`المعلومات${gap(gaps.info)}`},
     {id:"features",label:`المواصفات${count(form.features.length)}${gap(gaps.features)}`},
-    {id:"media",   label:`الصور والفيديو${count(media.length)}${gap(gaps.media)}`},
+    /* الوسائط بلا عدّاد في اسم التبويب — العدد وسقفه داخل اللوحة نفسها
+       («٣ / ٨»)، ورقمٌ عارٍ في الشريط لا يقول أيّهما هو. */
+    {id:"media",   label:`الصور والفيديوهات${gap(gaps.media)}`},
     {id:"reviews", label:`الآراء${count(form.reviews.length)}`},
   ];
   const BUS_TYPES=["حافلة عادية","حافلة VIP","ميني باص"];
@@ -380,7 +387,7 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
                      <input className={inp} style={ist} value={form.name} placeholder={form.mode==="flight"?"مثال: طيران الرياض إلى جدة":"مثال: حافلة الحرمين 1"} onChange={e=>set("name",e.target.value)}/>
                    </Field></div>
               {form.mode==="bus"&&<>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><Field label="النوع">
                        <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
                      </Field>
@@ -395,6 +402,10 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
                          ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>لا تنزل تحت {seatFloor} — محجوزة في رحلة مرتبطة.</div>
                          : <div className="text-xs mt-1" style={{color:B.muted}}>الحدّ الأدنى {seatFloor} مقعداً (محجوزة حالياً).</div>
                      )}</div>
+                <div><Field label="عدد المركبات من هذا النوع">
+                       <NumericInput min={1} className={inp} style={ist} value={form.fleetCount ?? 1} onValueChange={v=>set("fleetCount",Math.max(1,Number(v)||1))}/>
+                     </Field>
+                     <div className="text-xs mt-1" style={{color:B.muted}}>تُسجّل مواصفات هذا النوع مرة واحدة، ويُسمح بتشغيل هذا العدد من الرحلات المتداخلة.</div></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Field label={<>تكلفة المقعد ({SAR}) {req}</>}>
@@ -411,70 +422,44 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
                 <div><Field label="سنة التصنيع">
                        <NumericInput min={1990} max={new Date().getFullYear()+1} className={inp} style={ist} value={form.year} placeholder="2024" onValueChange={v=>set("year",v)}/>
                      </Field></div>
-                <div className="rounded-xl px-3.5 py-3 text-xs leading-relaxed flex items-center" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>
-                  بيانات المركبة النظامية مثل اللوحة والتأمين تُدار خارج تساهيل.
-                </div>
-              </div>
-              {/* الحالة تشغيلية فقط: نشطة أو متوقفة. يمكن حفظ المتوقفة
-                  ناقصة لأنها لا تدخل التسعير ولا الرحلات. */}
-              <div><label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الحالة</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([["active","نشطة ومتاحة","#E3F3E8","#1E7A44","#C4E4CE"],
-                     ["inactive","متوقفة","#FBE6E6","#BE2626","#F3C9C9"]] as const).map(([v,lbl,bg,fg,bd])=>{
-                    const on=form.status===v;
-                    const blocked=v==="active"&&activateBlocked;
-                    return (
-                      <button key={v} disabled={blocked}
-                        title={blocked?`ينقصها ${ready.blockers.length}: ${ready.blockers.map(b=>b.label).join(" · ")}`:undefined}
-                        onClick={()=>{ if(blocked){ setTab("info"); return; } set("status",v); }}
-                        className="flex items-center justify-center gap-2 py-3 px-3 rounded-xl font-bold text-sm"
-                        style={{background:on?bg:B.fill,color:on?fg:B.muted,border:`1.5px solid ${on?bd:B.border}`,
-                                opacity:blocked?.5:1,cursor:blocked?"not-allowed":"pointer"}}>
-                        <span className="w-2 h-2 rounded-full" style={{background:on?fg:B.border}}/>{lbl}
-                      </button>
-                    );
-                  })}
-                </div>
-                {!ready.canActivate&&(
-                  <div className="mt-2 px-3 py-2 rounded-xl text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08"}}>
-                    {wasActive
-                      ? <>تعمل الآن وينقصها {ready.blockers.length}: {ready.blockers.map(b=>b.label).join(" · ")} — أكملها ولا تُوقَف تلقائياً.</>
-                      : <>لا تُفعَّل قبل إكمال {ready.blockers.length}: {ready.blockers.map(b=>b.label).join(" · ")}</>}
-                  </div>
-                )}
-              </div>
-              {/* Live preview */}
-              <div className="rounded-xl p-4" style={{background:B.surface,border:`1px solid ${B.border}`}}>
-                <div className="text-xs font-bold mb-3" style={{color:B.primaryDeep}}>معاينة سريعة</div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div><div className="text-xs" style={{color:B.muted}}>المقاعد</div><div className="text-lg font-bold" style={{color:B.gold}}>{form.seats||"—"}</div></div>
-                  {/* الرقم والوحدة منفصلان في الرسم، فالوحدة من الثابت والرقم من sarNumber — لا لصقٌ يدوي. */}
-                  <div><div className="text-xs" style={{color:B.muted}}>تكلفة المقعد</div><div className="text-lg font-bold" style={{color:B.gold}}>{form.seatCost?sarNumber(form.seatCost):"—"} <span className="text-xs" style={{color:B.muted}}>{SAR}</span></div></div>
-                  <div><div className="text-xs" style={{color:B.muted}}>الطاقة الكاملة</div><div className="text-lg font-bold" style={{color:B.gold}}>{sarNumber((form.seats||0)*(form.seatCost||0))} <span className="text-xs" style={{color:B.muted}}>{SAR}</span></div></div>
-                </div>
               </div>
               </>}
             </motion.div>}
             {tab==="features"&&<motion.div role="tabpanel" id="trn-panel-features" aria-labelledby="trn-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-end justify-between gap-3">
                 <div><p className="font-bold text-sm" style={{color:B.black}}>تجهيزات الحافلة</p>
-                  <p className="text-xs mt-0.5" style={{color:B.muted}}>اختر الرموز المتوفرة — يمكن اختيار أكثر من خدمة.</p></div>
+                  <p className="text-xs mt-0.5" style={{color:B.muted}}>اختر رمزاً لإضافة تجهيزة، ثم اكتب اسمها كما سيظهر للعميل.</p></div>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>{form.features.length}</span>
               </div>
               <div className="grid gap-2" style={{gridTemplateColumns:"repeat(auto-fill, minmax(42px, 1fr))"}}>
-                {TRANSPORT_FEATURE_CATALOG.map(({id,label,Icon})=>{
-                  const selected=form.features.some(feature=>feature.icon===id);
-                  return <button key={id} type="button" aria-label={label} aria-pressed={selected}
-                    onClick={()=>toggleFeature(id,label)}
+                {TRANSPORT_FEATURE_CATALOG.map(({id,label,Icon})=>(
+                  <button key={id} type="button" aria-label={label} title={label} onClick={()=>{
+                    if(featureIconTarget) { chooseFeatIcon(featureIconTarget,id); setFeatureIconTarget(null); }
+                    else addFeat(id,label);
+                  }}
                     className="aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all"
-                    style={{background:selected?B.gold:B.fill,color:selected?B.black:B.text2,border:`1.5px solid ${selected?B.gold:B.border}`,boxShadow:selected?"0 5px 14px rgba(192,134,44,.24)":"none"}}>
-                    <Icon size={18}/>
-                  </button>;
-                })}
+                    style={{background:B.fill,color:B.text2,border:`1.5px solid ${B.border}`}}><Icon size={18}/></button>
+                ))}
               </div>
-              {form.features.some(feature=>!TRANSPORT_FEATURE_CATALOG.some(item=>item.id===feature.icon))&&(
-                <div className="text-xs" style={{color:B.muted}}>توجد رموز محفوظة من بيانات سابقة؛ تبقى كما هي حتى تُزال من السجل.</div>
-              )}
+              {featureIconTarget&&<p className="text-xs font-bold -mt-1" style={{color:"#8A6A08"}}>اختر الرمز الجديد من المعرض أعلاه.</p>}
+              <AnimatePresence>{form.features.map(f=>(
+                <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
+                  className="flex gap-2 items-center rounded-xl p-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+                  {(()=>{ const Icon=transportFeatureIcon(f.icon); const picking=featureIconTarget===f.id; return (
+                    <button type="button" aria-label="تغيير رمز التجهيزة" title="تغيير الرمز" onClick={()=>setFeatureIconTarget(picking?null:f.id)}
+                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer"
+                      style={{background:picking?B.gold:"#FBF3D6",border:`1px solid ${picking?B.gold:"#EBD9A0"}`,color:picking?B.black:"#8A6A08"}}><Icon size={18}/></button>
+                  ); })()}
+                  <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="مثال: واي فاي مجاني" onChange={e=>updFeat(f.id,e.target.value)}/>
+                  <div className="flex flex-col gap-1">
+                    <button aria-label="تقديم التجهيزة" title="تقديم" onClick={()=>moveFeat(f.id,-1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronUp size={12}/></button>
+                    <button aria-label="تأخير التجهيزة" title="تأخير" onClick={()=>moveFeat(f.id,1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronDown size={12}/></button>
+                  </div>
+                  <button aria-label="حذف التجهيزة" title="حذف التجهيزة" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
+                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
+                </motion.div>
+              ))}</AnimatePresence>
+              {form.features.length===0&&<div className="flex flex-col items-center py-10 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Wrench size={26} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف تجهيزات بعد</p></div>}
             </motion.div>}
             {tab==="media"&&<motion.div role="tabpanel" id="trn-panel-media" aria-labelledby="trn-tab-media" key="media" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -662,7 +647,7 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     active:transports.filter(t=>t.status==="active").length,
     buses:transports.filter(t=>t.mode==="bus").length,
     flights:transports.filter(t=>t.mode==="flight").length,
-    totalSeats:transports.reduce((a,t)=>a+t.seats,0),
+    totalSeats:transports.reduce((a,t)=>a+t.seats*Math.max(1,t.fleetCount??1),0),
   };
   function handleSave(t:Transport){
     setTransports(p=>editorDraft?.editId?p.map(x=>x.id===t.id?t:x):[t,...p]);

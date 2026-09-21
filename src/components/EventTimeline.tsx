@@ -40,10 +40,13 @@ const when = (iso: string): string => {
   return d.toLocaleString("ar-SA-u-nu-latn", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Riyadh" });
 };
 
-export function EventTimeline({ docType, docId, title = "سجلّ الطلب", outcomes, reloadKey, emptyText }: {
+export function EventTimeline({ docType, docId, title = "سجلّ الطلب", outcomes, reloadKey, emptyText, flat }: {
   docType: DocType;
   docId: string;
   title?: string;
+  /** بلا إطار البطاقة: حين يكون السجلّ داخل قسمٍ مطويّ يحمل عنوانه أصلاً
+      — إطارٌ داخل إطارٍ يُثقل الصفحة ويكرّر العنوان. */
+  flat?: boolean;
   /** نتائج يختارها الموظف لحدثٍ بلا نتيجة (إرسال أو تواصل). */
   outcomes?: readonly string[];
   /** أي تغيّرٍ فيه يعيد الجلب — مثلاً بعد إجراءٍ جديد. */
@@ -63,11 +66,12 @@ export function EventTimeline({ docType, docId, title = "سجلّ الطلب", o
   if (!isSupabaseEnabled) return null;
 
   return (
-    <div className="rounded-2xl p-5 mb-5" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
+    <div className={flat ? undefined : "rounded-2xl p-5 mb-5"}
+      style={flat ? undefined : { background: "#fff", border: `1px solid ${B.border}` }}>
       <div className="flex items-center justify-between mb-3">
         <div className="font-bold flex items-center gap-2" style={{ color: B.black, fontSize: 15 }}>
-          <Clock size={15} style={{ color: B.gold }} />{title}
-          <span className="text-xs font-semibold" style={{ color: B.muted }}>({events.length})</span>
+          {title ? <><Clock size={15} style={{ color: B.gold }} />{title}</> : null}
+          <span className="text-xs font-semibold" style={{ color: B.muted }}>({events.length}) حدثاً</span>
         </div>
         <button onClick={reload} aria-label="تحديث السجلّ" title="تحديث السجلّ"
           className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"

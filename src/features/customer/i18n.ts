@@ -81,7 +81,7 @@ const D: Record<Lang, Dict> = {
     roomPrivate:"غرفة خاصة", roomShared:"غرفة مشتركة", perPerson:"للفرد", mostWanted:"الأكثر طلباً",
     total:"الإجمالي", passengers:"بيانات المعتمرين", addPassenger:"إضافة معتمر", ownerDetails:"بيانات صاحب الحجز", ownerDetailsHint:"أدخل بياناتك مرة واحدة كما هي في وثيقتك الرسمية.", otherPilgrimsTitle:"بيانات بقية المعتمرين", otherPilgrimsNotice:"سيتم استكمال بيانات المعتمرين الآخرين قبل انطلاق الرحلة. يرجى الحضور مبكرًا وإحضار الوثائق الرسمية، أو التأكد من توفر جميع البيانات الرسمية المطلوبة للتسجيل.",
     name:"الاسم الكامل", phone:"رقم الجوال", idNumber:"رقم الهوية / الجواز", birthDate:"تاريخ الميلاد",
-    nameErr:"اكتب الاسم كاملاً كما في الوثيقة (اسمان على الأقل)", optional:"اختياري", nameHint:"الاسم كما هو مكتوب في الوثيقة", namePh:"مثال: أحمد محمد سعيد العمري",
+    nameErr:"اكتب الاسم كاملاً كما في الوثيقة (اسمان على الأقل)", optional:"اختياري", nameHint:"الاسم كما هو مكتوب في الوثيقة", namePh:"مثال: أحمد محمد",
     phoneHint:"٩ أرقام تبدأ بـ5، أو ١٠ تبدأ بـ05", phonePh:"05XXXXXXXX",
     customPkg:"رحلة حسب الطلب", customLead:"نسّق رحلتك كما تريد وسنتولّى ترتيبها لك بالكامل", customCta:"اطلب تنسيقاً خاصاً",
     customEyebrow:"بديل الباقات الجاهزة", customPerkHotels:"حجز فنادق", customPerkFlights:"ترتيب طيران", customPerkPlan:"تنسيق كامل",

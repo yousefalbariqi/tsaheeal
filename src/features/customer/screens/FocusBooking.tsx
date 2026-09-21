@@ -1,149 +1,87 @@
-import { useEffect, useMemo } from "react";
-import {
-  ArrowLeft, BedDouble, BusFront, CalendarDays, Check, ChevronLeft,
-  MapPin, Minus, Plus, ShieldCheck, Sparkles, Users,
-} from "lucide-react";
-import type { Hotel, Pkg, Transport, Trip } from "@/types";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, BedDouble, BusFront, CalendarDays, Check, ChevronDown, ChevronLeft, MapPin, Minus, Plus, Users } from "lucide-react";
+import type { Hotel, Pkg, Transport, TravellerType, Trip } from "@/types";
 import { hotelDisplayName } from "@/lib/hotelName";
+import { WhatsAppInlineButton } from "@/components/WhatsAppFab";
 import { availSeats } from "../data";
-import { bookingRoomChoices, splitTotal, type RoomSplit } from "../roomSplit";
-import { hotelCover, pkgCover, transportCover } from "../gallery";
+import { bookingRoomChoices, isPrivateAccommodation, packagePrice, roomCountOf, splitTotal, type RoomSplit } from "../roomSplit";
+import { hotelCover, pkgCover } from "../gallery";
 import { flipRTL, money } from "../ui/tokens";
-import { makeT } from "../i18n";
-import { TravellerTypeGrid } from "../ui/TravellerType";
-import { tiersForTraveller, tierLabel } from "@/data/housing";
-import type { TravellerType } from "@/types";
+import { TravellerCountPicker } from "../ui/TravellerType";
+import { ALL_AUDIENCE, audienceOf, tierLabel, tiersForTraveller } from "@/data/housing";
+import type { TravellerCounts } from "../draft";
 
 const addDays = (iso: string, days: number) => {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d + days));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 };
-const returnDate = (trip: Trip, pkg: Pkg) => /^\d{4}-\d{2}-\d{2}$/.test(trip.returnDate ?? "")
-  ? trip.returnDate : addDays(trip.departureDate, Math.max(0, pkg.days - 1));
-const shortDate = (iso: string, lang: "ar" | "en") => {
-  const d = new Date(`${iso}T00:00:00`);
-  const locale = lang === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory-nu-latn";
-  return new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(d).replace("،", "");
+const returnDate = (trip: Trip, pkg: Pkg) => /^\d{4}-\d{2}-\d{2}$/.test(trip.returnDate ?? "") ? trip.returnDate : addDays(trip.departureDate, Math.max(0, pkg.days - 1));
+const shortDate = (iso: string, lang: "ar" | "en") => new Intl.DateTimeFormat(lang === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-US-u-ca-gregory-nu-latn", { weekday: "long", day: "numeric", month: "long" }).format(new Date(`${iso}T00:00:00`)).replace("،", "");
+const roomLabel = (choice: RoomSplit, lang: "ar" | "en") => choice.rooms.length === 1 ? tierLabel(choice.type, choice.rooms[0].persons, lang) : `${choice.type} · ${choice.rooms.length} ${lang === "ar" ? "غرف" : "rooms"}`;
+const departureTimeParts = (hhmm: string | undefined) => {
+  const match = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? "");
+  if (!match) return { value: "—", period: "" };
+  const hour = Number(match[1]);
+  return { value: `${hour % 12 === 0 ? 12 : hour % 12}:${match[2]}`, period: hour < 12 ? "AM" : "PM" };
 };
-/* الاسم من كتالوج السكن لا من تركيبٍ محلّي: «سريران» و«3 أسرّة»
-   تُكتب في موضعٍ واحد فلا تتفارق بين المحرّر وبطاقة العميل. */
-const roomLabel = (choice: RoomSplit, lang: "ar" | "en") => choice.rooms.length === 1
-  ? tierLabel(choice.type, choice.rooms[0].persons, lang)
-  : `${choice.type} · ${choice.rooms.length} ${lang === "ar" ? "غرف" : "rooms"}`;
 
-export function FocusDetails({ pkg, trip, hotel, transport, onBack, persons, setPersons, split, setSplit, travellerType, setTravellerType, onContinue, lang }: {
-  pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport;
-  onBack: () => void; persons: number; setPersons: (n: number) => void;
-  split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
-  travellerType: TravellerType | ""; setTravellerType: (v: TravellerType) => void;
-  onContinue: () => void; lang: "ar" | "en";
+/** لا يظهر سؤال نوع المسافر إلا عندما تقيد بيانات السكن خياراته فعلاً. */
+export const needsTravellerTypeForAccommodation = (pkg: Pkg) => pkg.roomPrices.some(room => {
+  const audience = audienceOf(room);
+  return audience.length !== ALL_AUDIENCE.length || !ALL_AUDIENCE.every(type => audience.includes(type));
+});
+const transportLabel = (transport: Transport | undefined, lang: "ar" | "en") => !transport ? (lang === "ar" ? "مواصلات الرحلة" : "Trip transport") : [transport.model || transport.name, transport.year].filter(Boolean).join(" ") || transport.name;
+
+export function FocusDetails({ pkg, trip, hotel, transport, departureCity = "", onBack, persons, travellerCounts, setTravellerCounts, split, setSplit, travellerType, onContinue, lang }: {
+  pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport; onBack: () => void;
+  departureCity?: string;
+  persons: number; travellerCounts: TravellerCounts; setTravellerCounts: (counts: TravellerCounts) => void; split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
+  travellerType: TravellerType | ""; onContinue: () => void; lang: "ar" | "en";
 }) {
   const end = returnDate(trip, pkg);
-  const image = pkgCover(pkg);
-  const features = [
-    { icon: BusFront, label: lang === "ar" ? "مواصلات مريحة" : "Comfortable transport" },
-    { icon: BedDouble, label: lang === "ar" ? "سكن مختار" : "Selected stay" },
-    { icon: ShieldCheck, label: lang === "ar" ? "إرشاد ديني" : "Religious guidance" },
-    { icon: Sparkles, label: lang === "ar" ? "خدمة مميزة" : "Special service" },
-  ];
-  return (
-    <section className="ts-focus-detail" aria-labelledby="focus-detail-title">
-      <div className="ts-focus-detail-hero">
-        <img src={image} alt="" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/>
-        <div className="ts-focus-detail-shade"/>
-        <button type="button" className="ts-focus-detail-back" onClick={onBack} aria-label={lang === "ar" ? "رجوع" : "Back"}><ChevronLeft size={24} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button>
-      </div>
-      <div className="ts-focus-detail-main">
-        <header className="ts-focus-detail-title">
-          <div><p>{lang === "ar" ? `من ${shortDate(trip.departureDate, lang)} إلى ${shortDate(end, lang)}` : `${shortDate(trip.departureDate, lang)} – ${shortDate(end, lang)}`}</p><h1 id="focus-detail-title">{lang === "ar" ? `رحلة ${pkg.destination} · ${pkg.days} أيام` : `${pkg.destination} · ${pkg.days} days`}</h1></div>
-          <span>{lang === "ar" ? `${availSeats(trip)} مقعد متاح` : `${availSeats(trip)} seats`}</span>
-        </header>
-
-        <div className="ts-focus-feature-grid">
-          {features.map(({ icon: Icon, label }) => <div key={label}><span><Icon size={18}/></span><small>{label}</small></div>)}
-        </div>
-
-        <section className="ts-focus-detail-copy">
-          <h2>{lang === "ar" ? "نبذة عن الرحلة" : "About this journey"}</h2>
-          <p>{pkg.notes?.trim() || (lang === "ar" ? "رحلة مرتبة إلى مكة المكرمة، تجمع بين الراحة والتنظيم لتعيش تجربة عمرة مطمئنة." : "A thoughtfully arranged Umrah journey for a calm, comfortable experience.")}</p>
-        </section>
-
-        <div className="ts-focus-service-grid">
-          <article className="ts-focus-service-card"><img src={hotelCover(hotel, pkg.order)} alt=""/><div><span>{lang === "ar" ? "الإقامة" : "Stay"}</span><strong>{hotel ? hotelDisplayName(hotel.name) : (lang === "ar" ? "سكن الرحلة" : "Accommodation")}</strong><small>{hotel ? `${hotel.stars} نجوم · ${hotel.district}` : (lang === "ar" ? "تُحدَّد مع الباقة" : "Included with package")}</small></div></article>
-          <article className="ts-focus-service-card"><img src={transportCover(transport)} alt=""/><div><span>{lang === "ar" ? "التنقل" : "Transport"}</span><strong>{transport?.name || (lang === "ar" ? "مواصلات الرحلة" : "Trip transport")}</strong><small>{transport?.vehicleType || (lang === "ar" ? "ضمن الباقة" : "Included")}</small></div></article>
-        </div>
-
-        <section className="ts-focus-program">
-          <h2>{lang === "ar" ? "البرنامج المختصر" : "Trip itinerary"}</h2>
-          <div>{pkg.program.filter(s => !s.archived).slice(0, 4).map((stage, i) => <article key={stage.id}><span>{i + 1}</span><div><strong>{stage.day} · {stage.title}</strong><small><span>{stage.time}</span>{stage.desc && <span>{stage.desc}</span>}</small></div></article>)}</div>
-        </section>
-
-        {/* لا صفحة ثانية هنا: قرار الحجز يكمل ملخص الرحلة مباشرةً، كي
-            يظل الفندق والنقل والتاريخ أمام العميل وهو يختار العدد والسكن. */}
-        <FocusConfigure embedded pkg={pkg} trip={trip} hotel={hotel} transport={transport}
-          persons={persons} setPersons={setPersons} split={split} setSplit={setSplit}
-          travellerType={travellerType} setTravellerType={setTravellerType}
-          onBack={onBack} onContinue={onContinue} lang={lang}/>
-      </div>
-    </section>
-  );
+  /* الرحلة قد تمر بمحطات متعددة؛ نعيد الوقت الذي اختاره العميل من مدينته،
+     لا وقت أول محطة فقط الذي بقي للبيانات القديمة. */
+  const selectedStop = departureCity ? trip.departureStops?.find(stop => stop.city.trim() === departureCity.trim()) : trip.departureStops?.[0];
+  const departureTime = departureTimeParts(selectedStop?.time ?? trip.departureTime);
+  const [programOpen, setProgramOpen] = useState(false);
+  const departure = selectedStop?.city || trip.departureCity || selectedStop?.point || trip.departurePoint;
+  return <section className="ts-focus-detail" aria-labelledby="focus-detail-title">
+    <div className="ts-focus-detail-hero"><img src={pkgCover(pkg)} alt="" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/><button type="button" className="ts-focus-detail-back" onClick={onBack} aria-label={lang === "ar" ? "رجوع" : "Back"}><ChevronLeft size={24} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button></div>
+    <div className="ts-focus-detail-main">
+      <header className="ts-focus-trip-summary">
+        <div className="ts-focus-trip-summary-copy"><h1 id="focus-detail-title">{lang === "ar" ? `رحلة ${pkg.destination} · ${pkg.days} أيام` : `${pkg.destination} · ${pkg.days} days`}</h1><p><CalendarDays size={15}/>{lang === "ar" ? `${shortDate(trip.departureDate, lang)} ← ${shortDate(end, lang)}` : `${shortDate(trip.departureDate, lang)} – ${shortDate(end, lang)}`}</p>{departure && <p><MapPin size={15}/>{departure} · {lang === "ar" ? `${availSeats(trip)} مقعد متاح` : `${availSeats(trip)} seats available`}</p>}</div>
+        <div className="ts-focus-departure-time"><small>{lang === "ar" ? "وقت الانطلاق" : "Departure"}</small><strong>{departureTime.value}</strong>{departureTime.period && <em>{departureTime.period}</em>}</div>
+      </header>
+      <section className="ts-focus-includes" aria-label={lang === "ar" ? "يشمل" : "Includes"}><strong>{lang === "ar" ? "يشمل" : "Includes"}</strong><span><BusFront size={18}/>{transportLabel(transport, lang)}</span><span><BedDouble size={18}/>{hotel ? hotelDisplayName(hotel.name) : (lang === "ar" ? "سكن الرحلة" : "Accommodation")}</span></section>
+      <section className="ts-focus-program-compact"><button type="button" aria-expanded={programOpen} onClick={() => setProgramOpen(open => !open)}><span>{lang === "ar" ? "برنامج الرحلة" : "Trip itinerary"}</span><small>{lang === "ar" ? "عرض التفاصيل" : "View details"}</small><ChevronDown size={19}/></button>{programOpen && <div className="ts-focus-program-timeline">{pkg.program.filter(stage => !stage.archived).map((stage, index) => <article key={stage.id}><span>{index + 1}</span><div><strong>{stage.day} · {stage.title}</strong><small>{stage.time}{stage.desc ? ` · ${stage.desc}` : ""}</small></div></article>)}</div>}</section>
+      <FocusConfigure embedded pkg={pkg} trip={trip} hotel={hotel} transport={transport} persons={persons} travellerCounts={travellerCounts} setTravellerCounts={setTravellerCounts} split={split} setSplit={setSplit} travellerType={travellerType} onBack={onBack} onContinue={onContinue} lang={lang}/>
+    </div>
+  </section>;
 }
 
-export function FocusConfigure({ pkg, trip, hotel, transport, persons, setPersons, split, setSplit, travellerType, setTravellerType, onBack, onContinue, lang, embedded = false }: {
-  pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport;
-  persons: number; setPersons: (n: number) => void;
-  split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void;
-  travellerType: TravellerType | ""; setTravellerType: (v: TravellerType) => void;
+export function FocusConfigure({ pkg, trip, hotel, transport, persons, travellerCounts, setTravellerCounts, split, setSplit, travellerType, onBack, onContinue, lang, embedded = false }: {
+  pkg: Pkg; trip: Trip; hotel?: Hotel; transport?: Transport; persons: number;
+  travellerCounts: TravellerCounts; setTravellerCounts: (counts: TravellerCounts) => void;
+  split: RoomSplit | null; setSplit: (s: RoomSplit | null) => void; travellerType: TravellerType | "";
   onBack: () => void; onContinue: () => void; lang: "ar" | "en"; embedded?: boolean;
 }) {
-  const t = makeT(lang);
   const max = Math.max(1, availSeats(trip));
-  /* السكن يتبع نوع المسافر: السرير المشترك للرجال وحدهم. والتصفية قبل
-     بناء الخيارات لا بعدها — خيارٌ يُبنى ثم يُخفى يترك «الأرخص» محسوباً
-     على سعرٍ لا يراه صاحبه. */
-  const rooms = useMemo(
-    () => bookingRoomChoices(tiersForTraveller(pkg.roomPrices, travellerType), persons),
-    [pkg.roomPrices, persons, travellerType]);
-  /* اختيارٌ لم يعد معروضاً (بدّل نوعه بعد أن اختار سريراً مشتركاً)
-     يسقط إلى أول المتاح بدل أن يبقى محجوزاً خفيّاً. */
+  const requireTravellerType = needsTravellerTypeForAccommodation(pkg);
+  const tiers = requireTravellerType ? (travellerType ? tiersForTraveller(pkg.roomPrices, travellerType) : []) : pkg.roomPrices;
+  const rooms = useMemo(() => bookingRoomChoices(tiers, persons), [tiers, persons]);
   const chosen = split && rooms.some(room => room.key === split.key) ? split : rooms[0] ?? null;
   useEffect(() => { if (chosen !== split) setSplit(chosen); }, [chosen, split, setSplit]);
-  const total = chosen ? splitTotal(chosen, Math.max(1, pkg.nights)) : pkg.marketPrice * persons;
-  return (
-    <section className={`ts-focus-configure${embedded ? " embedded" : ""}`} aria-labelledby="focus-configure-title">
-      {!embedded && <header className="ts-focus-configure-head"><button type="button" onClick={onBack} aria-label={lang === "ar" ? "رجوع" : "Back"}><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><h1 id="focus-configure-title">{lang === "ar" ? "خصّص حجزك" : "Customize your booking"}</h1><span/></header>}
-      {embedded && <header className="ts-focus-configure-inline-head"><span>2</span><div><h2 id="focus-configure-title">{lang === "ar" ? "أكمل تفاصيل حجزك" : "Complete your booking"}</h2><p>{lang === "ar" ? "حدّد العدد والسكن ثم أكمل بيانات المعتمرين" : "Set your group and stay, then continue"}</p></div></header>}
-      <main>
-        <article className="ts-focus-configure-trip"><img src={pkgCover(pkg)} alt=""/><div><strong>{lang === "ar" ? `رحلة ${pkg.destination} · ${pkg.days} أيام` : `${pkg.destination} · ${pkg.days} days`}</strong><small><CalendarDays size={14}/>{shortDate(trip.departureDate, lang)}</small></div></article>
-
-        {/* من المسافر؟ — مضمّنٌ في الصفحة لا في نافذة منبثقة: تجربة Focus
-            صفحةٌ واحدة تُمرَّر، وكل اختياراتها (العدد، السكن) ظاهرةٌ فيها.
-            نافذةٌ تقفز على الوصول كانت تحجب الرحلة التي فُتحت لتُقرأ. */}
-        <section className="ts-focus-configure-section">
-          <div className="ts-focus-section-heading"><div><h2>{t("whoTravels")}</h2><small>{t("travellerTypeRequired")}</small></div><Users size={20}/></div>
-          <TravellerTypeGrid value={travellerType} onPick={setTravellerType} t={t}/>
-        </section>
-
-        <section className="ts-focus-configure-section ts-focus-travellers">
-          <div className="ts-focus-section-heading"><div><h2>{lang === "ar" ? "عدد المعتمرين" : "Travellers"}</h2><small>{lang === "ar" ? `${availSeats(trip)} مقعد متاح` : `${availSeats(trip)} seats available`}</small></div><Users size={20}/></div>
-          <div className="ts-focus-counter"><button type="button" disabled={persons <= 1} onClick={() => setPersons(Math.max(1, persons - 1))}><Minus size={18}/></button><strong>{persons}</strong><button type="button" disabled={persons >= max} onClick={() => setPersons(Math.min(max, persons + 1))}><Plus size={18}/></button></div>
-        </section>
-
-        <section className="ts-focus-configure-section ts-focus-accommodation">
-          <div className="ts-focus-section-heading"><div><h2>{lang === "ar" ? "اختر السكن" : "Choose accommodation"}</h2><small>{lang === "ar" ? "السعر يشمل كامل ليالي الإقامة" : "Price includes all stay nights"}</small></div><BedDouble size={20}/></div>
-          <div className="ts-focus-room-list">
-            {rooms.map(room => { const active = chosen?.key === room.key; const cap = room.rooms[0]?.persons ?? 1; return <button key={room.key} type="button" className={active ? "active" : ""} onClick={() => setSplit(room)}>
-              <img src={hotelCover(hotel, cap)} alt=""/><span className="ts-focus-room-copy"><strong>{roomLabel(room, lang)}</strong><small>{room.type.includes("مشترك") ? (lang === "ar" ? `تتشارك السكن مع ${Math.max(0, cap - 1)} ${cap - 1 === 1 ? "شخص" : "أشخاص"}` : `Shared with up to ${Math.max(0, cap - 1)}`) : (lang === "ar" ? "غرفة خاصة لمجموعتك" : "Private room for your group")}</small><em>+ {money(splitTotal(room, Math.max(1, pkg.nights)))} {lang === "ar" ? "ر.س" : "SAR"}</em></span>{active && <Check size={17}/>}</button>; })}
-            {rooms.length === 0 && <p className="ts-focus-room-empty">{lang === "ar" ? "لا توجد خيارات سكن مناسبة لهذا العدد." : "No room options for this group size."}</p>}
-          </div>
-        </section>
-
-        <section className="ts-focus-included"><img src={transportCover(transport)} alt=""/><div><strong>{lang === "ar" ? "مشمول في الباقة" : "Included in package"}</strong><span><BusFront size={14}/>{transport?.name || (lang === "ar" ? "مواصلات الرحلة" : "Trip transport")}</span><span><MapPin size={14}/>{hotel ? hotelDisplayName(hotel.name) : (lang === "ar" ? "سكن الرحلة" : "Accommodation")}</span></div></section>
-
-        <section className="ts-focus-price-summary"><h2>{lang === "ar" ? "ملخص السعر" : "Price summary"}</h2><div><span>{lang === "ar" ? `الإقامة · ${pkg.nights} ليالٍ` : `Stay · ${pkg.nights} nights`}</span><b>{money(total)} {lang === "ar" ? "ر.س" : "SAR"}</b></div><div><span>{lang === "ar" ? "عدد المعتمرين" : "Travellers"}</span><b>{persons}</b></div><footer><span>{lang === "ar" ? "الإجمالي" : "Total"}</span><strong>{money(total)} {lang === "ar" ? "ر.س" : "SAR"}</strong></footer></section>
-      </main>
-      <footer className="ts-focus-configure-cta"><button type="button" disabled={!chosen || !travellerType} onClick={onContinue}>{lang === "ar" ? "إكمال الحجز" : "Continue booking"}<ArrowLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><small>{!travellerType ? t("travellerTypeRequired") : (lang === "ar" ? "ستسجل الدخول قبل تعبئة بيانات المعتمرين" : "Sign in before entering traveller details")}</small></footer>
-    </section>
-  );
+  const price = chosen ? packagePrice(chosen, persons, pkg.seatCostOverride ?? transport?.seatCost ?? 0, pkg.nights) : null;
+  const total = price?.total ?? pkg.marketPrice * persons;
+  const hotelName = hotel ? hotelDisplayName(hotel.name) : (lang === "ar" ? "سكن الرحلة" : "Accommodation");
+  return <section className={`ts-focus-configure${embedded ? " embedded" : ""}`} aria-labelledby="focus-configure-title" id={embedded ? "booking-start" : undefined}>
+    {!embedded && <header className="ts-focus-configure-head"><button type="button" onClick={onBack} aria-label={lang === "ar" ? "رجوع" : "Back"}><ChevronLeft size={22} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button><h1 id="focus-configure-title">{lang === "ar" ? "ابدأ الحجز" : "Start booking"}</h1><span/></header>}
+    <main>
+      <section className="ts-focus-configure-section ts-focus-travellers"><div className="ts-focus-section-heading"><div><h2 id={embedded ? "focus-configure-title" : undefined}>{lang === "ar" ? "المعتمرون" : "Travellers"}</h2><small>{lang === "ar" ? `${availSeats(trip)} مقعد متاح · حدد عدد المعتمرين والمعتمرات` : `${availSeats(trip)} seats available · Set how many pilgrims`}</small></div><Users size={20}/></div><TravellerCountPicker value={travellerCounts} onChange={setTravellerCounts} max={max} lang={lang}/></section>
+      <section className="ts-focus-configure-section ts-focus-accommodation"><div className="ts-focus-section-heading"><div><h2>{lang === "ar" ? "اختر السكن" : "Choose accommodation"}</h2><small>{lang === "ar" ? "حدد عدد الغرف الخاصة المناسب لك" : "Choose the private rooms you need"}</small></div><BedDouble size={20}/></div><article className="ts-focus-hotel-once"><img src={hotelCover(hotel, pkg.order)} alt=""/><div><strong>{hotelName}</strong>{hotel && <small>{hotel.stars} {lang === "ar" ? "نجوم" : "stars"} · {hotel.district}</small>}</div></article><div className="ts-focus-room-list">{rooms.map(room => { const active = chosen?.key === room.key; const privateRoom = isPrivateAccommodation(room); const count = active ? roomCountOf(chosen!) : 1; return <div className="ts-focus-room-choice" key={room.key}><button type="button" className={active ? "active" : ""} onClick={() => setSplit({...room,roomCount:1})} aria-pressed={active}><span className="ts-focus-room-radio">{active && <Check size={14}/>}</span><span className="ts-focus-room-copy"><strong>{roomLabel(room, lang)}</strong><small>{lang === "ar" ? `تكلفة الليلة: ${money(room.perNight)} ر.س` : `Nightly cost: ${money(room.perNight)} SAR`}</small></span></button>{active&&privateRoom&&<div className="ts-focus-room-quantity"><span>{lang === "ar" ? "عدد الغرف المطلوبة" : "Rooms needed"}</span><div><button type="button" onClick={() => setSplit({...chosen!,roomCount:Math.max(1,count-1)})} disabled={count<=1} aria-label={lang === "ar" ? "تقليل عدد الغرف" : "Decrease rooms"}><Minus size={16}/></button><strong>{count}</strong><button type="button" onClick={() => setSplit({...chosen!,roomCount:count+1})} aria-label={lang === "ar" ? "زيادة عدد الغرف" : "Increase rooms"}><Plus size={16}/></button></div></div>}</div>; })}{persons === 0 && <p className="ts-focus-room-empty">{lang === "ar" ? "حدّد عدد المعتمرين أولاً لإظهار خيارات السكن." : "Choose traveller counts first to see eligible stays."}</p>}{persons > 0 && requireTravellerType && !travellerType && <p className="ts-focus-room-empty">{lang === "ar" ? "لا تتوفر خيارات سكن مناسبة لهذا التكوين." : "No stay options match this group."}</p>}{persons > 0 && (!requireTravellerType || travellerType) && rooms.length === 0 && <p className="ts-focus-room-empty">{lang === "ar" ? "لا توجد خيارات سكن مناسبة لهذا العدد." : "No room options for this group size."}</p>}</div></section>
+      <section className="ts-focus-price-summary"><h2>{lang === "ar" ? "ملخص التكلفة" : "Cost summary"}</h2><div><span>{lang === "ar" ? "إجمالي المواصلات" : "Transport total"}</span><b>{money(price?.transport ?? 0)} {lang === "ar" ? "ر.س" : "SAR"}</b></div><div><span>{lang === "ar" ? "إجمالي السكن" : "Accommodation total"}</span><b>{money(price?.accommodation ?? 0)} {lang === "ar" ? "ر.س" : "SAR"}</b></div></section>
+    </main>
+    <footer className="ts-focus-configure-cta"><WhatsAppInlineButton/><div><small>{lang === "ar" ? "الإجمالي" : "Total"}</small><strong>{money(total)} {lang === "ar" ? "ر.س" : "SAR"}</strong></div><button type="button" disabled={persons === 0 || !chosen || (requireTravellerType && !travellerType)} onClick={onContinue}>{lang === "ar" ? "متابعة الحجز" : "Continue booking"}<ArrowLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button></footer>
+  </section>;
 }

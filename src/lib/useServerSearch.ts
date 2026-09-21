@@ -9,7 +9,13 @@
    بين المصدرين بلا فرقٍ في الرسم.
 
    وإن كان الإجراء غير موجود بعد (ترحيلٌ لم يُشغَّل) تُطفئ نفسها وتترك
-   الشاشة على تصفيتها المحلية: نشرٌ سابقٌ للترحيل لا يجب أن يكسر الشاشة. */
+   الشاشة على تصفيتها المحلية: نشرٌ سابقٌ للترحيل لا يجب أن يكسر الشاشة.
+
+   و`optional` لوسيطٍ أحدثَ من الدالّة المنشورة: وسيطٌ لا تعرفه القاعدة
+   يُسقط النداء كلَّه، فيضيع معه البحثُ النصّيّ الذي كان يعمل. تُعاد
+   المحاولة مرّةً بلا الوسائط الاختيارية ويُرفع `degraded` — فتبقى
+   التصفية المعروفة في PostgreSQL وتتولّى الشاشة البُعد الجديد محلياً
+   حتى يُشغَّل الترحيل. */
 import { useEffect, useState } from "react";
 import { PER_PAGE, type Paged } from "@/components/Pager";
 import { isSupabaseEnabled, supabase } from "@/supabase/client";
@@ -17,12 +23,15 @@ import { isSupabaseEnabled, supabase } from "@/supabase/client";
 const DEBOUNCE_MS = 350;
 
 export function useServerPagedSearch<T>({
-  fn, args, resetKey, all, idOf, idField,
+  fn, args, optional, resetKey, all, idOf, idField,
 }: {
   /** اسم الإجراء في القاعدة. */
   fn: string;
   /** وسائط الإجراء عدا page_no/page_size. */
   args: Record<string, unknown>;
+  /** أسماء وسائطٍ قد لا تعرفها الدالّة المنشورة بعد. تُسقط عند رفضها
+      ويُرفع `degraded` ليصفّي بها المتصفّح. */
+  optional?: string[];
   /** يُعيد الترقيم إلى الصفحة الأولى عند تغيّره — البحث والمرشّحات. */
   resetKey: string;
   /** الصفوف المحمّلة، لمطابقة المعرّفات العائدة بكائناتها. */
@@ -30,12 +39,15 @@ export function useServerPagedSearch<T>({
   idOf: (row: T) => string;
   /** اسم عمود المعرّف في ما يُعيده الإجراء. */
   idField: string;
-}): { supported: boolean; searching: boolean; paged: Paged<T> } {
+}): { supported: boolean; searching: boolean; degraded: boolean; paged: Paged<T> } {
   const [page, setPage] = useState(1);
   const [ids, setIds] = useState<string[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   const [supported, setSupported] = useState(isSupabaseEnabled);
+  /* القاعدة لا تعرف الوسائط الاختيارية: تُصفّى أبعادُها في المتصفّح. */
+  const [degraded, setDegraded] = useState(false);
+  const optKey = (optional ?? []).join(",");
 
   useEffect(() => { setPage(1); }, [resetKey]);
 
@@ -43,22 +55,43 @@ export function useServerPagedSearch<T>({
     if (!isSupabaseEnabled || !supabase || !supported) return;
     let alive = true;
     setIds(null); setTotal(null); setSearching(true);
+    const opt = optional ?? [];
+    const without = (a: Record<string, unknown>) => {
+      const out = { ...a };
+      opt.forEach(k => delete out[k]);
+      return out;
+    };
+    const take = (data: unknown) => {
+      const out = (data ?? []) as Array<Record<string, unknown>>;
+      setIds(out.map(r => String(r[idField])));
+      setTotal(out.length ? Number(out[0].total_count) : 0);
+      setSearching(false);
+    };
     const timer = setTimeout(() => {
-      void supabase!.rpc(fn, { ...args, page_no: page, page_size: PER_PAGE })
+      const base = degraded ? without(args) : args;
+      void supabase!.rpc(fn, { ...base, page_no: page, page_size: PER_PAGE })
         .then(({ data, error }) => {
           if (!alive) return;
+          if (!error) { take(data); return; }
+          /* ربّما رُفض لوسيطٍ اختياريٍّ لا تعرفه الدالّة المنشورة:
+             محاولةٌ واحدة بدونه قبل الاستسلام. */
+          if (!degraded && opt.length) {
+            void supabase!.rpc(fn, { ...without(args), page_no: page, page_size: PER_PAGE })
+              .then(r2 => {
+                if (!alive) return;
+                if (r2.error) { setSupported(false); setSearching(false); return; }
+                setDegraded(true); take(r2.data);
+              });
+            return;
+          }
           /* الإجراء غير موجود أو ممنوع: تُطفأ مرّةً ولا تُعاد المحاولة
              كل ضغطة مفتاح، والشاشة تكمل على تصفيتها المحلية. */
-          if (error) { setSupported(false); setSearching(false); return; }
-          const out = (data ?? []) as Array<Record<string, unknown>>;
-          setIds(out.map(r => String(r[idField])));
-          setTotal(out.length ? Number(out[0].total_count) : 0);
-          setSearching(false);
+          setSupported(false); setSearching(false);
         });
     }, DEBOUNCE_MS);
     return () => { alive = false; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fn, idField, resetKey, page, supported]);
+  }, [fn, idField, resetKey, page, supported, degraded, optKey]);
 
   const pages = Math.max(1, Math.ceil((total ?? 0) / PER_PAGE));
   useEffect(() => { setPage(p => Math.min(p, pages)); }, [pages]);
@@ -67,7 +100,7 @@ export function useServerPagedSearch<T>({
   const rows = ids?.map(id => byId.get(id)).filter((r): r is T => !!r) ?? [];
 
   return {
-    supported, searching,
+    supported, searching, degraded,
     paged: {
       page, setPage, pages, total: total ?? 0, rows,
       from: total ? (page - 1) * PER_PAGE + 1 : 0,

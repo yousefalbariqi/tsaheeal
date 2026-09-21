@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, Users, X, Search, ArrowLeft, Clock, Eye, MapPin} from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, TravellerType } from "@/types";
-import { type RoomSplit, splitTotal, splitSummary } from "./roomSplit";
+import { packagePrice, type RoomSplit, splitSummary } from "./roomSplit";
 import { Spinner } from "@/components/Spinner";
 import { Toaster, toast } from "sonner";
 import { hideBootSplash } from "@/lib/bootSplash";
@@ -24,27 +24,25 @@ import { isSellable, tripState } from "@/lib/trip";
 import {
   sendOtp, verifyOtp, signInNoOtp, customerAccountExists, signInWithCustomerPassword, signUpCustomer, SKIP_OTP, loadSession, clearSession, onAuthChange, saveProfile,
   cachedPhoneLocal, isWhatsappEnabled, authErrorMessage, isFail,
+  sendCustomerRecovery, consumeRecoveryCode, setCustomerPassword,
   type CustomerSession,
 } from "./customerAuth";
 import { DirProvider, GrayButton, CTAButton, Sheet } from "./ui/kit";
-import { TravellerTypeGrid } from "./ui/TravellerType";
 import { FlowScreen, InputStack, StackField, PhoneField, TextLink } from "./ui/FlowScreen";
 import { C, T, R, G, LTR, SPACE, formatDate } from "./ui/tokens";
 import { AppBar, BottomBar, DesktopNav } from "./ui/chrome";
 import { Timeline } from "./ui/Timeline";
 import { Explore, matchesDestination } from "./screens/Explore";
-import { Listing } from "./screens/Listing";
 import { CustomRequestScreen } from "./screens/CustomRequest";
-import { FocusConfigure, FocusDetails } from "./screens/FocusBooking";
+import { FocusConfigure, FocusDetails, needsTravellerTypeForAccommodation } from "./screens/FocusBooking";
 import { Account } from "./screens/Account";
 import { parseRoute, pathOf, NEEDS_PACKAGE, HOME, type Screen } from "./routing";
 import { publicSettings } from "@/data/settings";
 import { configureSla } from "./sla";
-import { readDraft, writeDraft, clearDraft, draftHasInput, emptyPax, type Pax } from "./draft";
+import { readDraft, writeDraft, clearDraft, draftHasInput, emptyPax, emptyTravellerCounts, travellerCountTotal, travellerTypeForCounts, type Pax, type TravellerCounts } from "./draft";
 import { fetchTravellers, saveTraveller } from "./travellers";
 
-/* "listing" هي صفحة الباقة والحجوزات. الشاشة تُقرأ من المسار
-   (routing.ts) وPax ومسوّدتها في draft.ts. */
+/* الشاشة تُقرأ من المسار (routing.ts) وPax ومسوّدتها في draft.ts. */
 const money=(n:number)=>Math.round(n).toLocaleString("en-US");
 const validPhone=(p:string)=>/^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
 const validName=(s:string)=>s.trim().split(/\s+/).filter(Boolean).length>=2&&s.trim().length>=5;
@@ -58,13 +56,12 @@ const profileName=(full:string)=>{
 /* تحقق حقول المعتمر — رسالة لكل حقل تظهر تحته مباشرة.
    جوال المعتمر الأول إلزامي (هو جوال التواصل والتتبّع)، وبقية المرافقين اختياري. */
 type PaxField="name"|"phone"|"docType"|"idNumber"|"nationality"|"birthDate"|"gender"|"ageGroup";
-/** الطفل لا يُطلب جواله إطلاقاً؛ والبالغ الأول جواله إلزامي لأنه جوال التواصل. */
-const phoneRequired=(p:Pax,first:boolean)=>p.ageGroup!=="child"&&first;
-function paxErrors(p:Pax,first:boolean,t:(k:string)=>string,lang:string):Partial<Record<PaxField,string>>{
+function paxErrors(p:Pax,t:(k:string)=>string,lang:Lang="ar"):Partial<Record<PaxField,string>>{
   const e:Partial<Record<PaxField,string>>={};
   if(!p.name.trim()) e.name=t("required"); else if(!validName(p.name)) e.name=t("nameErr");
-  if(phoneRequired(p,first)){ if(!p.phone.trim()) e.phone=t("required"); else if(!validPhone(p.phone)) e.phone=t("invalidPhone"); }
-  else if(p.phone.trim()&&!validPhone(p.phone)) e.phone=t("invalidPhone");
+  /* جوال التواصل يأتي من الجلسة الموثّقة ويُرسل عند الحفظ؛ لا يظهر في
+     نموذج المعتمر، لذلك لا نمنع الحجز بحقلٍ لا يستطيع العميل تعبئته. */
+  if(p.phone.trim()&&!validPhone(p.phone)) e.phone=t("invalidPhone");
   if(!p.docType) e.docType=t("required");
   else { const d=docTypeDef(p.docType);
     if(!p.idNumber.trim()) e.idNumber=t("required");
@@ -72,28 +69,6 @@ function paxErrors(p:Pax,first:boolean,t:(k:string)=>string,lang:string):Partial
   if(!p.nationality) e.nationality=t("required");
   if(!p.birthDate) e.birthDate=t("required");
   return e;
-}
-
-/* اختيار من خيارين بشكل شريط مقسوم — أسرع من قائمة منسدلة لخيارين.
-   يقبل خصائص التسمية (role/aria-*) ليمرّرها LField إلى حاويته: مجموعةٌ
-   بلا اسم تُقرأ «زرّ ذكر، زرّ أنثى» بلا ذكر أنها حقل «الجنس». */
-function SegPick({value,onChange,options,dir,...aria}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[];dir:"rtl"|"ltr"}
-  &React.AriaAttributes&{role?:string}){
-  return (
-    <div {...aria} className="flex gap-1 p-1" style={{background:C.fill,border:`1px solid ${C.border}`,borderRadius:R.chip,direction:dir}}>
-      {options.map(o=>{
-        const on=value===o.value;
-        return (
-          <button key={o.value} type="button" onClick={()=>onChange(o.value)} aria-pressed={on}
-            style={{flex:1,padding:"8px 6px",borderRadius:9,fontSize:14,fontWeight:on?600:400,border:"none",fontFamily:"inherit",
-              cursor:"pointer",background:on?C.white:"transparent",color:on?C.ink:C.ink2,
-              boxShadow:on?"0 1px 3px rgba(0,0,0,.08)":"none"}}>
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 /* حقل معنون: عنوان فوق المربع + نص إرشادي تحته يتحوّل إلى رسالة خطأ عند الحاجة.
@@ -189,19 +164,10 @@ const TERMS_AR = `شروط وأحكام حجز العمرة — تساهيل ا�
 
 /* شاشات المسار — قاعدتها بيضاء وشريطها السفلي ثابت، فلا خلفية مزخرفة
    ولا فراغ سفلي ولا زر واتساب عائم يغطّي زر الإجراء. */
-const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","review","success"];
+const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","review","success","recover"];
 /* شاشات لها شريط تنقّل سفلي — الزر العائم يرتفع فوقه. */
-const TABBED_SCREENS:Screen[]=["packages","track","profile"];
+const TABBED_SCREENS:Screen[]=["track","profile"];
 const BOOKING_RESUME_KEY="tsaheel.booking.resume";
-/* من أي تجربةٍ دخل المستفيد مسار الحجز. كان في الذاكرة وحدها فيضيع عند
-   إعادة التحميل: من يُحدّث صفحة بيانات المعتمرين ثم يضغط «رجوع» كان
-   يهبط في صفحة التفاصيل القديمة — تجربتان تختلطان في مسارٍ واحد. */
-const BOOKING_ORIGIN_KEY="tsaheel.booking.origin";
-/* الافتراضي «focus»: هي الرئيسية ومسار الحجز الأساسي، فجلسةٌ بلا سجلّ
-   (رابط /book/:id مُلصق) تنتمي إليها لا إلى التجربة المحفوظة. */
-const readBookingOrigin=():"standard"|"focus"=>{
-  try{ return sessionStorage.getItem(BOOKING_ORIGIN_KEY)==="standard"?"standard":"focus"; }catch{ return "focus"; }
-};
 
 export function CustomerApp(){
   /* اللغة تُحفظ: «زر EN يجب أن يحفظ اختيار المستخدم». المتصفّح وحده
@@ -224,9 +190,9 @@ export function CustomerApp(){
   // booking state
   const [pkg,setPkg]=useState<Pkg|null>(null);
   const [trip,setTrip]=useState<Trip|null>(null);
-  const [persons,setPersons]=useState(1);
+  const [persons,setPersons]=useState(0);
+  const [travellerCounts,setTravellerCounts]=useState<TravellerCounts>(emptyTravellerCounts);
   const [split,setSplit]=useState<RoomSplit|null>(null);
-  const [bookingMode,setBookingMode]=useState<"full"|"transport">("full");
   /* العميل يختار المدينة فقط؛ نقطة الانطلاق ووقتها مثبتتان في الرحلة من الإدارة. */
   const [departureCity,setDepartureCity]=useState("");
   const [departureCitySheet,setDepartureCitySheet]=useState(false);
@@ -234,15 +200,6 @@ export function CustomerApp(){
      سابق تُخفي مدناً موجودة ويبدو أنها اختفت. */
   const [depQuery,setDepQuery]=useState("");
   const [travellerType,setTravellerType]=useState<TravellerType|"">("");
-  const [travellerTypeSheet,setTravellerTypeSheet]=useState(false);
-  /* مسار Focus يبقى داخل تجربته عند الرجوع من بيانات المعتمرين؛ لا يعيده
-     إلى صفحة التفاصيل القديمة. ويُكتب في الجلسة لا في الذاكرة وحدها حتى
-     يصمد أمام إعادة التحميل في منتصف المسار. */
-  const [bookingOrigin,setBookingOriginState]=useState<"standard"|"focus">(readBookingOrigin);
-  const setBookingOrigin=useCallback((o:"standard"|"focus")=>{
-    setBookingOriginState(o);
-    try{ sessionStorage.setItem(BOOKING_ORIGIN_KEY,o); }catch{}
-  },[]);
   const [pax,setPax]=useState<Pax[]>([emptyPax()]);
   const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
   const [paxTried,setPaxTried]=useState(false);
@@ -278,7 +235,9 @@ export function CustomerApp(){
   const rememberBookingResume=useCallback((requested?:Screen)=>{
     const id=pkgRef.current?.id??route.packageId;
     if(!id) return;
-    const candidate=requested??(screen==="listing"?"passengers":screen);
+    /* ما عدا خطوتَي الحجز يُحفظ بوصفه «بيانات المعتمر»: الرجوع بعد
+       الدخول إلى صفحة تفاصيلٍ لا يُكمل مساراً بدأه العميل. */
+    const candidate=requested??screen;
     const target=(candidate==="passengers"||candidate==="review")
       ? candidate : "passengers";
     try{ sessionStorage.setItem(BOOKING_RESUME_KEY,pathOf(target,id)); }catch{}
@@ -291,9 +250,18 @@ export function CustomerApp(){
   const [sessionReady,setSessionReady]=useState(false);
   const cachedPhone=useRef<string|null>(cachedPhoneLocal());
   const [loginPhone,setLoginPhone]=useState("");
-  const [loginStage,setLoginStage]=useState<"phone"|"password"|"signup">("phone");
+  const [loginStage,setLoginStage]=useState<"phone"|"password"|"signup"|"forgot"|"sent">("phone");
   const [loginPassword,setLoginPassword]=useState("");
   const [loginEmail,setLoginEmail]=useState("");
+  /* استعادة كلمة المرور. البريد يُكتب ولا يُستنتج من الرقم: ردّ الخادم
+     واحدٌ سواء كان للبريد حساب أم لا، فلو استنتجناه من الرقم لصار
+     الحقل أداةً تُخرج بريد صاحب أي رقمٍ جوال. */
+  const [forgotEmail,setForgotEmail]=useState("");
+  const [recoverPw,setRecoverPw]=useState("");
+  const [recoverPw2,setRecoverPw2]=useState("");
+  const [recoverErr,setRecoverErr]=useState("");
+  const [recoverBusy,setRecoverBusy]=useState(false);
+  const [recoverState,setRecoverState]=useState<"checking"|"ready"|"invalid"|"done">("checking");
   const [otpCode,setOtpCode]=useState("");
   const [otpErr,setOtpErr]=useState("");
   const [sentVia,setSentVia]=useState<"sms"|"whatsapp">("sms");
@@ -338,12 +306,20 @@ export function CustomerApp(){
   /* عدد المقاعد محفوظ في الطلب، لكنه لا يخلق نماذج بيانات للمرافقين.
      نموذج واحد فقط هو صاحب الحساب/الحجز؛ بيانات الآخرين تُستكمل لاحقاً. */
   useEffect(()=>{ setPax(prev=>[prev[0]??emptyPax()]); },[persons]);
-  /* فئة السكن مستقلة عن عدد معتمري الطلب. تبقى المختارة عند تغيير العدد،
-     ويعاد فقط ضرب سعر الفرد في العدد الجديد. */
-  useEffect(()=>{ setSplit(s=>s ? ({ ...s, perNight: s.rooms.reduce((sum, r) => sum + r.perNight, 0) * persons }) : null); },[persons]);
+  /** العددان هما مدخل العدد الوحيد في تجربة Focus. نشتق منهما
+      الإجمالي والنوع الملائم للسكن في لحظة واحدة كي لا تتعارض الحالات. */
+  const setTravellerBreakdown=useCallback((counts: TravellerCounts)=>{
+    const safe: TravellerCounts = {
+      men: Math.max(0, Math.trunc(counts.men) || 0),
+      women: Math.max(0, Math.trunc(counts.women) || 0),
+    };
+    setTravellerCounts(safe);
+    setPersons(travellerCountTotal(safe));
+    setTravellerType(travellerTypeForCounts(safe));
+  },[]);
   useEffect(()=>()=>{ if(resendTimer.current) clearInterval(resendTimer.current); },[]);
 
-  /* معاينة الموظف: /p/PKG-3?preview=1
+  /* معاينة الموظف: /focus/p/PKG-3?preview=1
 
      صفحة الباقة قبل النشر لا تُبنى نسخةً ثانية داخل اللوحة: نسخةٌ ثانية
      تتفارق عن الأصل عند أول تعديل، فتُطمئن الموظف على شكلٍ لا يراه أحد.
@@ -386,10 +362,6 @@ export function CustomerApp(){
      تنطلق اليوم ٢٢:٠٠ تبقى معروضةً حتى تنطلق، ورحلةٌ عادت أمس تختفي —
      والمقارنة النصّية وحدها كانت تُبقيها يوماً كاملاً. */
   const pkgTrips=(p:Pkg)=>cat.trips.filter(x=>x.packageId===p.id && isSellable(x) && availSeats(x)>0).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
-  /* رحلات التقويم — القابل للحجز والمكتمل معاً، فالمكتمل يُرسم مشطوباً بدل أن
-     يختفي: اختفاؤه يجعل يوماً فاتت مقاعده يبدو يوماً لا تسير فيه الباقة أصلاً.
-     الملغاة والمؤرشفة تبقى مستبعدة — عرضها ضجيج لا معلومة. */
-  const pkgTripsShown=(p:Pkg)=>cat.trips.filter(x=>{const st=tripState(x);return x.packageId===p.id && (st==="open"||st==="full") && x.departureDate>=today;}).sort((a,b)=>a.departureDate.localeCompare(b.departureDate));
   /* المدن ليست قائمةً في الكود: تُجمع من مدن الرحلات نفسها، وهي تُحدَّد
      في لوحة الإدارة عند إنشاء الرحلة (مدينة + نقطة + وقت). فمدينةٌ بلا
      رحلةٍ قادمة لا تظهر أصلاً — ولا يقع العميل على خيارٍ مآله فراغ.
@@ -399,8 +371,9 @@ export function CustomerApp(){
     const source=screen==="focus"
       ? (city?activePkgs.filter(p=>matchesDestination(p,city)):[])
       : (pkg?[pkg]:[]);
-    return [...new Set(source.flatMap(p=>pkgTrips(p)).map(x=>x.departureCity?.trim())
-      .filter((x):x is string=>!!x))].sort((a,b)=>a.localeCompare(b,"ar"));
+    return [...new Set(source.flatMap(p=>pkgTrips(p)).flatMap(x =>
+      x.departureStops?.length ? x.departureStops.map(s => s.city.trim()) : [x.departureCity?.trim() ?? ""]
+    ).filter((x):x is string=>!!x))].sort((a,b)=>a.localeCompare(b,"ar"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[screen,city,activePkgs,pkg,cat.trips,today]);
   /* ── متى تُسأل مدينة الانطلاق؟ ──
@@ -424,9 +397,6 @@ export function CustomerApp(){
        وفي الرئيسية لا رحلة بعد، فلا شيء يُفقد. */
     setDepartureCity(dep); setTrip(null); setTravellerType(""); setDepartureCitySheet(false);
   },[]);
-  const tripsForDepartureCity=(list:Trip[])=>needsDepartureCity
-    ? list.filter(x=>x.departureCity===departureCity)
-    : list;
   /* الرحلة التي تُبنى عليها صفحتا Focus: المختارة، وإلا أقرب رحلةٍ
      قابلة للحجز. تُحسب هنا مرّةً فيقرؤها الرسمُ وحارسُ المسار من مصدرٍ
      واحد — وإلا حَرَسَ الحارسُ شرطاً غير الذي يرسم به الشرطُ الآخر. */
@@ -437,15 +407,13 @@ export function CustomerApp(){
      وإلا اختفى قسم النقل كلياً حتى يختار المستفيد تاريخاً، وهو يحتاجه ليقرر. */
   const transport=cat.transports.find(x=>x.id===(trip?.transportId||pkg?.transportId));
   const hotel=pkg?cat.hotels.find(h=>h.id===pkg.hotelId):undefined;
+  /* نوع المسافر ليس معلومةً مطلوبة للحجز العام؛ لا نطلبه إلا إذا كانت
+     بيانات السكن المقيدة تحتاجه لإظهار الخيارات الصحيحة. */
+  const needsTravellerType=!!pkg&&needsTravellerTypeForAccommodation(pkg);
   const rooms=pkg?.roomPrices??[];
-  const nights=pkg?.nights||1;
-  /* الإجمالي من التوزيع: مجموع (سعر الفرد × سعة الغرفة) لكل غرفة، × الليالي.
-     مطابق للحساب القديم تماماً في التوزيعات المتساوية — أربعة في غرفتين
-     سعة اثنين: (150×2 + 150×2) × ليلتين = 1200، وهو (150×2)×4 نفسه.
-     ويختلف عمداً حين تفوق السعة العدد: الغرفة الأكبر بثمنها كاملاً. */
-  const total=bookingMode==="transport"
-    ? persons * (pkg?.transportOnlyPrice ?? 0)
-    : split?splitTotal(split,nights):(trip?.price??0)*persons;
+  /* التسعير: كل مقعد × عدد المعتمرين، ثم سعر الغرفة المختارة مرة واحدة. */
+  const fullPrice=split ? packagePrice(split,persons,pkg?.seatCostOverride ?? transport?.seatCost ?? 0,pkg?.nights ?? 1) : null;
+  const total=fullPrice?.total ?? (trip?.price??0)*persons;
 
   /* ── مزامنة الباقة مع المسار ──
      المسار قد يتغيّر بلا نقرة: زر الرجوع، رابط مُلصق، إعادة تحميل.
@@ -467,14 +435,20 @@ export function CustomerApp(){
     /* بلا باقة لا شيء يُقاس عليه — والمدينة هنا اختيارُ خطوة الوجهة في
        الرئيسية، يسبق الباقة ولا يُمحى بها. */
     if(!pkg) return;
-    setDepartureCity(c=>c&&pkgTrips(pkg).some(x=>x.departureCity?.trim()===c)?c:"");
+    /* الرحلة قد تمر بمدينة العميل بعد محطة البداية؛ لا نمسح اختياره
+       لمجرد أن المدينة المخزنة في الحقول القديمة هي المحطة الأولى. */
+    setDepartureCity(c=>c&&pkgTrips(pkg).some(x=>
+      x.departureStops?.length
+        ? x.departureStops.some(stop=>stop.city.trim()===c)
+        : x.departureCity?.trim()===c
+    )?c:"");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[pkg?.id,cat.trips]);
-  /* الورقة تُفتح من تلقائها حيث تكون المدينة مطلوبةً ولم تُختر: بعد
-     اختيار الوجهة في الرئيسية، وفي صفحة الباقة القديمة. خطوةٌ واحدة
-     تأتي إلى العميل، لا حقلٌ يبحث عنه في الصفحة. */
+  /* الورقة تُفتح من تلقائها بعد اختيار الوجهة في الرئيسية حيث تكون
+     المدينة مطلوبةً ولم تُختر: خطوةٌ واحدة تأتي إلى العميل، لا حقلٌ
+     يبحث عنه في الصفحة. */
   useEffect(()=>{
-    const atChoice=(screen==="focus"&&!!city)||screen==="listing";
+    const atChoice=screen==="focus"&&!!city;
     /* ورقةٌ بلا خيارات لا تُفتح من تلقائها: لو لم تُسجَّل مدن الانطلاق
        بعد، تبقى الرحلات معروضةً بلا تصفية بدل نافذةٍ فارغة تستقبل
        الزائر على الصفحة الرئيسية. الرسالة تبقى في متناوله من الشريط. */
@@ -503,8 +477,8 @@ export function CustomerApp(){
     const d=pid?readDraft():null;
     if(d&&d.packageId===pid){
       const tr=d.tripId?cat.trips.find(x=>x.id===d.tripId)??null:null;
-      setTrip(tr); setPersons(d.persons); setSplit(d.split); setBookingMode(d.bookingMode ?? "full");
-      setPax([d.pax[0]??emptyPax()]); setAgreed(d.agreed); setTravellerType(d.travellerType);
+      setTrip(tr); setPersons(d.persons); setTravellerCounts(d.travellerCounts); setSplit(d.split);
+      setPax([d.pax[0]??emptyPax()]); setAgreed(d.agreed); setTravellerType(travellerTypeForCounts(d.travellerCounts));
     }
     setRouteReady(true);
   },[loading,route.packageId,cat.trips]);
@@ -515,8 +489,8 @@ export function CustomerApp(){
   useEffect(()=>{
     if(!routeReady||!pkg||bookingNo) return;
     if(!draftHasInput(pax,trip?.id??null,split)) return;
-    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,split,bookingMode,travellerType,pax,agreed});
-  },[routeReady,pkg?.id,trip?.id,persons,split,bookingMode,travellerType,pax,agreed,bookingNo]);
+    writeDraft({packageId:pkg.id,tripId:trip?.id??null,persons,travellerCounts,split,travellerType,pax,agreed});
+  },[routeReady,pkg?.id,trip?.id,persons,travellerCounts,split,travellerType,pax,agreed,bookingNo]);
 
   /* ── العناوين القديمة ──
      /focus صارت هي «/». تُرسَم الصفحة نفسها ثم يُصحَّح العنوان استبدالاً:
@@ -546,7 +520,7 @@ export function CustomerApp(){
        شرط الرسم يُرجع لا شيء — صفحة بيضاء صامتة لرابطٍ مُشارَك انتهت
        مواعيد باقته. الآن يعود الزائر إلى الرئيسية ليختار من المتاح. */
     if((screen==="focusListing"||screen==="focusConfigure")&&!focusTrip){ replaceScreen(HOME,""); return; }
-    if(screen==="review"&&!trip){ replaceScreen(bookingOrigin==="focus"?"focusListing":"listing"); return; }
+    if(screen==="review"&&!trip){ replaceScreen("focusListing"); return; }
     /* شاشة النجاح بلا رقم طلب: تحديثٌ بعد الإرسال. الطلب محفوظ فعلاً،
        فالوجهة «طلباتي» لا نموذج فارغ. */
     if(screen==="success"&&!bookingNo){ replaceScreen(session?"track":HOME,""); return; }
@@ -557,29 +531,12 @@ export function CustomerApp(){
       rememberBookingResume(screen); setIntent("flow"); replaceScreen("login"); return;
     }
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
-  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,focusTrip,bookingOrigin,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
+  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,focusTrip,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
 
-  /* النافذة الإجباريّة حالةٌ محسوبة لا حدثٌ يُطلق.
-
-     كانت تُفتح بنداءٍ في لحظة اختيار الرحلة، ثم حارسٌ يُغلقها إن لم
-     تكن الشاشة شاشةَ حجز. والاثنان يتسابقان: `setScreen` يُحدّث المسار،
-     و`screen` يُقرأ من المسار، فتأتي رايةُ الفتح في رسمةٍ والشاشةُ
-     الجديدة في التي بعدها — فيرى الحارس شاشةً قديمة ويُغلق ما فُتح للتوّ.
-
-     المحسوب لا يتسابق: «أنت في شاشة حجز، ومعك رحلة، ولم تختر بعد» ⇒
-     النافذة مفتوحة. ومغادرةُ الشاشة تُبطل الشرط فتُغلق وحدها — فلا
-     تبقى نافذةٌ لا تُغلق معلّقةً فوق الرئيسية بعد زرّ الرجوع. */
-  const travellerScreen=screen==="listing"||screen==="focusListing"||screen==="focusConfigure";
-  /* شاشات Focus تعمل على `focusTrip` (يرجع لأول رحلة عند فتح رابطٍ
-     مباشر)، والشاشة القديمة على `trip` المختار في تقويمها. */
-  const travellerTrip=(screen==="focusListing"||screen==="focusConfigure")?focusTrip:trip;
-  const mustPickTraveller=travellerScreen&&!!pkg&&!!travellerTrip&&!travellerType;
-  const travellerSheetOpen=mustPickTraveller||travellerTypeSheet;
-
-  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(0);setTravellerCounts(emptyTravellerCounts());setSplit(null);setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
   // ── تحقق نموذج صاحب الحجز ──
-  const paxErrs=useMemo(()=>pax.map((p,i)=>paxErrors(p,i===0,t,lang)),[pax,t,lang]);
+  const paxErrs=useMemo(()=>pax.map(p=>paxErrors(p,t,lang)),[pax,t,lang]);
   const paxValid=paxErrs.every(e=>Object.keys(e).length===0);
   const setPaxField=(i:number,k:keyof Pax,v:string)=>setPax(a=>a.map((x,j)=>j===i?{...x,[k]:v}:x));
   const touch=(i:number,f:PaxField)=>setPaxTouched(s=>({...s,[`${i}.${f}`]:true}));
@@ -617,16 +574,14 @@ export function CustomerApp(){
   },[session?.userId]);
 
   async function doSubmit(){
-    if(submitting||!trip||!pkg) return;
+    if(submitting||!trip||!pkg||persons < 1) return;
     setErrMsg("");
     /* الطلب يُنشأ بجوال موثّق — الجلسة قد تنتهي بين الخطوات. */
     if(!session){ setErrMsg(t("errLoginRequired")); openLogin("flow"); return; }
     if(!agreed){ setErrMsg(t("iAgreeRead")); return; }
-    /* الرجوع يتبع المسار الذي جاء منه: قذفُ من دخل من الرئيسية (Focus)
-       إلى شاشة `listing` القديمة كان ينقله بين تصميمين في منتصف حجزه. */
-    if(!travellerType){
+    if(needsTravellerType&&!travellerType){
       setErrMsg(t("travellerTypeRequired"));
-      setScreen(bookingOrigin==="focus"?"focusListing":"listing",pkg.id);
+      setScreen("focusListing",pkg.id);
       return;
     }
     if(!paxValid){ setErrMsg(t("required")); setPaxTried(true); setScreen("passengers"); return; }
@@ -637,9 +592,11 @@ export function CustomerApp(){
         /* النصّ يُبنى بالعربية دائماً لا بلغة الواجهة: لوحة الموظف والتذاكر
            وصفحة الدفع تعرضه كما هو، فحجز بالإنجليزية كان يكتب فيها سطراً
            إنجليزياً وسط جدول عربي. والغرف تُحفظ مفصّلة بجواره. */
-        roomType:bookingMode==="transport"?"مواصلات فقط":split?splitSummary(split,makeT("ar")):"", persons, travellerType, total,
-        bookingMode: bookingMode === "transport" ? "transport_only" : "full_package",
-        rooms:bookingMode==="transport"?undefined:split?.rooms.map(r=>({tierId:r.id,type:r.type,persons,perNight:r.perNight})),
+        roomType:split?`${splitSummary(split,makeT("ar"))}${split.roomCount && split.roomCount > 1 ? ` · ${split.roomCount} غرف` : ""}`:"", persons, travellerType:travellerType||undefined,
+        /* قاعدة البيانات تحفظ ثلاثة أصناف؛ تجربة الحجز الحالية فيها
+           رجال ونساء فقط، لذلك نرسل الأطفال صراحةً بصفر لا كمفتاح غائب. */
+        travellerCounts:{...travellerCounts,children:0}, pricing:fullPrice ? { seatPrice:fullPrice.seatPrice, transportTotal:fullPrice.transport, accommodationNightly:split?.perNight ?? 0, roomCount:fullPrice.roomCount, nights:fullPrice.nights, accommodationTotal:fullPrice.accommodation } : undefined, total,
+        rooms:split?.rooms.flatMap(r=>Array.from({length:split.roomCount ?? 1},()=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight}))),
         /* لا تُنشأ سجلات وهمية للمرافقين: سجلّ صاحب الحجز وحده الآن. */
         pilgrims:[pax[0]].map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
@@ -669,23 +626,27 @@ export function CustomerApp(){
     return onAuthChange(s=>{ if(alive) setSession(s); });
   },[]);
 
-  /* المعتمر الأول = صاحب الحساب: اسمه وتاريخ ميلاده وجواله الموثّق
-     تُعبَّأ تلقائياً فلا يكتب بياناته مرتين ولا يغلط في رقم التتبّع. */
+  /* ── رابط استعادة كلمة المرور ──
+     العميل هنا بـ?code من رسالة البريد. يُبدَّل مرّةً واحدة بجلسةٍ
+     يكتب فيها كلمته الجديدة. بلا رمزٍ في العنوان فالصفحة فُتحت مباشرةً
+     لا من الرسالة — ويُقال ذلك بدل نموذجٍ لا يحفظ شيئاً. */
   useEffect(()=>{
-    if(!session) return;
-    setPax(a=>{ if(!a.length) return a;
-      const p=a[0], full=[session.profile?.firstName,session.profile?.lastName].filter(Boolean).join(" ");
-      const next={...p,
-        name: p.name.trim()?p.name:full,
-        birthDate: p.birthDate||session.profile?.birthDate||"",
-        phone: session.phoneLocal };
-      /* يبقى رقم الجوال في Form State للحفظ والتحقق فقط؛ لا نعرضه ثانية
-         داخل نموذج صاحب الحجز بعد أن أُدخل في خطوة الدخول. */
-      if(next.name===p.name&&next.birthDate===p.birthDate&&next.phone===p.phone) return a;
-      return [next,...a.slice(1)];
+    if(screen!=="recover"||recoverState!=="checking") return;
+    let alive=true;
+    consumeRecoveryCode().then(r=>{
+      if(!alive) return;
+      /* الرمز مُسح من شريط العنوان داخل الدالة؛ وهذا يُبلّغ الموجّه
+         بالمسح كي لا تبقى نسخته من العنوان حاملةً رمزاً محروقاً. */
+      replaceScreen("recover");
+      if(r===null){ setRecoverErr("افتح الرابط من رسالة البريد مباشرة."); setRecoverState("invalid"); return; }
+      if(isFail(r)){ setRecoverErr(authErrorMessage(r,t)); setRecoverState("invalid"); return; }
+      setSession(r.session); setRecoverState("ready");
+    }).catch(e=>{
+      console.error("[recover] تعذّر تبديل رمز الاستعادة:",e);
+      if(alive){ setRecoverErr(t("errUnknown")); setRecoverState("invalid"); }
     });
-  },[session?.userId,session?.profile?.firstName,session?.profile?.lastName,session?.profile?.birthDate,session?.phoneLocal,
-    pax[0]?.name,pax[0]?.birthDate,pax[0]?.phone]);
+    return ()=>{ alive=false; };
+  },[screen,recoverState,t,replaceScreen]);
 
   // OTP helpers
   function startResendCountdown(sec:number){ setResendIn(sec); if(resendTimer.current) clearInterval(resendTimer.current);
@@ -730,12 +691,44 @@ export function CustomerApp(){
     if(isFail(r)){ setOtpErr("كلمة المرور غير صحيحة"); return; }
     setSession(r.session); afterAuth(r.session);
   }
+  /* ── استعادة كلمة المرور ──
+     الرسالة تُطلَب بالبريد، والردّ واحد سواء وُجد الحساب أم لا: كشفُ
+     «لا حساب بهذا البريد» يجعل النموذج أداةَ جردٍ لمن عندنا حساب. */
+  async function submitForgot(){
+    if(sending) return;
+    const email=forgotEmail.trim();
+    if(!email.includes("@")) return;
+    setOtpErr(""); setSending(true);
+    const r=await sendCustomerRecovery(email);
+    setSending(false);
+    if(isFail(r)){ setOtpErr(authErrorMessage(r,t)); return; }
+    setLoginStage("sent");
+  }
+  /** يضبط الكلمة الجديدة داخل جلسة الاستعادة التي فتحها الرابط. */
+  async function submitNewPassword(){
+    if(recoverBusy) return;
+    if(recoverPw.length<6){ setRecoverErr("كلمة المرور 6 أحرف على الأقل"); return; }
+    if(recoverPw!==recoverPw2){ setRecoverErr("الكلمتان غير متطابقتين"); return; }
+    setRecoverErr(""); setRecoverBusy(true);
+    const r=await setCustomerPassword(recoverPw);
+    setRecoverBusy(false);
+    if(isFail(r)){ setRecoverErr(authErrorMessage(r,t)); return; }
+    /* الجلسة تُقرأ من جديد: تبديل الكلمة يُصدر رموزاً جديدة، والملف
+       يُجلب معها فتعرف الشاشة التالية أمكتملٌ الحساب أم لا. */
+    const fresh=await loadSession();
+    if(fresh) setSession(fresh);
+    setRecoverState("done");
+  }
+
   async function submitSignup(){
     if(sending||!loginEmail.includes("@")||loginPassword.length<6) return;
     setOtpErr(""); setSending(true);
     const r=await signUpCustomer(loginPhone,loginEmail,loginPassword);
     setSending(false);
     if(isFail(r)){ setOtpErr(authErrorMessage(r,t)); return; }
+    /* لا يوقف التسجيل — البريد المكرَّر شائع في الأسرة الواحدة. لكنه
+       يُقال الآن بدل أن يُكتشف يوم يُطلب رابط استعادة لا يأتي. */
+    if(r.recoveryWarning) toast.warning(r.recoveryWarning,{duration:10000});
     setSession(r.session); afterAuth(r.session);
   }
   /* مسار الرمز القديم يبقى للروابط/الجلسات القائمة فقط. */
@@ -777,7 +770,7 @@ export function CustomerApp(){
   async function submitAccount(){
     setPaxTried(true); setAcErr("");
     const owner=pax[0]??emptyPax();
-    if(Object.keys(paxErrors(owner,true,t,lang)).length) return;
+    if(Object.keys(paxErrors(owner,t,lang)).length) return;
     const {firstName,lastName}=profileName(owner.name);
     setAcSaving(true);
     const r=await saveProfile({firstName,lastName,birthDate:owner.birthDate,email:acEmail||session?.profile?.email||""});
@@ -791,7 +784,7 @@ export function CustomerApp(){
   async function logout(){ await clearSession(); setSession(null); setMyOrders(null); setScreen(HOME); }
 
   /** بوابة الدخول بين صفحة التفاصيل وبيانات المعتمرين. */
-  function goAfterListing(){
+  function goAfterDetails(){
     /* المعاينة تعرض ولا تحجز: باقةٌ مسودة قد تكون بلا أسعار ولا رحلات،
        والمضيّ فيها يُنتج طلباً على منتجٍ لم يُنشر بعد. */
     if(preview){ toast.info(t("previewNote")); return; }
@@ -814,15 +807,13 @@ export function CustomerApp(){
   const primaryBtn=(on=true)=>({background:on?G.gold:"#d6cfc6",color:on?B.black:"#a09688",border:"none",cursor:on?"pointer":"not-allowed"} as const);
 
   const isFlow=FLOW_SCREENS.includes(screen);
-  /* رئيسيةُ الشاشة الحالية. للموقع رئيسيتان ما دام القديم محفوظاً: من
-     فتح الاستكشاف القديم على مساره الداخلي يبقى فيه حين يضغط الشعار أو
-     تبويب «استكشاف»، وما عداه — والطلبات والحساب مشتركة بين التجربتين —
-     يعود إلى الرئيسية الجديدة. بلا هذا كان تبويب «استكشاف» من «طلباتي»
-     يقذف زائر Focus إلى التصميم القديم. */
-  const homeScreen:Screen = (screen==="packages"||screen==="listing") ? "packages" : HOME;
+  /* وجهة ✕ و«رجوع» من شاشات المسار: صفحة تفاصيل الباقة. ثابتٌ واحد لا
+     اسمُ شاشةٍ مكتوبٌ في خمسة مواضع — كان المكتوب "listing"، فمن ضغط ✕
+     على تسجيل الدخول يُقذف إلى التصميم القديم بلا أن يطلبه. */
+  const detailScreen:Screen = "focusListing";
   /* الحساب والحجوزات جزءٌ من الواجهة الجديدة كذلك؛ لا تعود لهما خلفية
      الحرم القديمة أو لون قاعدة مختلف حين ينتقل العميل بين التبويبات. */
-  const whiteBase=isFlow||screen==="packages"||screen==="focus"||screen==="focusListing"||screen==="focusConfigure"||screen==="listing"||screen==="track"||screen==="profile"||screen==="custom";
+  const whiteBase=isFlow||screen==="focus"||screen==="focusListing"||screen==="focusConfigure"||screen==="track"||screen==="profile"||screen==="custom";
   /* Safari قد يكشف لون body عند شريط الحالة أو أسفل الـviewport المتغيّر.
      لا نتركه أبيض في Focus: لون السطح يجب أن يمتد بلا نهاية حول الصفحة. */
   const pageBase=screen==="focus" ? "#fffaf2" : (screen==="focusListing"||screen==="focusConfigure" ? "#fffaf4" : (whiteBase ? "#fff" : G.bg));
@@ -866,41 +857,20 @@ export function CustomerApp(){
         </div>
       )}
       <div className="relative flex flex-col flex-1" style={{zIndex:1}}>
-      {!isFlow && (screen === "packages" || screen === "listing" || screen === "track" || screen === "profile" || screen === "custom") &&
-        <DesktopNav screen={screen} home={homeScreen} onNav={setScreen} lang={lang} setLang={setLang} t={t}
+      {!isFlow && (screen === "track" || screen === "profile" || screen === "custom") &&
+        <DesktopNav screen={screen} home={HOME} onNav={setScreen} lang={lang} setLang={setLang} t={t}
           cities={cities} city={city} setCity={setCity}
           signedIn={!!session} onLogin={()=>openLogin("track")} onSignup={()=>openLogin("track")}/>
       }
 
-      {/* ═══ EXPLORE (الاستكشاف) ═══ */}
-      {screen==="packages"&&<>
-        <Explore
-          packages={activePkgs}
-          hotels={cat.hotels}
-          transports={cat.transports}
-          cities={cities} city={city} setCity={setCity}
-          tripsOf={pkgTrips}
-          /* باقة جديدة تُبطل مسوّدة الباقة السابقة — وإلا عادت رحلتها
-             وتوزيع غرفها إلى نموذج باقة أخرى. */
-          onOpen={p=>{setBookingOrigin("standard");clearDraft();setPkg(p);setTrip(null);setPersons(1);setSplit(null);setBookingMode("full");setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setScreen("listing",p.id);}}
-          onCustom={()=>setScreen("custom")}
-          signedIn={!!session}
-          onAccount={()=>session ? setScreen("profile") : openLogin("track")}
-          t={t} lang={lang} setLang={setLang}
-        />
-        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
-      </>}
-
       {/* ═══ الرئيسية — تجربة Focus على «/» ═══
-          نفس مكوّن الاستكشاف بخاصيّة destinationFirst: الوجهة أولاً ثم
-          الرحلات. لم تُمسّ كتلة الاستكشاف القديم أعلاه ولا خُلطت عناصرها
-          هنا؛ هي محفوظة كما هي على /classic حتى يُتأكّد من استقرار هذه. */}
+          الوجهة أولاً ثم الرحلات. كانت هذه الكتلة وكتلةُ الاستكشاف
+          القديم تتشاركان مكوّن Explore بخاصيّة destinationFirst؛ حُذفت
+          القديمة في ٢٠٢٦-٠٩-١٦ فلم تبق إلا هذه. */}
       {screen==="focus"&&<>
         <Explore
           packages={activePkgs}
-          hotels={cat.hotels}
-          transports={cat.transports}
-          cities={cities} city={city} setCity={nextCity=>{
+          city={city} setCity={nextCity=>{
             setCity(nextCity);
             /* الوجهة تغيّرت ⇒ مدينة انطلاقٍ اختيرت لوجهةٍ أخرى لا تُحمل
                معها: قد لا تُسيّر هذه الوجهة رحلةً منها أصلاً. */
@@ -908,12 +878,11 @@ export function CustomerApp(){
             if(!nextCity){ setPkg(null); setTrip(null); setScreen("focus"); }
           }}
           tripsOf={pkgTrips}
-          destinationFirst
           departureCity={departureCity} departureRequired={needsDepartureCity}
           onPickDepartureCity={()=>setDepartureCitySheet(true)}
           /* مدينة الانطلاق لا تُمسح هنا: اختارها العميل قبل الرحلة،
              والرحلة المفتوحة تنطلق منها. مسحُها كان يعني سؤاله مرّتين. */
-          onOpen={(p,chosenTrip)=>{setBookingOrigin("focus");clearDraft();setPkg(p);setTrip(chosenTrip??pkgTrips(p)[0]??null);setPersons(1);setSplit(null);setBookingMode("full");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setScreen("focusListing",p.id);}}
+          onOpen={(p,chosenTrip)=>{clearDraft();setPkg(p);setTrip(chosenTrip??pkgTrips(p)[0]??null);setPersons(0);setTravellerCounts(emptyTravellerCounts());setSplit(null);setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setScreen("focusListing",p.id);}}
           onCustom={()=>setScreen("custom")}
           signedIn={!!session}
           onAccount={()=>session ? setScreen("profile") : openLogin("track")}
@@ -923,43 +892,17 @@ export function CustomerApp(){
 
       {/* صفحات التفاصيل والتخصيص الخاصة بتجربة Focus فقط. */}
       {screen==="focusListing"&&pkg&&focusTrip&&
-        <FocusDetails pkg={pkg} trip={focusTrip} hotel={hotel} transport={transport} lang={lang}
-          persons={persons} setPersons={setPersons} split={split} setSplit={setSplit}
-          travellerType={travellerType} setTravellerType={setTravellerType}
-          onBack={()=>setScreen("focus")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
+        <FocusDetails pkg={pkg} trip={focusTrip} hotel={hotel} transport={transport} departureCity={departureCity} lang={lang}
+          persons={persons} travellerCounts={travellerCounts} setTravellerCounts={setTravellerBreakdown} split={split} setSplit={setSplit}
+          travellerType={travellerType}
+          onBack={()=>setScreen("focus")} onContinue={goAfterDetails}/>
       }
       {screen==="focusConfigure"&&pkg&&focusTrip&&
         <FocusConfigure pkg={pkg} trip={focusTrip} hotel={hotel} transport={transport}
-          persons={persons} setPersons={setPersons} split={split} setSplit={setSplit} lang={lang}
-          travellerType={travellerType} setTravellerType={setTravellerType}
-          onBack={()=>setScreen("focusListing")} onContinue={()=>{setBookingOrigin("focus"); session ? setScreen("passengers") : openLogin("flow");}}/>
+          persons={persons} travellerCounts={travellerCounts} setTravellerCounts={setTravellerBreakdown} split={split} setSplit={setSplit} lang={lang}
+          travellerType={travellerType}
+          onBack={()=>setScreen("focusListing")} onContinue={goAfterDetails}/>
       }
-
-      {/* ═══ LISTING — الصفحة الواحدة (تحل محل trip + seat + room) ═══ */}
-      {screen==="listing"&&pkg&&
-        <Listing
-          pkg={pkg}
-          trips={tripsForDepartureCity(pkgTrips(pkg))}
-          calendarTrips={tripsForDepartureCity(pkgTripsShown(pkg))}
-          hotel={hotel}
-          transport={transport}
-          trip={trip}
-          setTrip={tr=>{ setTrip(tr); if(tr){ setPersons(n=>Math.min(Math.max(1,n),availSeats(tr))); setTravellerType(""); } }}
-          persons={persons} setPersons={setPersons}
-          bookingMode={bookingMode} setBookingMode={mode=>{setBookingMode(mode); if(mode==="transport") setSplit(null);}}
-          split={split} setSplit={setSplit}
-          total={total}
-          /* الرجوع يبقى في التجربة القديمة (/classic) لا يقفز إلى الرئيسية
-             الجديدة: من فتح هذه الصفحة فتحها بمسارها، فلا يُنقل بين
-             تصميمين في ضغطة رجوع واحدة. */
-          onBack={()=>setScreen("packages")}
-          onNext={goAfterListing}
-          departureCityRequired={needsDepartureCity} departureCity={departureCity}
-          onDepartureCityClick={()=>setDepartureCitySheet(true)}
-          travellerType={travellerType} onTravellerTypeClick={()=>setTravellerTypeSheet(true)}
-          terms={TERMS_AR}
-          t={t} lang={lang}
-        />}
 
       {/* ── مدينة الانطلاق ──
           مرحلةٌ في المسار: ورقةٌ تُفتح وحدها بعد الوجهة، فيها بحثٌ يعمل
@@ -999,17 +942,9 @@ export function CustomerApp(){
         </div>
       </Sheet>
 
-      <Sheet open={travellerSheetOpen} onClose={()=>setTravellerTypeSheet(false)} title={t("whoTravels")} center
-        dismissible={!!travellerType}>
-        {/* الاختيار يُغلق الورقة فوراً بلا زر تأكيد: خيارٌ واحدٌ من ثلاثة
-            بلا حقولٍ بعده، وزرُّ تأكيدٍ عليه نقرةٌ ثانية بلا معنى. */}
-        <TravellerTypeGrid value={travellerType} t={t}
-          onPick={v=>{ setTravellerType(v); setTravellerTypeSheet(false); }}/>
-      </Sheet>
-
       {/* ═══ CUSTOM — رحلة حسب الطلب: طلب لا حجز ═══ */}
       {screen==="custom"&&<>
-        <CustomRequestScreen lang={lang} dir={dir} onBack={()=>setScreen(HOME)} onDone={()=>setScreen(HOME)}/>
+        <CustomRequestScreen lang={lang} dir={dir} onBack={()=>setScreen("focus")} onDone={()=>setScreen(HOME)}/>
       </>}
 
       {/* ═══ OWNER — نموذج واحد لصاحب الحجز فقط ═══ */}
@@ -1017,7 +952,7 @@ export function CustomerApp(){
         <FlowScreen
           variant="auth"
           title={t("ownerDetails")} subtitle={t("ownerDetailsHint")} step={2}
-          onBack={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")} onClose={()=>setScreen(bookingOrigin==="focus"?"focusListing":"listing")}
+          onBack={()=>setScreen(detailScreen)} onClose={()=>setScreen(detailScreen)}
           cta={goReview} ctaLabel={t("next")}
           error={paxTried&&!paxValid?t("fillFirst"):undefined}>
           <div className="flex flex-col gap-4">
@@ -1035,20 +970,6 @@ export function CustomerApp(){
                   <input value={p.name} onChange={e=>setPaxField(i,"name",e.target.value)} onBlur={()=>touch(i,"name")}
                     placeholder={t("namePh")} className={inp} style={ist(errOf(i,"name"))}/>
                 </LField>
-
-                {/* الفئة العمرية والجنس — صفّان متجاوران */}
-                <div className="grid grid-cols-2 gap-3">
-                  <LField group label={t("ageGroup")}>
-                    <SegPick dir={dir} value={p.ageGroup}
-                      onChange={v=>setPax(a=>a.map((x,j)=>j===i?{...x,ageGroup:v as Pax["ageGroup"],phone:v==="child"?"":x.phone}:x))}
-                      options={[{value:"adult",label:t("adult")},{value:"child",label:t("child")}]}/>
-                  </LField>
-                  <LField group label={t("gender")}>
-                    <SegPick dir={dir} value={p.gender}
-                      onChange={v=>setPaxField(i,"gender",v)}
-                      options={[{value:"male",label:t("male")},{value:"female",label:t("female")}]}/>
-                  </LField>
-                </div>
 
                 {/* نوع الوثيقة — يحدّد شكل الرقم المطلوب */}
                 <LField label={t("docType")} hint={t("docTypeHint")} error={errOf(i,"docType")}>
@@ -1093,7 +1014,7 @@ export function CustomerApp(){
         <FlowScreen
           variant="auth"
           title={t("review")} step={3}
-          onBack={()=>setScreen("passengers")} onClose={()=>setScreen("listing")}
+          onBack={()=>setScreen("passengers")} onClose={()=>setScreen(detailScreen)}
           cta={doSubmit} ctaLabel={submitting?t("submitting"):t("submit")}
           ctaBusy={submitting} ctaDisabled={!agreed} error={errMsg}>
         <div className="flex flex-col" style={{gap:20}}>
@@ -1102,8 +1023,7 @@ export function CustomerApp(){
             {[[t("package"),pkg.name],
               [t("trip"),`${formatDate(trip.departureDate,lang)} · ${trip.departureTime}`],
               ...(needsDepartureCity ? [[t("departureCity"),departureCity]] : []),
-              [t("whoTravels"),t(travellerType)],
-              ...(bookingMode==="transport" ? [["نوع الحجز","🚌 مواصلات فقط"]] : [[t("room"),split?splitSummary(split,t):"—"]]),
+              [t("room"),split?splitSummary(split,t):"—"],
               [t("people"),`${persons}`]].map(([l,v])=>(
               <div key={l} className="flex items-start justify-between" style={{gap:16,...T.body}}>
                 <span style={{color:C.ink2,flexShrink:0}}>{l}</span>
@@ -1135,28 +1055,18 @@ export function CustomerApp(){
               الضريبة متضمَّنة لا مضافة (قرار ٢٠٢٦-٠٩-٠٦) فيُقال ذلك سطراً. */}
           <div className="flex flex-col" style={{gap:8,paddingTop:16,borderTop:`1px solid ${C.line}`}}>
             <span style={{...T.small,fontWeight:600,color:C.ink2}}>{t("priceBreakdown")}</span>
-            {split&&(
+            {split&&fullPrice&&(
               <div className="flex items-center justify-between" style={{...T.body}}>
-                <span style={{color:C.ink2}}>{t("perNightGroup")} · {splitSummary(split,t)}</span>
-                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(split.perNight)}</span>
+                <span style={{color:C.ink2}}>إجمالي المواصلات (ذهاب وعودة)</span>
+                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(fullPrice.transport)} {t("currency")}</span>
               </div>
             )}
-            {bookingMode==="transport"&&(
+            {split&&fullPrice&&(
               <div className="flex items-center justify-between" style={{...T.body}}>
-                <span style={{color:C.ink2}}>المواصلات للفرد</span>
-                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(pkg.transportOnlyPrice??0)} {t("currency")}</span>
+                <span style={{color:C.ink2}}>إجمالي السكن</span>
+                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{money(fullPrice.accommodation)} {t("currency")}</span>
               </div>
             )}
-            {split&&(
-              <div className="flex items-center justify-between" style={{...T.body}}>
-                <span style={{color:C.ink2}}>{t("nightsCount")}</span>
-                <span style={{fontFamily:"var(--font-app)",color:C.ink}}>× {nights}</span>
-              </div>
-            )}
-            <div className="flex items-center justify-between" style={{...T.body}}>
-              <span style={{color:C.ink2}}>{t("people")}</span>
-              <span style={{fontFamily:"var(--font-app)",color:C.ink}}>{persons}</span>
-            </div>
             {transport&&(
               <div className="flex items-center justify-between" style={{...T.body}}>
                 <span style={{color:C.ink2}}>{t("transportIncl")} · {transport.vehicleType}</span>
@@ -1294,36 +1204,92 @@ export function CustomerApp(){
               : <div className="text-center py-10" style={{...T.body,color:C.ink2}}>{t("noBookings")}</div>}
           <div style={{height:8}}/>
         </div>
-        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
+        <BottomBar screen={screen} home={HOME} onNav={setScreen} t={t}/>
       </>}
 
-      {/* ═══ LOGIN — الجوال ═══ */}
-      {screen==="login"&&
-        <FlowScreen
-          variant="auth"
-          title={loginStage==="phone"?t("loginOrSignup"):loginStage==="password"?"مرحبًا بعودتك":"إنشاء حساب جديد"}
-          subtitle={loginStage==="phone"?"أدخل رقم جوالك للمتابعة":loginStage==="password"?"أدخل كلمة المرور للدخول إلى حسابك":"أدخل بريدك الإلكتروني وكلمة المرور لإنشاء حسابك"}
-          onBack={loginStage!=="phone"?()=>{setLoginStage("phone");setOtpErr("");}:undefined}
-          onClose={()=>setScreen(intent==="track"?"track":"listing")}
-          cta={loginStage==="phone"?beginLogin:loginStage==="password"?submitPasswordLogin:submitSignup}
-          ctaLabel={loginStage==="phone"?"متابعة":loginStage==="password"?"تسجيل الدخول":"إنشاء الحساب"} ctaBusy={sending}
-          ctaDisabled={loginStage==="phone"?!validPhone(loginPhone):loginStage==="password"?!loginPassword:!loginEmail.includes("@")||loginPassword.length<6} error={otpErr}>
+      {/* ═══ LOGIN — الجوال، ثم كلمة المرور، ومنها الاستعادة ═══ */}
+      {screen==="login"&&(()=>{
+        /* خمس مراحل في شاشة واحدة. ثلاثيةٌ متداخلة لكل خاصية صارت أطول
+           من أن تُقرأ، فجدولُ مرحلةٍ واحد بدلها. */
+        const stages={
+          phone:   {title:t("loginOrSignup"), subtitle:"أدخل رقم جوالك للمتابعة",
+                    cta:beginLogin, label:"متابعة", off:!validPhone(loginPhone)},
+          password:{title:"مرحبًا بعودتك", subtitle:"أدخل كلمة المرور للدخول إلى حسابك",
+                    cta:submitPasswordLogin, label:"تسجيل الدخول", off:!loginPassword},
+          signup:  {title:"إنشاء حساب جديد", subtitle:"أدخل بريدك الإلكتروني وكلمة المرور لإنشاء حسابك",
+                    cta:submitSignup, label:"إنشاء الحساب", off:!loginEmail.includes("@")||loginPassword.length<6},
+          forgot:  {title:"استعادة كلمة المرور", subtitle:"أدخل البريد المرتبط بحسابك ونرسل إليه رابط تعيين كلمة مرور جديدة",
+                    cta:submitForgot, label:"إرسال الرابط", off:!forgotEmail.includes("@")},
+          /* «إن كان مرتبطاً بحساب» لا «أُرسل إلى بريدك»: الردّ واحد في
+             الحالتين عمداً، فلا يصير النموذج جرداً لمن عندنا حساب. */
+          sent:    {title:"تفقّد بريدك", subtitle:"إن كان هذا البريد مرتبطاً بحساب فسيصلك خلال دقائق رابطٌ لتعيين كلمة مرور جديدة. تفقّد مجلد الرسائل غير المرغوبة إن لم تجده.",
+                    cta:()=>{setLoginStage("password");setOtpErr("");}, label:"العودة لتسجيل الدخول", off:false},
+        };
+        const st=stages[loginStage];
+        const backTo=loginStage==="forgot"||loginStage==="sent"?"password":"phone";
+        return <FlowScreen
+          variant="auth" title={st.title} subtitle={st.subtitle}
+          onBack={loginStage==="phone"?undefined:()=>{setLoginStage(backTo);setOtpErr("");}}
+          onClose={()=>setScreen(intent==="track"?"track":detailScreen)}
+          cta={st.cta} ctaLabel={st.label} ctaBusy={sending} ctaDisabled={st.off} error={otpErr}>
           {/* الزر معطّل حتى يصحّ الرقم؛ والتلميح يظهر بعد أول إدخال
               حتى لا يبقى المستخدم أمام زر لا يعمل بلا سبب معروض. */}
           {loginStage==="phone" ? <PhoneField value={loginPhone} onChange={setLoginPhone} onEnter={beginLogin}
             error={loginPhone.trim().length>=4&&!validPhone(loginPhone)?t("phoneHint"):undefined}/>
-          : <InputStack>
-              {loginStage==="signup"&&<StackField label="البريد الإلكتروني" value={loginEmail} onChange={setLoginEmail} placeholder="name@example.com" type="email" inputMode="email" />}
-              <StackField label="كلمة المرور" value={loginPassword} onChange={setLoginPassword} placeholder="6 أحرف على الأقل" type="password" last />
-            </InputStack>}
-        </FlowScreen>}
+          : loginStage==="forgot" ? <InputStack>
+              <StackField label="البريد الإلكتروني" value={forgotEmail} onChange={setForgotEmail}
+                placeholder="name@example.com" type="email" inputMode="email" last/>
+            </InputStack>
+          : loginStage==="sent" ? null
+          : <>
+              <InputStack>
+                {loginStage==="signup"&&<StackField label="البريد الإلكتروني" value={loginEmail} onChange={setLoginEmail} placeholder="name@example.com" type="email" inputMode="email" />}
+                <StackField label="كلمة المرور" value={loginPassword} onChange={setLoginPassword} placeholder="6 أحرف على الأقل" type="password" last />
+              </InputStack>
+              {/* تحت الحقل مباشرة: هناك يقف نظر من فشلت كلمته، لا أسفل
+                  الشاشة بعد الزر. */}
+              {loginStage==="password"&&
+                <div style={{textAlign:"start"}}>
+                  <TextLink onClick={()=>{setLoginStage("forgot");setOtpErr("");setForgotEmail(session?.profile?.email??"");}}>نسيت كلمة المرور؟</TextLink>
+                </div>}
+            </>}
+        </FlowScreen>;
+      })()}
+
+      {/* ═══ RECOVER — كلمة مرور جديدة بعد رابط البريد ═══ */}
+      {screen==="recover"&&(()=>{
+        if(recoverState==="checking") return <FlowScreen variant="auth" align="center"
+          title="جارٍ فتح الرابط" subtitle="لحظة — نتحقّق من صلاحية رابط الاستعادة."/>;
+        if(recoverState==="invalid") return <FlowScreen variant="auth" align="center"
+          title="الرابط لم يعد صالحاً"
+          subtitle={recoverErr||"رابط الاستعادة يُستعمل مرّة واحدة وتنتهي صلاحيته بعد مدّة."}
+          onClose={()=>setScreen(HOME)}
+          cta={()=>{setOtpErr("");setLoginStage("forgot");setScreen("login");}} ctaLabel="اطلب رابطاً جديداً"/>;
+        if(recoverState==="done") return <FlowScreen variant="auth" align="center"
+          title="تم تغيير كلمة المرور" subtitle="أنت داخل حسابك الآن. استعمل الكلمة الجديدة في المرّات القادمة."
+          cta={()=>setScreen(session?.profile?.complete?"track":"account")}
+          ctaLabel={session?.profile?.complete?"عرض طلباتي":"أكمل بيانات حسابك"}/>;
+        return <FlowScreen variant="auth"
+          title="اختر كلمة مرور جديدة" subtitle="لا يعرفها أحد غيرك — ولا موظفو تساهيل."
+          onClose={()=>setScreen(HOME)}
+          cta={submitNewPassword} ctaLabel="حفظ والدخول" ctaBusy={recoverBusy}
+          ctaDisabled={recoverPw.length<6||recoverPw!==recoverPw2} error={recoverErr}>
+          <InputStack>
+            <StackField label="كلمة المرور الجديدة" value={recoverPw} onChange={setRecoverPw}
+              placeholder="6 أحرف على الأقل" type="password"/>
+            <StackField label="تأكيد كلمة المرور" value={recoverPw2} onChange={setRecoverPw2}
+              placeholder="أعد كتابتها" type="password" last
+              error={recoverPw2&&recoverPw!==recoverPw2?"الكلمتان غير متطابقتين":undefined}/>
+          </InputStack>
+        </FlowScreen>;
+      })()}
 
       {/* ═══ OTP — تأكيد الهوية ═══ */}
       {screen==="otp"&&
         <FlowScreen
           title={t("confirmIdentity")} align="center" step={1}
           onBack={()=>{setScreen("login");setOtpErr("");}}
-          onClose={()=>setScreen(intent==="track"?"track":"listing")}
+          onClose={()=>setScreen(intent==="track"?"track":detailScreen)}
           cta={confirmOtp} ctaLabel={t("verify")} ctaBusy={sending} ctaDisabled={otpCode.length<6}
           error={otpErr}
           subtitle={<>
@@ -1365,24 +1331,13 @@ export function CustomerApp(){
         return <FlowScreen
           variant="auth"
           title={t("ownerDetails")} subtitle={t("ownerDetailsHint")} step={1}
-          onClose={()=>setScreen(intent==="track"?"track":"listing")}
+          onClose={()=>setScreen(intent==="track"?"track":detailScreen)}
           cta={submitAccount} ctaLabel={t("saveAndContinue")} ctaBusy={acSaving} error={acErr}>
           <div className="flex flex-col gap-4">
             <LField label={t("name")} hint={t("nameHint")} error={errOf(0,"name")}>
               <input value={p.name} onChange={e=>setPaxField(0,"name",e.target.value)} onBlur={()=>touch(0,"name")}
                 placeholder={t("namePh")} className={inp} style={ist(errOf(0,"name"))}/>
             </LField>
-            <div className="grid grid-cols-2 gap-3">
-              <LField group label={t("ageGroup")}>
-                <SegPick dir={dir} value={p.ageGroup}
-                  onChange={v=>setPax(a=>[{...(a[0]??emptyPax()),ageGroup:v as Pax["ageGroup"],phone:v==="child"?"":(a[0]?.phone??"")}])}
-                  options={[{value:"adult",label:t("adult")},{value:"child",label:t("child")} ]}/>
-              </LField>
-              <LField group label={t("gender")}>
-                <SegPick dir={dir} value={p.gender} onChange={v=>setPaxField(0,"gender",v)}
-                  options={[{value:"male",label:t("male")},{value:"female",label:t("female")} ]}/>
-              </LField>
-            </div>
             <LField label={t("docType")} hint={t("docTypeHint")} error={errOf(0,"docType")}>
               <SearchSelect dir={dir} searchable={false} subInTrigger={false} value={p.docType} invalid={!!errOf(0,"docType")}
                 onChange={v=>{setPax(a=>[{...(a[0]??emptyPax()),docType:v as DocType,idNumber:""}]);touch(0,"docType");}}
@@ -1418,7 +1373,7 @@ export function CustomerApp(){
           onLogout={logout}
           onBookings={()=>setScreen("track")}
         />
-        <BottomBar screen={screen} home={homeScreen} onNav={setScreen} t={t}/>
+        <BottomBar screen={screen} home={HOME} onNav={setScreen} t={t}/>
       </>}
 
       </div>
@@ -1446,12 +1401,13 @@ export function CustomerApp(){
       </AnimatePresence>
 
       {/* فراغ أسفل الشاشات بلا شريط سفلي حتى لا يغطّي زر الواتساب آخر عنصر */}
-      {!TABBED_SCREENS.includes(screen)&&screen!=="listing"&&screen!=="focus"&&screen!=="focusListing"&&screen!=="focusConfigure"&&!isFlow&&<div style={{height:76,flexShrink:0}}/>}
+      {!TABBED_SCREENS.includes(screen)&&screen!=="focus"&&screen!=="focusListing"&&screen!=="focusConfigure"&&!isFlow&&<div style={{height:76,flexShrink:0}}/>}
 
-      {/* زر واتساب — ثابت في كل الشاشات، ويرتفع فوق الشريط السفلي حيث يظهر */}
-      {/* يظهر في تجربة Focus طوال التصفح؛ وفي صفحة تفاصيل الحجز يرتفع كي
-          لا يغطي زر الإكمال. صفحة الحجز الرئيسية القديمة تبقيه مخفياً. */}
-      {!isFlow&&screen!=="listing"&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)?100:(screen==="focusListing"||screen==="focusConfigure"?88:24)}/>}
+      {/* زر واتساب — ثابت في كل الشاشات، ويرتفع فوق الشريط السفلي حيث يظهر.
+          ويغيب عن صفحتَي Focus: هناك شريط إجراء ثابت أصلاً، وكان الزر
+          العائم فوقه يحجب آخر سطر من «مراجعة السعر». بديله أيقونةٌ داخل
+          الشريط نفسه (WhatsAppInlineButton). */}
+      {!isFlow&&screen!=="focusListing"&&screen!=="focusConfigure"&&<WhatsAppFab bottom={TABBED_SCREENS.includes(screen)?100:24}/>}
 
       {/* كان مركّباً في AdminApp وحده، فكل toast من طبقة البيانات كان
           يُطلَق في لا مكان: العميل يرى «تم استلام طلبك» ثم لا شيء. dir

@@ -23,9 +23,10 @@ export interface RoomSplit {
   capacity: number;
   /** أسرّة فائضة = capacity − persons. صفر يعني مطابقة تامّة. */
   spare: number;
-  /** ثمن ليلة واحدة للمجموعة كلها = Σ(سعر الفرد × سعة الغرفة).
-      محسوب هنا لا في الواجهة: كان الحساب مكرّراً في ثلاثة مواضع. */
+  /** سعر الليلة للغرفة/الغرف المختارة قبل ضربه في العدد والليالي. */
   perNight: number;
+  /** عدد الغرف من النوع نفسه الذي طلبه العميل. لا علاقة له بعدد المسافرين. */
+  roomCount?: number;
 }
 
 export interface RoomSplitLimits {
@@ -38,8 +39,8 @@ export interface RoomSplitLimits {
 /** خيارات الحجز العام البسيطة.
 
     صفّ الأسعار هو فئة السكن نفسها: «سكن مشترك · 3 أشخاص» يصف عدد النزلاء
-    في الغرفة، لا عدد معتمري الطلب. تظهر كل الفئات المسجلة كما هي، ويدفع
-    العميل سعر الفئة للفرد × عدد معتمري طلبه، بلا توزيع غرف افتراضي. */
+    في الغرفة، لا عدد معتمري الطلب. تظهر كل الفئات المسجلة كما هي، ويُحصّل
+    سعر الغرفة المختارة مرة واحدة، بلا توزيع غرف افتراضي. */
 export function bookingRoomChoices(
   tiers: RoomPrice[] | undefined,
   persons: number,
@@ -63,13 +64,46 @@ export function bookingRoomChoices(
     rooms: [tier],
     capacity: tier.persons,
     spare: 0,
-    // إجمالي ليلة الطلب = سعر الفرد في الفئة × عدد المعتمرين المختار.
-    perNight: tier.perNight * persons,
+    // الاختيار يبدأ بغرفة واحدة، ويُعدّل العميل العدد للغرف الخاصة.
+    perNight: tier.perNight,
+    roomCount: 1,
   }));
 }
 
-/** إجمالي التوزيع لكامل الإقامة. */
-export const splitTotal = (s: RoomSplit, nights: number) => s.perNight * Math.max(1, nights);
+export const roomCountOf = (s: RoomSplit) => Math.max(1, Math.trunc(s.roomCount ?? 1));
+export const isPrivateAccommodation = (s: Pick<RoomSplit, "type">) => /خاص|private/i.test(s.type);
+
+/** إجمالي السكن = سعر الليلة × عدد الغرف × عدد الليالي.
+    عدد الغرف قرار مستقل عن عدد المعتمرين ولا يوزع النظام الأشخاص عليها. */
+export const splitTotal = (s: RoomSplit, nights = 1) =>
+  s.perNight * roomCountOf(s) * Math.max(1, Math.trunc(nights) || 1);
+
+export interface PackagePriceBreakdown {
+  seatPrice: number;
+  transport: number;
+  accommodation: number;
+  roomCount: number;
+  nights: number;
+  total: number;
+}
+
+/** سعر الباقة: مقعد لكل شخص + سكن ليلي بعدد الغرف الذي حدده العميل.
+
+    `transportPrice` سعر النقل للفرد ذهاباً وعودةً، ويأتي من الباقة لا من
+    صفّ الغرفة: المقعد في الحافلة واحد مهما كان مبيت صاحبه. */
+export function packagePrice(
+  split: RoomSplit,
+  persons: number,
+  transportPrice = 0,
+  nights = 1,
+): PackagePriceBreakdown {
+  const seatPrice = Math.max(0, transportPrice || 0);
+  const transport = Math.max(0, persons) * seatPrice;
+  const roomCount = roomCountOf(split);
+  const safeNights = Math.max(1, Math.trunc(nights) || 1);
+  const accommodation = splitTotal(split, safeNights);
+  return { seatPrice, transport, accommodation, roomCount, nights: safeNights, total: transport + accommodation };
+}
 
 /** وصف فئة واحدة: «غرفة خاصة · 2 أفراد». */
 export const roomLabel = (r: RoomPrice, t: (k: string) => string) =>
@@ -201,7 +235,7 @@ export function roomSplits(
         key: `${type}|${parts.join("-")}`,
         type, rooms, capacity,
         spare: capacity - persons,
-        perNight: rooms.reduce((a, r) => a + r.perNight * r.persons, 0),
+        perNight: rooms.reduce((a, r) => a + r.perNight, 0),
       };
     });
 

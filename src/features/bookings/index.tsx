@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useSearchParams } from "react-router";
-import { Pencil, X, Check, Bus, BookOpen, Armchair, ArrowRight, Repeat, Phone, Link2, Plus, ChevronDown, Printer, Mail, Copy as CopyIcon } from "lucide-react";
+import { X, Check, BookOpen, Plus } from "lucide-react";
 import { B } from "@/lib/theme";
-import type { Pkg, Trip, Payment, Pilgrim, BookingStatus, Booking, TicketEntry } from "@/types";
-import { openWhatsApp, copyText, payLinkFor, firstTwo, genderGlyph, newId, invVerifyUrl } from "@/lib/utils";
-import { StatusBadge } from "@/components/StatusBadge";
-import { statusChips, statusLabel } from "@/lib/status";
+import type { Pkg, Trip, Pilgrim, BookingStatus, Booking, Transport } from "@/types";
+import { newId, todayYMD } from "@/lib/utils";
+import { statusLabel } from "@/lib/status";
 import { isSellable } from "@/lib/trip";
 import { EntityGate } from "@/components/States";
 import { useServerPagedSearch } from "@/lib/useServerSearch";
@@ -14,32 +13,60 @@ import { Spinner } from "@/components/Spinner";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
-import { NationalitySelect } from "@/components/NationalitySelect";
-import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
-import { BusSeatGrid } from "@/components/BusSeatGrid";
 import { useStore, flushSync, clearSyncError } from "@/store/useStore";
-import { PAY_ACCOUNT, InvoiceModal } from "@/features/payments";
-import { TicketCard } from "@/features/tickets";
-import { formatPhone } from "@/lib/phone";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { Pager, type Paged, usePaged } from "@/components/Pager";
-import { sar, sarNumber, SAR } from "@/lib/money";
-import { todayYMD } from "@/lib/utils";
-import { bookingGaps, transitionsFor, waitingFor, isStale, staleDays, type Transition } from "./flow";
-import { verifyState, markVerified, markError, afterEdit, VERIFY_LABEL, verifiedCount as countVerified, allVerified as everyVerified } from "./verification";
-import { ConfirmTransition, type TransitionSubmit } from "./ConfirmTransition";
-import { acceptBooking, rejectBooking, cancelBooking, closeStaleBookings, applyDiscount, searchCustomers, type CustomerHit } from "./ops";
-import { EventTimeline } from "@/components/EventTimeline";
-import { logDocEvent, SEND_OUTCOMES } from "@/features/docs/docEvents";
-import { invoicePhase, INVOICE_PHASE_LABEL, INVOICE_PHASE_TONE } from "@/lib/docPhase";
-import { roomSplits, splitTotal, splitSummary, type RoomSplit } from "@/features/customer/roomSplit";
+import { sar } from "@/lib/money";
+import { isStale } from "./flow";
+/* لغةٌ واحدة في الجدول والشاشة: عمود «الحالة» يقول الخطوة التي يقف
+   عندها الطلب (stages.ts) لا اسم حالته في القاعدة — «جديد» و«مقبول»
+   كانتا تظهران هنا بينما تقول شاشة الطلب شيئاً آخر. */
+import { BookingDetail } from "./BookingDetail";
+import { STAGES, closedAs, stageLabel, stageOf, type StageKey } from "./stages";
+import { closeStaleBookings, searchCustomers, type CustomerHit } from "./ops";
+import { packagePrice, roomSplits, splitSummary, type RoomSplit } from "@/features/customer/roomSplit";
 import { normPhone } from "@/features/beneficiaries/link";
-import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
 
 const PAY_METHODS_INTERNAL = ["كاش","تحويل بنكي","آجل للموظف"];
+
+/* ════════ مرشّح الجدول: خطوةُ عملٍ لا اسمُ حالة ════════
+
+   كانت الشرائح سبعاً بأسماء الحالات: «جديد» و«قيد المراجعة» و«مقبول»
+   ثلاثٌ لمعنًى لم يعد معروضاً في أي شاشة، و«مقبول» و«بانتظار الدفع»
+   شريحتان لخطوةٍ واحدة. صارت خطوات المسار الأربع، ومعها «مغلق» يجمع
+   المرفوض والملغى — فالموظف يسأل «وين تكدّس الشغل؟» لا «كم طلباً
+   حالته كذا؟».
+
+   و«مغلق» ليس خطوةً في المسار، فهو هنا وحده. */
+type StageFilter = "all" | StageKey | "closed";
+const STAGE_FILTERS: [StageFilter,string][] = [
+  ["all","الكل"],
+  ...STAGES.map(s=>[s.key,s.label] as [StageFilter,string]),
+  ["closed","مغلق"],
+];
+const STAGE_KEYS = STAGE_FILTERS.map(([v])=>v);
+/** خطوة الطلب كما يراها المرشّح — المغلق خارج الخطوات الأربع. */
+const filterStageOf = (b:Booking):StageFilter => closedAs(b.status) ? "closed" : stageOf(b);
+const BOOKING_STATUSES:BookingStatus[] = ["new","reviewing","needs_edit","rejected","accepted","awaiting_payment","awaiting_trip","paid","verifying","verified","confirmed","cancelled"];
 const validPhone = (p:string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g,""));
+
+/* شارة الخطوة في الجدول — الموظف يقرأ في القائمة نفس ما يقرؤه داخل
+   الطلب: «التحقق من البيانات» لا «جديد»، و«بانتظار الدفع» لا «مقبول». */
+function StageBadge({booking}:{booking:Booking}) {
+  const closed=closedAs(booking.status);
+  const label=closed?(closed==="rejected"?"مرفوض":"ملغى"):stageLabel(stageOf(booking));
+  const tone=closed
+    ? {bg:"#FBE6E6",fg:"#BE2626",br:"#F3C9C9"}
+    : booking.status==="confirmed"
+      ? {bg:"#E3F3E8",fg:"#1E7A44",br:"#C4E4CE"}
+      : {bg:B.cream,fg:"#8A6A08",br:"#EDE4CF"};
+  return (
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap"
+      style={{background:tone.bg,color:tone.fg,border:`1px solid ${tone.br}`}}>{label}</span>
+  );
+}
 
 /* ════════ إضافة طلب جديد (حجز داخلي للموظف) ════════ */
 export interface InternalOrderInput {
@@ -74,8 +101,8 @@ function localCustomerSearch(q:string):CustomerHit[]{
   return [...out,...byPhone.values()].slice(0,8);
 }
 
-function NewOrderModal({packages,trips,onCreate,onClose}:{
-  packages:Pkg[];trips:Trip[];
+function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
+  packages:Pkg[];trips:Trip[];transports:Transport[];
   onCreate:(d:InternalOrderInput)=>string|null;
   onClose:()=>void;
 }) {
@@ -104,6 +131,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
   const availTrips = trips.filter(t=>t.packageId===packageId && isSellable(t));
   const selTrip = trips.find(t=>t.id===tripId);
   const selPkg = packages.find(p=>p.id===packageId);
+  const transport = transports.find(t=>t.id===(selTrip?.transportId||selPkg?.transportId));
   const maxSeats = selTrip ? Math.max(1,selTrip.seats-selTrip.bookedSeats) : 1;
   const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
 
@@ -112,8 +140,8 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
   const housing = (selPkg?.nights??0)>0 && (selPkg?.roomPrices?.length??0)>0;
   const splits = useMemo(()=>selPkg&&housing?roomSplits(selPkg.roomPrices,persons):[],[selPkg,housing,persons]);
   useEffect(()=>{ setSplit(prev=>prev&&splits.some(x=>x.key===prev.key)?prev:(splits[0]??null)); },[splits]);
-  const nights = Math.max(1, selPkg?.nights??1);
-  const estimate = housing&&split ? splitTotal(split,nights) : (selTrip?.price||selPkg?.marketPrice||0)*persons;
+  const price = housing&&split ? packagePrice(split,persons,selPkg?.seatCostOverride ?? transport?.seatCost ?? 0,selPkg?.nights ?? 1) : null;
+  const estimate = price?.total ?? (selTrip?.price||selPkg?.marketPrice||0)*persons;
 
   useEffect(()=>{
     const q = clientPhone.replace(/\D/g,"").length>=4 ? clientPhone : clientName.trim().length>=2 ? clientName : "";
@@ -265,7 +293,7 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
                         style={{background:on?B.gold:"#fff",border:`1px solid ${on?B.gold:B.border}`,color:B.black}}>
                         <div className="text-sm font-bold">{splitSummary(sp,tAr)}</div>
                         <div className="text-xs mt-0.5" style={{color:on?B.black:B.muted}}>
-                          {sar(sp.perNight)} / الليلة للمجموعة{sp.spare>0?` · ${sp.spare} سرير فائض`:""}
+                          {sar(sp.perNight)} للغرفة مرة واحدة{sp.spare>0?` · ${sp.spare} سرير فائض`:""}
                         </div>
                       </button>
                     );
@@ -281,8 +309,8 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
           {tripId&&(
             <div className="col-span-2 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap" style={{background:B.cream,border:"1px solid #EDE4CF"}}>
               <div className="text-xs" style={{color:B.text2}}>
-                {housing&&split
-                  ? <>{split.rooms.length} {split.rooms.length===1?"غرفة":"غرف"} × {nights} {nights===1?"ليلة":"ليالٍ"} · {persons} معتمر</>
+                {housing&&split&&price
+                  ? <>المواصلات: {persons} مقاعد × {sar(price.seatPrice)} = {sar(price.transport)}<br/>السكن: {split.rooms.length} {split.rooms.length===1?"غرفة":"غرف"} = {sar(price.accommodation)}</>
                   : <>{persons} معتمر × {sar(selTrip?.price||selPkg?.marketPrice||0)}</>}
                 <div style={{color:B.muted,marginTop:2}}>المبلغ المعتمد تحسبه القاعدة من أسعار الباقة — لا يُرسل من هنا.</div>
               </div>
@@ -307,1039 +335,9 @@ function NewOrderModal({packages,trips,onCreate,onClose}:{
   );
 }
 
-/* ════════ الخصم الموثَّق — للمدير وحده (قرار ١) ════════ */
-function DiscountPanel({booking,onDone}:{booking:Booking;onDone:()=>Promise<void>}) {
-  const [open,setOpen]=useState(false);
-  const [pct,setPct]=useState(String(booking.discountPercent??""));
-  const [reason,setReason]=useState(booking.discountReason??"");
-  const [busy,setBusy]=useState(false);
-  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
-  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
-  async function save(){
-    const p=Number(pct);
-    if(Number.isNaN(p)||p<0||p>100){ toast.error("النسبة بين 0 و100"); return; }
-    if(p>0&&!reason.trim()){ toast.error("سبب الخصم إلزامي"); return; }
-    setBusy(true);
-    const r=await applyDiscount(booking.id,p,reason.trim());
-    setBusy(false);
-    if(r.unsupported){ toast.info("الخصم الموثَّق يحتاج ترحيل 20260910 على القاعدة."); return; }
-    if(r.error){ toast.error(r.error); return; }
-    toast.success(p>0?`اعتُمد خصم ${p}% — الإجمالي ${sar(r.total??0)}`:"أُلغي الخصم");
-    setOpen(false); await onDone();
-  }
-  if(!open) return (
-    <button onClick={()=>setOpen(true)} className="text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer"
-      style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8A6A08"}}>
-      {booking.discountPercent?"تعديل الخصم":"خصم موثَّق (للمدير)"}
-    </button>
-  );
-  return (
-    <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#FFFBF0",border:"1px solid #EBD9A0"}}>
-      <div className="text-sm font-bold" style={{color:B.black}}>خصم موثَّق</div>
-      <div className="text-xs" style={{color:B.text2}}>يُسجَّل باسمك ووقته وسببه، ويظهر سطراً مستقلاً في الفاتورة. يُحسب من السعر الأصلي لا من الإجمالي الحالي، فلا يتراكب خصمٌ على خصم.</div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div><Field label="النسبة %"><NumericInput min={0} max={100} className={inp} style={{...ist,direction:"ltr"}} value={pct} onValueChange={setPct}/></Field></div>
-        <div className="sm:col-span-2"><Field label="السبب"><input className={inp} style={ist} value={reason} placeholder="مثال: عميل متكرر · مجموعة · تعويض عن خطأ" onChange={e=>setReason(e.target.value)}/></Field></div>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={save} disabled={busy} className="px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>{busy?"جارٍ الحفظ…":"اعتماد"}</button>
-        <button onClick={()=>setOpen(false)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إغلاق</button>
-      </div>
-    </div>
-  );
-}
-
-/* ألوان النقلات — من نغمة الإجراء في flow.ts لا من كل موضع رسم.
-   النغمة معنى (خطر · تمام · محايد) واللون ترجمتها، فتُترجم مرّة. */
-const TONE: Record<string,{bg:string;fg:string;br:string}> = {
-  primary: { bg: B.gold, fg: B.black,  br: B.gold },
-  ok:      { bg: "#E3F3E8", fg: "#1E7A44", br: "#C4E4CE" },
-  warn:    { bg: "#FBF3D6", fg: "#8A6A08", br: "#EBD9A0" },
-  risk:    { bg: "#FBE6E6", fg: "#BE2626", br: "#F3C9C9" },
-  neutral: { bg: "#fff",    fg: B.text2,   br: B.border  },
-};
-
-/* نقلاتٌ لا تمضي بضغطةٍ واحدة: لها أثرٌ على المقعد أو المال أو التذكرة،
-   فتُعرَض آثارها أوّلاً. وإرسال رابط الدفع ليس منها — لا يُتلف شيئاً. */
-/* النافذة للسبب لا للتأكيد: الرفض والإلغاء يحتاجان سبباً مكتوباً ورسالةً
-   للعميل. أمّا الدفع والتأكيد فقرارٌ اتّخذه الموظف حين فعّل «تم استلام
-   الدفع» — وسؤاله «هل أنت متأكد؟» بعده خطوةٌ ثالثة لقرارٍ واحد
-   (قرار ٢٠٢٦-٠٩-١١). */
-const NEEDS_DIALOG: BookingStatus[] = ["cancelled","rejected"];
-
-/* خمس محطّات لا ست: الدفع والتأكيد صارا ضغطةً واحدة، فمحطّتاهما واحدة.
-   `alt` تضمّ الحالات التي تقف عند نفس المحطّة — طلباتٌ قديمة في «تم
-   الدفع» أو «قيد التحقق» تُرسم في آخر المسار لا خارجه. */
-const BOOKING_TIMELINE: {status:BookingStatus;label:string;alt?:BookingStatus[]}[] = [
-  {status:"new",label:"جديد"},{status:"reviewing",label:"قيد المراجعة"},{status:"accepted",label:"مقبول"},
-  {status:"awaiting_payment",label:"بانتظار الدفع"},
-  {status:"confirmed",label:"مؤكد",alt:["paid","verifying","verified"]},
-];
-
-function BookingTimeline({status}:{status:BookingStatus}) {
-  const cancelled = status==="cancelled"||status==="rejected";
-  const activeIdx = BOOKING_TIMELINE.findIndex(s=>s.status===status||s.alt?.includes(status));
-  return (
-    <div className="flex items-center gap-0 overflow-x-auto" style={{scrollbarWidth:"none"}}>
-      {BOOKING_TIMELINE.map((s,i)=>{
-        const done = cancelled ? false : (activeIdx>=0 && i<=activeIdx);
-        const active = !cancelled && i===activeIdx;
-        return (
-          <div key={s.status} className="flex items-center min-w-0 flex-1">
-            <div className="flex flex-col items-center gap-1 min-w-0" style={{minWidth:60}}>
-              <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold transition-all"
-                style={{background:cancelled?"#EEECEA":done?B.gold:"#fff",border:active?`2px solid ${B.gold}`:done?"none":`1px solid ${B.border}`,color:cancelled?"#9a9186":done?B.black:B.muted}}>
-                {done&&!active?<Check size={12}/>:<span>{i+1}</span>}
-              </div>
-              <span className="text-center whitespace-nowrap" style={{fontSize:10,fontWeight:active?700:500,color:cancelled?B.muted:done?B.text3:B.muted}}>{s.label}</span>
-            </div>
-            {i<BOOKING_TIMELINE.length-1&&(
-              <div className="flex-1 h-px mx-1 flex-shrink" style={{background:done&&activeIdx>i?B.gold:B.border,minWidth:8}}/>
-            )}
-          </div>
-        );
-      })}
-      {cancelled&&<div className="flex flex-col items-center gap-1 mr-2" style={{minWidth:60}}>
-        <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{background:"#FBE6E6",border:"1px solid #F3C9C9"}}><X size={12} style={{color:"#BE2626"}}/></div>
-        <span style={{fontSize:10,fontWeight:700,color:"#BE2626"}}>{status==="rejected"?"مرفوض":"ملغى"}</span>
-      </div>}
-    </div>
-  );
-}
-
-function PilgrimCard({pilgrim,index}:{pilgrim:Pilgrim;index:number}) {
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
-      <div className="flex items-center gap-3 px-4 py-3" style={{background:B.cream,borderBottom:`1px solid ${B.border}`}}>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-xs"
-          style={{background:pilgrim.gender==="female"?"#F1E9FA":"#EAF1FE",color:pilgrim.gender==="female"?"#7226BE":"#1E52C7"}}>
-          {pilgrim.gender==="female"?"♀":"♂"}
-        </div>
-        <span className="font-extrabold text-sm" style={{color:B.black}}>معتمر {index+1}</span>
-        <span className="text-xs font-medium mr-auto" style={{color:B.muted}}>{pilgrim.nationality}</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
-        {[
-          {l:"الاسم الكامل",v:pilgrim.name,col:true},
-          {l:"رقم الهوية",v:pilgrim.idNumber||"—"},
-          {l:"الجوال",v:pilgrim.phone||"—"},
-          {l:"تاريخ الميلاد",v:pilgrim.birthDate||"—"},
-          {l:"الجنس",v:pilgrim.gender==="male"?"ذكر":"أنثى"},
-        ].map(f=>(
-          <div key={f.l} className={f.col?"col-span-2 sm:col-span-3":""}>
-            <div className="text-xs mb-0.5 font-semibold" style={{color:B.muted}}>{f.l}</div>
-            <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.l==="رقم الهوية"||f.l==="الجوال"?"var(--font-app)":"inherit"}}>{f.v}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Bus/flight seat-selection map ─── */
-function SeatMap({booking,trip,allBookings,onConfirm,onClose}:{booking:Booking;trip:Trip|undefined;allBookings:Booking[];onConfirm:(seats:number[])=>void;onClose:()=>void}) {
-  const capacity=trip?.seats??49;
-  const need=booking.persons;
-  // occupied seats from other active bookings on the same trip
-  const occupied=new Map<number,"male"|"female">();
-  allBookings.forEach(b=>{
-    if(b.id===booking.id||b.tripId!==booking.tripId||b.status==="cancelled"||b.status==="rejected") return;
-    b.seats.forEach((sn,idx)=>occupied.set(sn,b.pilgrims[idx]?.gender??"male"));
-  });
-  const [sel,setSel]=useState<number[]>(()=>booking.seats.filter(s=>!occupied.has(s)));
-  const toggle=(n:number)=>{ if(occupied.has(n)) return; setSel(prev=>prev.includes(n)?prev.filter(x=>x!==n):(prev.length>=need?prev:[...prev,n])); };
-  const occupiedSet=new Set(occupied.keys());
-  return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-6 overflow-auto"
-      style={{background:"rgba(21,76,72,0.55)",backdropFilter:"blur(4px)"}} onClick={onClose}>
-      <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} exit={{opacity:0,y:30}} transition={{type:"spring",damping:30,stiffness:400}}
-        className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:480,background:"#fff",maxHeight:"92vh"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>اختيار المقعد</h2>
-              <div className="text-xs mt-1" style={{color:"#CDE7E4"}}>{booking.clientName} · رحلة {trip?.departureDate??"—"} — {need} مقعد{booking.seats.length>0?" · راجعها وأكّدها":""}</div>
-            </div>
-            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3.5" style={{scrollbarWidth:"none"}}>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold" style={{color:B.black}}>المقاعد المخصّصة</span>
-            <span className="px-2.5 py-1 rounded-full text-xs font-bold" style={{background:sel.length===need?"#E3F3E8":B.fill,color:sel.length===need?"#1E7A44":B.muted,border:`1px solid ${sel.length===need?"#C4E4CE":B.border}`}}>{sel.length} / {need}</span>
-          </div>
-          {/* Numbered label list: seat → first+second name */}
-          <div className="flex flex-col gap-1.5">
-            {booking.pilgrims.map((pg,idx)=>{
-              const seatNum=sel[idx];
-              const gCol=pg.gender==="female"?"#B4266E":"#1E52C7";
-              const gBg=pg.gender==="female"?"#FBE9F1":"#EAF1FE";
-              return (
-                <div key={idx} className="flex items-center gap-2.5 rounded-xl px-3 py-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-                  <span className="w-6 h-6 rounded-lg flex items-center justify-center font-extrabold flex-shrink-0" style={{background:B.gold,color:B.black,fontSize:11}}>{idx+1}</span>
-                  <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{firstTwo(pg.name)}</span>
-                  <span className="flex items-center justify-center rounded-md flex-shrink-0" style={{width:22,height:22,background:gBg,color:gCol,fontSize:12,fontWeight:800}} title={pg.gender==="female"?"أنثى":"ذكر"}>{genderGlyph(pg.gender)}</span>
-                  {seatNum!=null
-                    ? <span className="flex items-center justify-center rounded-lg font-extrabold flex-shrink-0" style={{minWidth:30,height:26,padding:"0 6px",background:"#FFF7EA",border:`1px solid ${B.gold}`,color:"#8a6a08",fontSize:12}}>مقعد {seatNum}</span>
-                    : <span className="text-xs font-bold flex-shrink-0" style={{color:B.muted}}>لم يُختَر</span>}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold leading-relaxed" style={{background:"#EAF1FE",border:"1px solid #CBDBFB",color:"#1E52C7"}}>
-            <span className="flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center" style={{background:"#1E52C7",color:"#fff"}}>💺</span>
-            <span>{booking.seats.length>0?"المقاعد الذهبية هي المخصّصة للطلب — راجعها. اضغط عليها لتحريرها، وعلى أي مقعد متاح لنقل المعتمر إليه، ثم أكّد.":"اضغط على أي مقعد متاح لتخصيصه للمعتمر. اضغط على المقعد الذهبي مرة أخرى لتحريره واختيار غيره، ثم أكّد."}</span>
-          </div>
-          <BusSeatGrid capacity={capacity} occupied={occupiedSet} selected={sel} need={need} onToggle={toggle}
-            occGender={(n)=>occupied.get(n)??null} selGender={(n)=>booking.pilgrims[sel.indexOf(n)]?.gender??null} showLegend={false}/>
-          <div className="flex flex-wrap gap-3 justify-center pt-3" style={{borderTop:`1px solid ${B.border}`}}>
-            {[["#fff",B.border,"متاح"],["#EAF1FE","#CBDBFB","ذكر"],["#FBE9F1","#F3CADF","أنثى"]].map(([bg,bd,l])=>(
-              <span key={l} className="inline-flex items-center gap-1.5 text-xs font-bold" style={{color:B.text2}}>
-                <span className="rounded" style={{width:14,height:14,background:bg as string,border:`1px solid ${bd}`}}/>{l}
-              </span>
-            ))}
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{color:B.text2}}>
-              <span className="rounded" style={{width:14,height:14,background:"#FFF7EA",border:`1px solid ${B.gold}`,boxShadow:`0 0 0 2px ${B.gold}`}}/>اختيارك
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-3 p-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
-          <button onClick={()=>onConfirm(sel)} disabled={sel.length!==need}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm" style={{background:sel.length===need?B.gold:"#EEECEA",color:sel.length===need?B.black:B.muted,border:"none",cursor:sel.length===need?"pointer":"not-allowed"}}>
-            <Check size={14}/>تأكيد اختيار المقعد
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-/* ─── إجراءات ما بعد الحجز ───
-   الطلب المؤكد انتهى تدبيره: لا مراجعة ولا دفع ولا نقلة حالة. عملُه
-   مستنداتٌ تُطبع وتُرسل — وهذه هي الأربعة التي طلبها الفريق. والإلغاء
-   يبقى ممكناً لكنه ليس الإجراء الذي يُفتح عليه الطلب المؤكد. */
-function PostBookingActions({booking,invoice,ticket,onPrint,onOpenInvoice,onOpenTicket,onLogged}:{
-  booking:Booking; invoice?:Payment; ticket?:TicketEntry;
-  onPrint:(d:"invoice"|"ticket")=>void;
-  onOpenInvoice:()=>void; onOpenTicket:()=>void; onLogged:()=>void;
-}) {
-  const email=(booking.customer?.email??"").trim();
-  const ticketText = ticket
-    ? `مرحباً ${ticket.clientName}،\nتذكرة تساهيل العمرة رقم ${ticket.ticketNo}\nالرحلة: ${ticket.tripDate} · ${ticket.tripTime}\nنقطة الانطلاق: ${ticket.departurePoint}\nرابط التحقق: ${invVerifyUrl(ticket.ticketNo)}`
-    : "";
-
-  const sendWhatsApp=()=>{
-    if(!ticket) return;
-    openWhatsApp(ticket.clientPhone,ticketText);
-    void logDocEvent("ticket",ticket.ticketNo,"whatsapp",{note:"من شاشة الطلب"}).then(onLogged);
-  };
-  /* البريد يفتح برنامج الموظف لا يرسل من الخادم — نفس قرار واتساب
-     (٢٠٢٦-٠٩-٠٦): لا واجهة برمجية، فادّعاء الإرسال كذب. ويُسجَّل الحدث
-     «تواصل» لأن سجلّ القاعدة لا يعرف نوعاً اسمه «بريد». */
-  const sendEmail=()=>{
-    if(!ticket||!email) return;
-    const subject=`تذكرة تساهيل العمرة — ${ticket.ticketNo}`;
-    window.location.href=`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(ticketText)}`;
-    void logDocEvent("ticket",ticket.ticketNo,"contact",{note:`بريد إلكتروني: ${email}`}).then(onLogged);
-  };
-
-  const act=(bg:string,fg:string,on:boolean):React.CSSProperties=>({
-    display:"inline-flex",alignItems:"center",gap:7,padding:"11px 18px",borderRadius:12,
-    fontSize:14,fontWeight:700,background:on?bg:"#EEECEA",color:on?fg:B.muted,border:"none",
-    cursor:on?"pointer":"not-allowed",opacity:on?1:.75,
-  });
-
-  return (
-    <div className="rounded-2xl px-5 py-4 flex flex-col gap-3" style={{background:B.cream,border:"1px solid #EDE4CF"}}>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-xs font-bold" style={{color:B.text2}}>إجراءات ما بعد الحجز</div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold"
-          style={{background:"#1E7A44",color:"#fff"}}><Check size={12}/>{invoice&&ticket?"مؤكد — صدرت الفاتورة والتذكرة":"مؤكد"}</span>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <button onClick={()=>{ if(invoice) onPrint("invoice"); }} disabled={!invoice}
-          title={invoice?"يفتح الفاتورة ويبدأ الطباعة":"لم تصدر فاتورة لهذا الطلب بعد"}
-          style={act(B.gold,B.black,!!invoice)}><Printer size={15}/>طباعة الفاتورة</button>
-        <button onClick={()=>{ if(ticket) onPrint("ticket"); }} disabled={!ticket}
-          title={ticket?"يفتح التذكرة ويبدأ الطباعة":"لم تصدر تذكرة لهذا الطلب بعد"}
-          style={act(B.gold,B.black,!!ticket)}><Printer size={15}/>طباعة التذكرة</button>
-        <button onClick={sendWhatsApp} disabled={!ticket}
-          title={ticket?"يفتح واتساب برسالة التذكرة":"لم تصدر تذكرة بعد"}
-          style={act("#25D366","#fff",!!ticket)}><Phone size={15}/>إرسال التذكرة واتساب</button>
-        <button onClick={sendEmail} disabled={!ticket||!email}
-          title={!ticket?"لم تصدر تذكرة بعد":email?`إلى ${email}`:"لا بريد إلكتروني في ملف العميل"}
-          style={act("#EAF1FE","#1E52C7",!!ticket&&!!email)}><Mail size={15}/>إرسال التذكرة بالبريد</button>
-      </div>
-      <div className="flex flex-wrap items-center gap-4 text-xs" style={{color:B.muted}}>
-        {invoice&&<button onClick={onOpenInvoice} className="font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2,padding:0,textDecoration:"underline"}}>عرض الفاتورة {invoice.id}</button>}
-        {ticket&&<button onClick={onOpenTicket} className="font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2,padding:0,textDecoration:"underline"}}>عرض التذكرة {ticket.ticketNo}</button>}
-        {!email&&<span>لا بريد إلكتروني في ملف العميل — الإرسال بالبريد معطَّل.</span>}
-        {(!invoice||!ticket)&&<span style={{color:"#B4530C"}}>المستند الناقص يصدر من القاعدة لحظة التأكيد — حدِّث الصفحة إن لم يظهر.</span>}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Payment link card (admin) ─── */
-function PaymentLinkCard({booking,trip,pkg,onLogged}:{booking:Booking;trip:Trip|undefined;pkg:Pkg|undefined;onLogged?:()=>void}) {
-  const [copied,setCopied]=useState(false);
-  /* الفروع النشطة وحدها، مرتّبةً بالاسم — من المخزن لا من مصفوفة ثابتة. */
-  const branches=useStore(s=>s.branches);
-  const activeBranches=useMemo(
-    ()=>branches.filter(b=>b.isActive).sort((a,b)=>a.name.localeCompare(b.name,"ar")),
-    [branches]);
-  const link=payLinkFor(booking.id,booking.payToken);
-  const hours=trip?.settings?.paymentDeadlineHours??pkg?.settings?.paymentDeadlineHours??24;
-  const amount=sar(booking.total);
-  const sent=booking.status==="awaiting_payment";
-  const waMsg=`مرحباً ${booking.clientName}،\nرابط دفع باقة (${pkg?.name??"العمرة"}):\n${link}\nالمبلغ المطلوب: ${amount}\nالرابط صالح لمدة ${hours} ساعة.`;
-  const copy=()=>{ copyText(link); setCopied(true); setTimeout(()=>setCopied(false),1500); };
-  return (
-    <div className="rounded-2xl p-5 flex flex-col gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <div className="font-bold flex items-center gap-2" style={{color:B.black,fontSize:15}}><Link2 size={15} style={{color:B.gold}}/>رابط الدفع</div>
-          <div className="text-xs mt-0.5" style={{color:B.muted}}>راجع التفاصيل ثم أرسل الرابط لجوال العميل.</div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{background:sent?"#F1E9FA":"#E3F3E8",color:sent?"#7226BE":"#1E7A44",border:`1px solid ${sent?"#D8BBFA":"#C4E4CE"}`}}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{background:sent?"#7226BE":"#1E7A44"}}/>{sent?"أُرسل الرابط":"جاهز للإرسال"}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-          <Link2 size={13} style={{color:B.muted,flexShrink:0}}/>
-          <span className="text-sm font-bold truncate" style={{color:B.black,direction:"ltr",fontFamily:"var(--font-app)"}}>{link}</span>
-        </div>
-        <button onClick={copy} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer flex-shrink-0" style={{background:B.gold,color:B.black,border:"none"}}>
-          {copied?<Check size={14}/>:<CopyIcon size={14}/>}{copied?"تم النسخ":"نسخ الرابط"}
-        </button>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* كل إرسال يُسجَّل حدثاً (القالب والوقت والموظف) ويُسأل عن نتيجته
-            في سجلّ الطلب — قرار ٢: لا واجهة برمجية لواتساب، فالنتيجة يدوية. */}
-        <button onClick={()=>{ openWhatsApp(booking.clientPhone,waMsg); void logDocEvent("booking",booking.id,"whatsapp",{note:"قالب: رابط الدفع"}).then(()=>onLogged?.()); }}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:"#25D366",color:"#fff",border:"none"}}><Phone size={14}/>إرسال عبر واتساب</button>
-        <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",textDecoration:"none"}}><Link2 size={14}/>فتح صفحة الدفع (تجربة العميل)</a>
-        <span className="text-xs" style={{color:B.muted}}>ينتهي الرابط خلال <b style={{color:B.text2}}>{hours} ساعة</b> من الإرسال</span>
-      </div>
-      {/* Payment methods */}
-      <div style={{borderTop:`1px solid ${B.border}`,paddingTop:14}}>
-        <div className="text-xs font-bold mb-2.5" style={{color:B.text2}}>طرق الدفع</div>
-        <div className="flex flex-col gap-2">
-          <div className="rounded-xl px-4 py-3" style={{border:`1px solid ${B.border}`}}>
-            <div className="text-sm font-bold mb-2" style={{color:B.black}}>تحويل بنكي</div>
-            <div className="flex flex-col gap-1 text-xs">
-              <div className="flex gap-2"><span style={{color:B.muted,minWidth:60}}>المؤسسة</span><span className="font-bold" style={{color:B.black}}>{PAY_ACCOUNT.org}</span></div>
-              <div className="flex gap-2"><span style={{color:B.muted,minWidth:60}}>البنك</span><span className="font-bold" style={{color:B.black}}>{PAY_ACCOUNT.bank}</span></div>
-              <div className="flex gap-2 items-center"><span style={{color:B.muted,minWidth:60}}>الآيبان</span><span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)",letterSpacing:.5,direction:"ltr"}}>{PAY_ACCOUNT.iban}</span>
-                <button onClick={()=>copyText(PAY_ACCOUNT.iban.replace(/\s/g,""))} className="cursor-pointer" style={{background:"none",border:"none",color:B.gold}} title="نسخ الآيبان"><CopyIcon size={12}/></button></div>
-            </div>
-          </div>
-          <div className="rounded-xl px-4 py-3" style={{border:`1px solid ${B.border}`}}>
-            <div className="text-sm font-bold mb-1" style={{color:B.black}}>الدفع الإلكتروني عبر الرابط</div>
-            <div className="text-xs mb-2.5" style={{color:B.text2}}>عند فتح العميل للرابط تُفتح بوابة دفع آمنة تقبل:</div>
-            <div className="flex flex-wrap gap-2">
-              {["مدى","Apple Pay","Visa / Mastercard","STC Pay"].map(m=>(
-                <span key={m} className="px-3 py-1.5 rounded-lg text-xs font-bold" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.black}}>{m}</span>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl px-4 py-3" style={{border:`1px solid ${B.border}`}}>
-            <div className="text-sm font-bold mb-1" style={{color:B.black}}>كاش في الفرع</div>
-            <div className="text-xs leading-relaxed" style={{color:B.text2}}>يُسلّم المبلغ في أي فرع من فروع تساهيل خلال {hours} ساعة كحدٍّ أقصى من إنشاء الطلب.</div>
-          </div>
-        </div>
-      </div>
-      {/* ── مواقع الفروع ──
-          من جدول الفروع الحيّ لا من مصفوفة في الشفرة: كانت ثلاثة فروع
-          مكتوبة (الرياض وجدة ومكة) تُعرض للعميل مهما تغيّرت الفروع
-          فعلاً — فرعٌ أُغلق يبقى معروضاً، وفرعٌ فُتح لا يظهر. والمعطَّل
-          يُستبعد: عنوانُ فرعٍ لا يعمل يُرسل العميل بنقوده إلى بابٍ مغلق. */}
-      {activeBranches.length > 0 && (
-        <div>
-          <div className="text-xs font-bold mb-2.5" style={{color:B.text2}}>مواقع الفروع</div>
-          <div className="flex flex-col gap-2">
-            {activeBranches.map(b=>(
-              <div key={b.id} className="rounded-xl px-4 py-3" style={{border:`1px solid ${B.border}`}}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold" style={{color:B.black}}>{b.name}</span>
-                  {b.phone && <span className="text-xs" style={{color:B.muted,direction:"ltr"}}>{formatPhone(b.phone)}</span>}
-                </div>
-                <div className="text-xs mt-0.5" style={{color:B.text2}}>
-                  {[b.address, b.city].map(x=>(x||"").trim()).filter(Boolean).join("، ") || "—"}
-                </div>
-                {b.gmapUrl && (
-                  <a href={b.gmapUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-bold mt-1 inline-block" style={{color:B.gold}}>
-                    الموقع على الخريطة ↗
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BookingDetail({booking,trips,packages,allBookings,onBack,onStatusChange,onPilgrimsChange,onClientChange,onSeatsChange,onRefresh}:{booking:Booking;trips:Trip[];packages:Pkg[];allBookings:Booking[];onBack:()=>void;onStatusChange:(id:string,s:BookingStatus,patch?:Partial<Booking>)=>void;onPilgrimsChange:(id:string,pilgrims:Pilgrim[])=>void;onClientChange:(id:string,patch:{clientName:string;clientPhone:string})=>void;onSeatsChange:(id:string,seats:number[])=>void;onRefresh:()=>Promise<void>}) {
-  const trip  = trips.find(t=>t.id===booking.tripId);
-  const pkg   = packages.find(p=>p.id===trip?.packageId);
-  const { isAdmin } = useRole();
-  /* إجراءٌ جارٍ في القاعدة — يمنع النقر المزدوج على نقلةٍ ذات أثر. */
-  const [busy,setBusy]=useState(false);
-  /* يتغيّر بعد كل إجراء فيعيد سجلّ الأحداث جلبه. */
-  const [evKey,setEvKey]=useState(0);
-  const bump=()=>setEvKey(k=>k+1);
-  const [invoiceOpen,setInvoiceOpen]=useState(false);
-  /* الفاتورة والتذكرة والمستفيد تُقرأ من المخزن لا تُمرَّر: أثر الإلغاء
-     يحتاج أن يعرف هل صدرت فاتورةٌ فعلاً، وتحذير النواقص يحتاج أن يعرف
-     هل رُبط الطلب بملف مستفيد. */
-  const payments=useStore(s=>s.payments);
-  const tickets=useStore(s=>s.tickets);
-  const beneficiaries=useStore(s=>s.beneficiaries);
-
-  /* التحقق لا يُبنى هنا: يُقرأ من المعتمر نفسه (verification.ts). كان
-     `useState` يبدأ كل معتمرٍ «بانتظار التحقق» عند كل فتحٍ للصفحة، فيُسأل
-     الموظف عمّا أجابه صباحاً — والانتقال بين المراحل يسأله من جديد. */
-  const staffName = useStore(s=>s.currentUser?.name) ?? booking.staff ?? "";
-  const setPilgrim=(i:number,fn:(p:Pilgrim)=>Pilgrim,note:string)=>{
-    onPilgrimsChange(booking.id,booking.pilgrims.map((p,idx)=>idx===i?fn(p):p));
-    void logDocEvent("booking",booking.id,"note",{note}).then(bump);
-  };
-  const pgName=(p:Pilgrim,i:number)=>p.name?.trim()||`معتمر ${i+1}`;
-  const [editIdx,setEditIdx]=useState<number|null>(null);
-  const [draft,setDraft]=useState<Pilgrim|null>(null);
-  /* المعتمر المتحقَّق منه يُطوى: حالةٌ واحدة واضحة تكفي الموظف، والتفاصيل
-     تُفتح عند الطلب («يكفي إظهار ✓ تم التحقق بدون تفاصيل إضافية»). */
-  const [openRows,setOpenRows]=useState<Record<number,boolean>>({});
-  const toggleRow=(i:number)=>setOpenRows(o=>({...o,[i]:!o[i]}));
-  const startEdit=(i:number)=>{setEditIdx(i);setDraft({...booking.pilgrims[i]});setOpenRows(o=>({...o,[i]:true}));};
-  const cancelEdit=()=>{setEditIdx(null);setDraft(null);};
-  /* التعديل بعد التحقق يُسقطه ويطلب تحقّقاً جديداً — وحفظٌ لم يغيّر حرفاً
-     لا يُسقط مراجعةً تمّت (afterEdit يقارن قبل أن يُبطل). */
-  const saveEdit=()=>{ if(editIdx===null||!draft) return;
-    const prev=booking.pilgrims[editIdx], next=afterEdit(prev,draft);
-    onPilgrimsChange(booking.id,booking.pilgrims.map((p,idx)=>idx===editIdx?next:p));
-    if(verifyState(next)==="stale") void logDocEvent("booking",booking.id,"note",
-      {note:`عُدِّلت بيانات ${pgName(next,editIdx)} بعد التحقق — يلزم تحقّقٌ جديد`}).then(bump);
-    setEditIdx(null); setDraft(null); };
-  const setD=<K extends keyof Pilgrim>(k:K,v:Pilgrim[K])=>setDraft(d=>d?{...d,[k]:v}:d);
-  const einp="w-full border rounded-lg px-2.5 py-2 text-sm focus:outline-none";
-  const eist={borderColor:B.gold,background:"#fff",color:B.black,fontFamily:"inherit"};
-  /* تعديل بيانات العميل — الاسم والجوال. الموظف يكتشف الخطأ أثناء
-     المراجعة فيصحّحه في مكانه بدل أن يعيد الطلب للعميل. الباقة والرحلة
-     وعدد المعتمرين ليست تصحيحاً: تغييرها يغيّر السعر والمقاعد، ولها
-     مسارها (تحويل الطلب) لا حقلُ نصّ. */
-  const [clientEdit,setClientEdit]=useState(false);
-  const [cName,setCName]=useState(booking.clientName);
-  const [cPhone,setCPhone]=useState(booking.clientPhone);
-  const [cErr,setCErr]=useState<string|null>(null);
-  const startClientEdit=()=>{ setCName(booking.clientName); setCPhone(booking.clientPhone); setCErr(null); setClientEdit(true); };
-  const saveClient=()=>{
-    const name=cName.trim(), phone=cPhone.trim();
-    if(name.length<3){ setCErr("اكتب اسم العميل كاملاً."); return; }
-    /* الرقم المخزَّن لا يُعاد التحقق منه: طلبٌ قديمٌ بصيغةٍ أخرى كان
-       يمنع تصحيح الاسم وحده. الجديد وحده يُفحص. */
-    if(phone!==booking.clientPhone&&!validPhone(phone)){ setCErr("رقم جوال غير صحيح — 05xxxxxxxx."); return; }
-    if(name===booking.clientName&&phone===booking.clientPhone){ setClientEdit(false); return; }
-    onClientChange(booking.id,{clientName:name,clientPhone:phone});
-    void logDocEvent("booking",booking.id,"note",{note:`تصحيح بيانات العميل: ${name} · ${phone}`}).then(bump);
-    setClientEdit(false);
-  };
-
-  const [seatOpen,setSeatOpen]=useState(false);
-  const [ticketOpen,setTicketOpen]=useState(false);
-  /* الطباعة تفتح المستند ثم تطبعه: window.print تطبع ما رُسم على الشاشة،
-     وقاعدة @media print في كل نافذة تُخفي ما عداها. فلا سبيل لطباعة
-     فاتورةٍ لم تُفتح. */
-  const [printDoc,setPrintDoc]=useState<"invoice"|"ticket"|null>(null);
-  const openPrint=(d:"invoice"|"ticket")=>{ setPrintDoc(d); if(d==="invoice") setInvoiceOpen(true); else setTicketOpen(true); };
-  const closeDoc=()=>{ setPrintDoc(null); setInvoiceOpen(false); setTicketOpen(false); };
-  const [payReceived,setPayReceived]=useState(false);
-  const [payMethodSel,setPayMethodSel]=useState(booking.payMethod&&booking.payMethod!=="—"?booking.payMethod:"تحويل بنكي");
-  const verifiedCount = countVerified(booking.pilgrims);
-  const allVerified   = everyVerified(booking.pilgrims);
-
-  const needsVerif = booking.status==="new"||booking.status==="reviewing";
-
-  /* الدفع المسجَّل يُحفظ مع نقلة الحالة لا بعدها: كانت طريقة الدفع تُختار
-     في الشاشة ثم تُهمل — يصير الطلب «مدفوعاً» بلا طريقة ولا تاريخ. */
-  /* التوقيت المحلي لا UTC: toISOString تُقدّم اليوم أو تُؤخّره ثلاث
-     ساعات عن الرياض، فيُسجَّل الدفع بتاريخ أمس أو غد. */
-  const today = todayYMD();
-
-  /* الإجراءات تُقرأ من جدول المسار (flow.ts) لا تُكتب هنا: الشرط والأثر
-     والتسمية في وحدةٍ واحدة تقرؤها الشاشة والنافذة، وستقرؤها دوالّ
-     القاعدة في الموجة القادمة. */
-  const flowCtx = {
-    booking, trip, pkg,
-    payReceived,
-    hasInvoice: payments.some(x=>x.bookingId===booking.id),
-    hasTicket: tickets.some(x=>x.bookingId===booking.id),
-    beneficiaryLinked: beneficiaries.some(x=>x.bookingIds.includes(booking.id)),
-    today,
-  };
-  const gaps = bookingGaps(flowCtx);
-  const actions = transitionsFor(flowCtx);
-  const [pending,setPending]=useState<Transition|null>(null);
-  const invoice = payments.find(x=>x.bookingId===booking.id);
-  const ticket  = tickets.find(x=>x.bookingId===booking.id);
-
-  /* طرق الدفع تُحفظ مع النقلة: patch القادم من الجدول لا يحمل الطريقة
-     المختارة في الشاشة ولا تاريخ اليوم — فيُكمَلان هنا.
-
-     الشرط على أثر النقلة لا على اسم حالتها: بعد دمج الدفع والتأكيد صارت
-     النقلة تنتهي عند «مؤكد»، وشرطُ `to === "paid"` كان سيُسقط الطريقة
-     والتاريخ فيصير الطلب مدفوعاً بلا طريقةٍ ولا يوم. */
-  const patchFor = (t:Transition):Partial<Booking>|undefined => {
-    if(t.patch?.paymentStatus!=="verified") return t.patch;
-    return {
-      ...t.patch,
-      payMethod: t.patch.payMethod ?? payMethodSel,
-      payDate: today,
-    };
-  };
-
-  /* الرفض والإلغاء يُنفَّذان في القاعدة (reject_booking · cancel_booking):
-     سببٌ إلزامي وقيدٌ في السجل وتحرير المقاعد وإلغاء المستندات في
-     معاملةٍ واحدة. قاعدةٌ بلا الترحيل تسلك المسار القديم (الكتابة
-     المباشرة) فلا يتعطّل شيء قبل تشغيله. */
-  const runTransition = async (t:Transition, v?:TransitionSubmit) => {
-    if(busy) return;
-    setBusy(true);
-    let handled=false;
-    if(t.to==="rejected"&&v){
-      const r=await rejectBooking(booking.id,v.internalReason,v.customerMessage);
-      if(!r.unsupported){ handled=true; if(r.error){ toast.error(r.error); setBusy(false); return; } }
-    } else if(t.to==="cancelled"&&v){
-      const r=await cancelBooking(booking.id,v.internalReason);
-      if(!r.unsupported){ handled=true; if(r.error){ toast.error(r.error); setBusy(false); return; } }
-    }
-    if(handled){
-      await onRefresh();
-    } else {
-      clearSyncError();
-      onStatusChange(booking.id,t.to,patchFor(t));
-      void logDocEvent("booking",booking.id,
-        t.to==="rejected"?"reject":t.to==="cancelled"?"cancel":"status",
-        {note:`→ ${statusLabel(t.to,"booking")}${v?.internalReason?` — ${v.internalReason}`:""}`});
-      /* التأكيد يُنشئ الفاتورة والتذكرة في القاعدة (حارس
-         trg_booking_confirm_docs)، فتُنتظر الكتابة ثم يُعاد الجلب — وإلا
-         بقيت الشاشة تقول «لم تصدر تذكرة» وهي صادرة. */
-      if(t.to==="confirmed"){
-        const err=await flushSync();
-        if(err){ toast.error(err); setBusy(false); return; }
-        await onRefresh();
-        toast.success("تم تأكيد الطلب");
-      }
-    }
-    if(v?.notify && v.customerMessage){
-      openWhatsApp(booking.clientPhone, v.customerMessage);
-      void logDocEvent("booking",booking.id,"whatsapp",{note:`قالب: ${t.to==="rejected"?"رفض":"إلغاء"} — ${v.customerMessage.slice(0,120)}`});
-    }
-    setBusy(false); setPending(null); bump();
-  };
-
-  /* ── تخطيط الصفحة ──
-     كانت الصفحة عموداً واحداً بعرض max-w-4xl: محتوًى محشورٌ في يمين
-     الشاشة وفراغٌ ضخمٌ في يسارها، وطولٌ يُمرَّر طويلاً قبل أن يصل
-     الموظف إلى الإجراء. صارت صفوفاً تملأ العرض: العميل مع المسار
-     والمبلغ في الأعلى، ثم الإجراءات والمقاعد، ثم المعتمرون بجانب
-     الدفع والفاتورة والسجل. */
-  const cardBase = {background:"#fff",border:`1px solid ${B.border}`} as const;
-  /* الثانوي لا يُزاحم الرئيسي: إلغاء الطلب المؤكد إجراءٌ قائم، لكنه ليس
-     ما يُفتح عليه الطلب المؤكد — فيُذكر سطراً أسفل الصفحة لا زرّاً. */
-  const primaryActions   = actions.filter(a=>!a.secondary);
-  const secondaryActions = actions.filter(a=>a.secondary);
-  const hasSideCard      = booking.status==="confirmed"||primaryActions.length>0;
-  const hasAlerts = isStale(booking,trip,today)||gaps.length>0;
-  const verifiedAll = booking.pilgrims.length>0&&allVerified;
-
-  return (
-    <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="flex-1 w-full min-w-0 px-4 md:px-8 pb-12 pt-5">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold mb-4 cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>
-        <ArrowRight size={14}/>عودة للطلبات
-      </button>
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div>
-          <div className="font-extrabold mb-0.5" style={{fontFamily:"var(--font-app)",fontSize:22,color:B.black}}>{booking.id}</div>
-          <div className="text-xs" style={{color:B.muted}}>
-            أُنشئ {booking.createdAt} · رحلة {trip?.departureDate??"—"} · موظف: {booking.staff||"—"}
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <StatusBadge status={booking.status} entity="booking"/>
-          {/* الحالة تقول ما وصل إليه الطلب، وهذا يقول ما ينتظره — وهو
-              ما كان ناقصاً: «مقبول» لا تخبر الموظف أن الدفع لم يُرسل. */}
-          <span className="text-xs font-semibold" style={{color:B.text2}}>{waitingFor(booking.status)}</span>
-        </div>
-      </div>
-
-      {/* التنبيهات صفٌّ واحد يملأ العرض بدل بطاقتين متتاليتين تُطيلان الصفحة. */}
-      {hasAlerts&&(
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4 items-start">
-          {/* طلبٌ انتهت رحلته وما زال مفتوحاً — يُوسَم ولا يُغلق من تلقائه. */}
-          {isStale(booking,trip,today)&&(
-            <div className="rounded-2xl px-5 py-3.5 flex items-start gap-3"
-              style={{background:"#FCEBDD",border:"1px solid #F3D2B4"}}>
-              <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 font-bold"
-                style={{background:"#B4530C",color:"#fff",fontSize:12}}>!</span>
-              <div className="text-sm leading-relaxed" style={{color:"#8A3F09"}}>
-                <b>مضت رحلة هذا الطلب قبل {staleDays(trip,today)} يوماً</b> وهو ما زال «{waitingFor(booking.status)}».
-                أغلقه بالرفض أو الإلغاء، أو انقله إلى رحلةٍ قادمة.
-              </div>
-            </div>
-          )}
-
-          {/* البيانات الناقصة أعلى الطلب — نصّ الملاحظة حرفياً: المستفيد،
-              الهوية، الغرفة، الدفع، المقاعد. */}
-          {gaps.length>0&&(
-            <div className="rounded-2xl px-5 py-4"
-              style={{background:gaps.some(g=>g.blocking)?"#FBE6E6":"#FBF3D6",
-                      border:`1px solid ${gaps.some(g=>g.blocking)?"#F3C9C9":"#EBD9A0"}`}}>
-              <div className="text-xs font-bold mb-2" style={{color:gaps.some(g=>g.blocking)?"#BE2626":"#8A6A08"}}>
-                بيانات ناقصة ({gaps.length})
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {gaps.map(g=>(
-                  <div key={g.key} className="flex items-center gap-2 text-xs font-semibold" style={{color:g.blocking?"#8A2020":"#6b5a2a"}}>
-                    <span className="w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0"
-                      style={{background:"#fff",border:`1px solid ${g.blocking?"#F3C9C9":B.border}`,fontSize:9,color:g.blocking?"#BE2626":B.muted}}>
-                      {g.blocking?"!":"·"}
-                    </span>
-                    {g.label}
-                    <span style={{fontWeight:400,color:B.muted}}>— {g.blocking?"يمنع القبول والتأكيد":"تنبيه"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── الصفّ الأول: بيانات العميل · بجانبها المسار والمبلغ ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-start">
-        <div className="xl:col-span-7 rounded-2xl p-5" style={cardBase}>
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div className="font-bold" style={{color:B.black,fontSize:15}}>بيانات العميل</div>
-            {!clientEdit&&(
-              <button onClick={startClientEdit} title="تصحيح اسم العميل أو جوّاله"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل</button>
-            )}
-          </div>
-          {clientEdit
-            ? <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم</div>
-                    <input className={einp} style={eist} value={cName} onChange={e=>{setCName(e.target.value);setCErr(null);}}/>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
-                    <input className={einp} style={{...eist,direction:"ltr"}} value={cPhone} placeholder="05xxxxxxxx"
-                      onChange={e=>{setCPhone(e.target.value);setCErr(null);}}/>
-                  </div>
-                </div>
-                {cErr&&<div className="text-xs font-bold" style={{color:"#BE2626"}}>{cErr}</div>}
-                <div className="text-xs" style={{color:B.muted}}>
-                  الباقة وتاريخ الرحلة وعدد المعتمرين لا تُصحَّح هنا — تغييرها يغيّر السعر والمقاعد.
-                </div>
-                <div className="grid grid-cols-2 gap-3 max-w-sm">
-                  <button onClick={()=>setClientEdit(false)} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                    style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
-                  <button onClick={saveClient} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                    style={{background:B.gold,color:B.black,border:"none"}}>حفظ التعديلات</button>
-                </div>
-              </div>
-            : <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                {[
-                  {l:"الاسم",v:booking.clientName},
-                  {l:"الجوال",v:booking.clientPhone,mono:true},
-                  {l:"الباقة",v:pkg?.name??"—"},
-                  {l:"تاريخ الرحلة",v:trip?.departureDate??"—",mono:true},
-                  {l:"نوع الغرفة",v:booking.roomType},
-                  {l:"عدد المعتمرين",v:booking.persons},
-                ].map(f=>(
-                  <div key={f.l}>
-                    <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                    <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit",direction:f.l==="الجوال"?"ltr":undefined,textAlign:f.l==="الجوال"?"right":undefined}}>{f.v}</div>
-                  </div>
-                ))}
-              </div>
-          }
-
-          {/* توزيع الغرف مفصّلاً — ما يحتاجه التسكين فعلاً: «غرفة ثلاثية
-              وغرفة ثنائية» لا جملة واحدة. يظهر للحجوزات العامة الجديدة
-              وحدها؛ القديمة والداخلية بلا صفوف توزيع. */}
-          {!!booking.rooms?.length&&(
-            <div className="mt-4">
-              <div className="text-xs font-semibold mb-1.5" style={{color:B.muted}}>توزيع الغرف</div>
-              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-                {booking.rooms.map((r,i)=>(
-                  <div key={i} className="flex items-center justify-between px-3 py-2 text-xs"
-                    style={{borderTop:i?`1px solid ${B.border}`:"none",background:"#fff"}}>
-                    <span style={{color:B.text2}}>غرفة {i+1} · {r.type} · {r.persons} أفراد</span>
-                    <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>
-                      {sar(r.perNight)} / للفرد / الليلة
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="xl:col-span-5 flex flex-col gap-4">
-          {/* مسار الطلب */}
-          <div className="rounded-2xl p-5" style={cardBase}>
-            <div className="text-sm font-bold mb-4" style={{color:B.text2}}>مسار الطلب</div>
-            <BookingTimeline status={booking.status}/>
-          </div>
-          {/* المبلغ الإجمالي */}
-          <div className="rounded-2xl p-5 flex flex-wrap items-end justify-between gap-4" style={{background:B.surface,border:`1px solid ${B.border}`}}>
-            <div>
-              <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>المبلغ الإجمالي</div>
-              <div className="font-extrabold" style={{color:B.gold,fontSize:32,fontFamily:"var(--font-app)",lineHeight:1.2}}>{sarNumber(booking.total)}</div>
-              <div className="text-xs mt-1" style={{color:B.muted}}>{SAR}</div>
-            </div>
-            {booking.paymentStatus!=="none"&&(
-              <div className="pr-4" style={{borderRight:`1px solid ${B.border}`}}>
-                <div className="text-xs font-semibold mb-1" style={{color:B.muted}}>طريقة الدفع</div>
-                <div className="text-sm font-bold" style={{color:B.black}}>{booking.payMethod||"—"}</div>
-                {booking.txnNo&&booking.txnNo!=="—"&&<div className="text-xs font-mono mt-0.5" style={{color:B.muted}}>{booking.txnNo}</div>}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── الصفّ الثاني: الإجراءات · المقاعد ──
-          الطلب المؤكد تتحوّل واجهته من إدارة الطلب إلى إدارة مستنداته،
-          فتحلّ الطباعة والإرسال محلّ نقلات الحالة. */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4 items-start">
-        {booking.status==="confirmed"
-          ? <div className="xl:col-span-8">
-              <PostBookingActions booking={booking} invoice={invoice} ticket={ticket}
-                onPrint={openPrint} onOpenInvoice={()=>setInvoiceOpen(true)} onOpenTicket={()=>setTicketOpen(true)} onLogged={bump}/>
-            </div>
-          : primaryActions.length>0&&(
-          <div className="xl:col-span-8 rounded-2xl px-5 py-4" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
-            <div className="text-xs font-bold mb-3" style={{color:B.text2}}>الإجراءات</div>
-            {needsVerif&&!allVerified&&(
-              <div className="flex items-center gap-3 px-4 py-3 rounded-xl mb-3 text-sm font-semibold"
-                style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
-                تم التحقق من {verifiedCount} من {booking.pilgrims.length} — لا يمكن قبول الطلب حتى يُتحقق من جميع المعتمرين.
-              </div>
-            )}
-            {/* Payment gate before manual confirm */}
-            {booking.status==="awaiting_payment"&&(
-              <div className="rounded-xl p-4 mb-3 flex flex-col gap-3" style={cardBase}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Field label="طريقة الدفع">
-                      <AppSelect value={payMethodSel} onChange={setPayMethodSel}
-                        options={["تحويل بنكي","بطاقة مدى","Apple Pay","تابي","تمارا","كاش في الفرع"].map(m=>({value:m,label:m}))}/>
-                    </Field>
-                  </div>
-                  <label className="flex items-end gap-2.5 cursor-pointer pb-1.5">
-                    <span onClick={()=>setPayReceived(v=>!v)} className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{background:payReceived?"#1E7A44":"#fff",border:`1.5px solid ${payReceived?"#1E7A44":B.border}`}}>
-                      {payReceived&&<Check size={14} style={{color:"#fff"}}/>}
-                    </span>
-                    <span className="text-sm font-bold" style={{color:B.black}} onClick={()=>setPayReceived(v=>!v)}>تم استلام الدفع فعلياً</span>
-                  </label>
-                </div>
-                {!payReceived&&<div className="text-xs" style={{color:"#B4530C"}}>فعّل «تم استلام الدفع فعلياً» ليعمل زرّ «تأكيد الدفع».</div>}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-3">
-              {primaryActions.map(a=>{
-                const disabled=a.blockers.length>0;
-                const tone=TONE[a.tone];
-                return (
-                <button key={a.label} disabled={disabled}
-                  title={disabled?a.blockers.join(" · "):a.effects.join(" · ")}
-                  /* لا window.confirm: النقلة ذات الأثر تفتح نافذةً تقول
-                     الأثر وتطلب السبب. وما لا أثر له (إرسال الرابط) يمضي. */
-                  onClick={()=>{ if(disabled) return;
-                    if(a.opensSeatMap){setSeatOpen(true);return;}
-                    if(NEEDS_DIALOG.includes(a.to)||a.reason){setPending(a);return;}
-                    runTransition(a); }}
-                  className="px-5 py-2.5 rounded-xl font-bold text-sm"
-                  style={{background:disabled?"#EEECEA":tone.bg,color:disabled?B.muted:tone.fg,border:`1px solid ${disabled?B.border:tone.br}`,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.7:1}}>
-                  {a.label}
-                </button>
-                );
-              })}
-            </div>
-            {/* لماذا الزرّ معطَّل — بنصّه لا بتلميحٍ يُكتشف بالمرور. */}
-            {primaryActions.some(a=>a.blockers.length>0)&&(
-              <div className="mt-3 flex flex-col gap-1.5">
-                {primaryActions.filter(a=>a.blockers.length>0).map(a=>(
-                  <div key={a.label} className="text-xs leading-relaxed" style={{color:"#B4530C"}}>
-                    <b style={{color:"#8A6A08"}}>{a.label}:</b> {a.blockers.join(" · ")}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* المقاعد المخصّصة — الموظف يراجعها ويؤكدها، لا يبدأها من الصفر. */}
-        <div className={`${hasSideCard?"xl:col-span-4":"xl:col-span-12"} rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3`} style={cardBase}>
-          <div className="min-w-0">
-            <div className="font-bold mb-1" style={{color:B.black,fontSize:15}}>المقاعد المخصّصة</div>
-            {booking.seats.length>0
-              ? <div className="flex items-center gap-1.5 flex-wrap">{booking.seats.map(s=>(
-                  <span key={s} className="inline-flex items-center justify-center rounded-lg text-sm font-extrabold" style={{minWidth:34,height:34,padding:"0 8px",background:"#FFF7EA",border:`1px solid ${B.gold}`,color:"#8a6a08"}}>{s}</span>
-                ))}</div>
-              : <div className="text-sm" style={{color:B.muted}}>لم تُخصَّص مقاعد بعد — تُؤكَّد عند قبول الطلب.</div>}
-          </div>
-          <button onClick={()=>setSeatOpen(true)} disabled={booking.status==="new"||booking.status==="reviewing"?!allVerified:false}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold"
-            style={{background:B.gold,color:B.black,border:"none",opacity:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?0.5:1,cursor:((booking.status==="new"||booking.status==="reviewing")&&!allVerified)?"not-allowed":"pointer"}}>
-            <Armchair size={14}/>اختيار المقعد
-          </button>
-        </div>
-      </div>
-
-      {/* ── الصفّ الثالث: المعتمرون · الدفع والفاتورة والسجل ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-        {/* Pilgrims */}
-        <div className="xl:col-span-7 rounded-2xl p-5" style={cardBase}>
-          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-            <div className="font-bold" style={{color:B.black,fontSize:15}}>بيانات المعتمرين ({booking.persons})</div>
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold"
-              style={{background:verifiedAll?"#E3F3E8":B.fill,color:verifiedAll?"#1E7A44":B.text2,border:`1px solid ${verifiedAll?"#C4E4CE":B.border}`}}>
-              {verifiedAll?"✓ تم التحقق من الجميع":`تم التحقق من ${verifiedCount} من ${booking.pilgrims.length}`}
-            </span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {booking.pilgrims.map((pg,i)=>{
-              const vs=verifyState(pg);
-              const editing = editIdx===i;
-              /* المتحقَّق منه يُطوى إلى سطرٍ واحد: الحالة وحدها تكفي. */
-              const collapsed = vs==="verified"&&!editing&&!openRows[i];
-              /* «عُدِّلت بعد التحقق» تنبيهٌ لا خطأ: كهرماء لا حمراء. */
-              const bd = vs==="verified"?"#C4E4CE":vs==="error"?"#F3C9C9":vs==="stale"?"#F0DCA8":B.border;
-              const headBg = vs==="verified"?"#F4FBF6":vs==="error"?"#FDF5F5":vs==="stale"?"#FFFBF0":B.cream;
-              return (
-                <div key={i} className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${bd}`}}>
-                  <div className="flex items-center gap-3 px-4 py-2.5 flex-wrap" style={{background:headBg,borderBottom:collapsed?"none":`1px solid ${B.border}`}}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                      style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
-                      {i+1}
-                    </div>
-                    <span className="font-extrabold text-sm" style={{color:B.black}}>{pg.name||`معتمر ${i+1}`}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                      style={{background:pg.gender==="female"?"#F1E9FA":"#EAF1FE",color:pg.gender==="female"?"#7226BE":"#1E52C7"}}>
-                      {pg.gender==="male"?"ذكر":"أنثى"}
-                    </span>
-                    {/* الحالة واضحةٌ جداً: خضراء مصمتة للمتحقَّق، حمراء للخطأ،
-                        كهرمانية لمن عُدِّلت بياناته بعد تحقّقٍ تمّ. ومن تحقّق
-                        ومتى في الـtitle لا في السطر: «يكفي ✓ تم التحقق». */}
-                    {vs==="pending"
-                      ? <span className="text-xs px-2.5 py-0.5 rounded-full font-bold" style={{background:"#F0EAE0",color:"#8A6A08"}}>بانتظار التحقق</span>
-                      : <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold"
-                          title={pg.verifiedBy||pg.verifiedAt?`${vs==="stale"?"كان تحقّق":"تحقّق"} ${pg.verifiedBy||"—"}${pg.verifiedAt?` · ${pg.verifiedAt.slice(0,10)}`:""}`:undefined}
-                          style={{background:vs==="verified"?"#1E7A44":vs==="stale"?"#B4530C":"#BE2626",color:"#fff"}}>
-                          {vs==="verified"?<Check size={12}/>:vs==="stale"?<Repeat size={12}/>:<X size={12}/>}{VERIFY_LABEL[vs]}
-                        </span>}
-                    <div className="flex items-center gap-2 mr-auto">
-                      {!collapsed&&<span className="text-xs" style={{color:B.muted}}>{pg.nationality}</span>}
-                      {!editing&&vs!=="verified"&&<button onClick={()=>startEdit(i)} title="تعديل بيانات المعتمر"
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer"
-                        style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل</button>}
-                      {vs==="verified"&&!editing&&(
-                        <button onClick={()=>toggleRow(i)} title={collapsed?"عرض البيانات":"إخفاء البيانات"}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer"
-                          style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
-                          <ChevronDown size={12} style={{transform:collapsed?"none":"rotate(180deg)",transition:"transform .15s"}}/>البيانات
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {!collapsed&&(editing&&draft
-                    ? <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-                        <div className="col-span-2"><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الاسم الكامل</div>
-                          <input className={einp} style={eist} value={draft.name} onChange={e=>setD("name",e.target.value)}/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>نوع الوثيقة</div>
-                          <AppSelect value={draft.docType??guessDocType(draft.idNumber)} onChange={v=>setD("docType",v as Pilgrim["docType"])}
-                            options={DOC_TYPES.map(d=>({value:d.value,label:`${d.icon} ${d.label.ar}`}))} placeholder="اختر النوع"/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>{numberLabelOf(draft.docType,draft.idNumber)}</div>
-                          <input className={einp} style={{...eist,direction:"ltr"}} value={draft.idNumber}
-                            placeholder={docTypeDef(draft.docType).placeholder} onChange={e=>setD("idNumber",e.target.value)}/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنسية</div>
-                          <NationalitySelect value={draft.nationality} onChange={v=>setD("nationality",v)} subInTrigger={false} compact/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجنس</div>
-                          <AppSelect value={draft.gender} onChange={v=>setD("gender",v as Pilgrim["gender"])}
-                            options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>تاريخ الميلاد</div>
-                          <input type="date" className={einp} style={{...eist,direction:"ltr"}} value={draft.birthDate} onChange={e=>setD("birthDate",e.target.value)}/></div>
-                        <div><div className="text-xs font-semibold mb-1" style={{color:B.muted}}>الجوال</div>
-                          <input className={einp} style={{...eist,direction:"ltr"}} value={draft.phone} onChange={e=>setD("phone",e.target.value)}/></div>
-                      </div>
-                    : <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
-                        {[
-                          {l:numberLabelOf(pg.docType,pg.idNumber),v:pg.idNumber||"—",mono:true},
-                          {l:"الجنسية",v:pg.nationality||"—"},
-                          {l:"تاريخ الميلاد",v:pg.birthDate||"—",mono:true},
-                          {l:"الجوال",v:pg.phone||"—",mono:true},
-                        ].map(f=>(
-                          <div key={f.l}>
-                            <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                            <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit"}}>{f.v}</div>
-                          </div>
-                        ))}
-                      </div>
-                  )}
-                  {!collapsed&&(
-                    <div className="px-4 pb-4">
-                      {editing
-                        ? <div className="grid grid-cols-2 gap-3">
-                            <button onClick={cancelEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                              style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إلغاء</button>
-                            <button onClick={saveEdit} className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                              style={{background:B.gold,color:B.black,border:"none"}}>حفظ التعديلات</button>
-                          </div>
-                        : vs!=="verified"
-                          ? <div className="flex flex-col gap-2.5">
-                              {vs==="stale"&&(
-                                <div className="text-xs leading-relaxed" style={{color:"#B4530C"}}>
-                                  عُدِّلت البيانات بعد تحقّق {pg.verifiedBy||"الموظف"}{pg.verifiedAt?` (${pg.verifiedAt.slice(0,10)})`:""} — راجعها وأكّد التحقق من جديد.
-                                </div>
-                              )}
-                              <div className="grid grid-cols-2 gap-3">
-                                <button onClick={()=>setPilgrim(i,markError,`وُسمت بيانات ${pgName(pg,i)} بخطأ`)}
-                                  className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                                  style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>
-                                  يوجد خطأ
-                                </button>
-                                <button onClick={()=>setPilgrim(i,p=>markVerified(p,staffName),`تم التحقق من بيانات ${pgName(pg,i)}`)}
-                                  className="py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-                                  style={{background:"#E3F3E8",color:"#1E7A44",border:"1px solid #C4E4CE"}}>
-                                  تم التحقق
-                                </button>
-                              </div>
-                            </div>
-                          /* لا زرّ «تغيير الحالة» بعد التحقق: التحقق يتمّ مرّةً،
-                             ولا يُلغيه إلا تعديلٌ حقيقيٌّ في البيانات. */
-                          : <div className="flex items-center justify-end gap-2 flex-wrap">
-                              <button onClick={()=>startEdit(i)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                                style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8a6a08"}}><Pencil size={11}/>تعديل البيانات</button>
-                            </div>
-                      }
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="xl:col-span-5 flex flex-col gap-4">
-          {/* Payment link (after acceptance) */}
-          {(booking.status==="accepted"||booking.status==="awaiting_payment")&&(
-            <PaymentLinkCard booking={booking} trip={trip} pkg={pkg} onLogged={bump}/>
-          )}
-
-          {/* الفاتورة داخل الطلب — حالتها والمدفوع والمتبقي ورابطٌ مباشر
-              («أظهر داخل الطلب الفاتورة وحالة الدفع والمبلغ المدفوع والمتبقي»). */}
-          {invoice&&(()=>{
-            const ph=invoicePhase(invoice); const tone=INVOICE_PHASE_TONE[ph];
-            const paid=invoice.payStatus==="verified"?invoice.total:0;
-            return (
-              <div className="rounded-2xl p-5 flex flex-wrap items-center gap-4" style={cardBase}>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold mb-1.5 flex items-center gap-2 flex-wrap" style={{color:B.black,fontSize:15}}>
-                    الفاتورة <span style={{fontFamily:"var(--font-app)",color:B.text3,fontSize:13}}>{invoice.id}</span>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{background:tone.bg,color:tone.fg}}>{INVOICE_PHASE_LABEL[ph]}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-4 text-xs" style={{color:B.text2}}>
-                    <span>الإجمالي <b style={{fontFamily:"var(--font-app)",color:B.black}}>{sar(invoice.total)}</b></span>
-                    <span>المدفوع <b style={{fontFamily:"var(--font-app)",color:"#1E7A44"}}>{sar(paid)}</b></span>
-                    <span>المتبقي <b style={{fontFamily:"var(--font-app)",color:paid>=invoice.total?B.muted:"#BE2626"}}>{sar(Math.max(0,invoice.total-paid))}</b></span>
-                    {invoice.dueAt&&ph!=="paid"&&<span>ينتهي الرابط <span style={{fontFamily:"var(--font-app)"}}>{new Date(invoice.dueAt).toLocaleString("ar-SA-u-nu-latn",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Riyadh"})}</span></span>}
-                  </div>
-                </div>
-                <button onClick={()=>setInvoiceOpen(true)} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>فتح الفاتورة</button>
-              </div>
-            );
-          })()}
-
-          {/* الخصم — المدير يعتمده، والموظف يراه. لا خصم بعد التحصيل: ذاك استرجاع. */}
-          {booking.discountPercent?(
-            <div className="rounded-xl px-4 py-2.5 text-xs" style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#6b5a2a"}}>
-              خصم معتمد <b>{booking.discountPercent}%</b> — {booking.discountReason}{booking.discountAt?<span style={{fontFamily:"var(--font-app)"}}> · {booking.discountAt.slice(0,10)}</span>:null}
-            </div>
-          ):null}
-          {isAdmin&&booking.paymentStatus!=="verified"&&!["cancelled","rejected"].includes(booking.status)&&(
-            <div><DiscountPanel booking={booking} onDone={async()=>{ await onRefresh(); bump(); }}/></div>
-          )}
-
-          {/* سجلّ الطلب — كل انتقالٍ وإرسالٍ بصاحبه ووقته. */}
-          <EventTimeline docType="booking" docId={booking.id} title="سجلّ الطلب" outcomes={SEND_OUTCOMES} reloadKey={evKey}/>
-        </div>
-      </div>
-
-      {secondaryActions.length>0&&(
-        <div className="mt-5 pt-4 flex flex-wrap items-center gap-3" style={{borderTop:`1px solid ${B.border}`}}>
-          <span className="text-xs" style={{color:B.muted}}>إجراءات أخرى</span>
-          {secondaryActions.map(a=>(
-            <button key={a.label} title={a.effects.join(" · ")}
-              onClick={()=>{ if(NEEDS_DIALOG.includes(a.to)||a.reason){setPending(a);return;} runTransition(a); }}
-              className="text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer"
-              style={{background:"#fff",border:`1px solid ${B.border}`,color:"#BE2626"}}>{a.label}</button>
-          ))}
-        </div>
-      )}
-
-      <AnimatePresence>
-        {seatOpen&&(
-          <SeatMap booking={booking} trip={trip} allBookings={allBookings}
-            onClose={()=>setSeatOpen(false)}
-            /* القبول والمقاعد في معاملةٍ واحدة (accept_booking): كانا نداءين
-               متعاقبين قد ينجح أوّلهما ويفشل ثانيهما — طلبٌ مقبول بلا مقاعد
-               أو مقاعدُ محجوزةٌ لطلبٍ لم يُقبل. */
-            onConfirm={async(seats)=>{
-              if(busy) return;
-              const accepting = booking.status==="new"||booking.status==="reviewing"||booking.status==="needs_edit";
-              if(accepting){
-                setBusy(true);
-                const r=await acceptBooking(booking.id,seats);
-                setBusy(false);
-                if(!r.unsupported){
-                  if(r.error){ toast.error(r.error); return; }
-                  setSeatOpen(false); await onRefresh(); bump(); return;
-                }
-                onSeatsChange(booking.id,seats); onStatusChange(booking.id,"accepted");
-                void logDocEvent("booking",booking.id,"accept",{note:`المقاعد: ${seats.join("، ")}`});
-              } else {
-                onSeatsChange(booking.id,seats);
-              }
-              setSeatOpen(false); bump();
-            }}/>
-        )}
-        {pending&&(
-          <ConfirmTransition t={pending} booking={{id:booking.id,clientName:booking.clientName}} busy={busy}
-            onCancel={()=>setPending(null)}
-            onConfirm={v=>{ void runTransition(pending,v); }}/>
-        )}
-        {invoiceOpen&&invoice&&<InvoiceModal pay={invoice} autoPrint={printDoc==="invoice"} onClose={closeDoc}/>}
-        {ticketOpen&&ticket&&<TicketCard ticket={ticket} autoPrint={printDoc==="ticket"} onClose={closeDoc}/>}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
 export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:Trip[];onMenuOpen?:()=>void}) {
   const bookings=useStore(s=>s.bookings); const setBookings=useStore(s=>s.setBookings);
+  const transports=useStore(s=>s.transports);
   const refreshTrips=useStore(s=>s.refreshTrips);
   const refreshBookings=useStore(s=>s.refreshBookings);
   const currentUser=useStore(s=>s.currentUser);
@@ -1349,7 +347,11 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
      هي UTC فتُقدّم اليوم أو تُؤخّره ثلاث ساعات عن الرياض. */
   const today=todayYMD();
   const [search,setSearch]=useState("");
-  const [statusFilter,setStatusFilter]=useState<"all"|BookingStatus>("all");
+  const [stageFilter,setStageFilter]=useState<StageFilter>("all");
+  /* رابطٌ قديمٌ محفوظ يصفّي باسم الحالة (`?status=accepted`). يبقى عاملاً
+     كما كان، ويُقال للموظف صراحةً بأيّ حالةٍ صُفّي الجدول وكيف يُزال —
+     وإلا رأى جدولاً منقوصاً ولا شريحةَ مضيئة تفسّره. */
+  const [legacyStatus,setLegacyStatus]=useState<BookingStatus|null>(null);
   const [detailId,setDetailId]=useState<string|null>(null);
   const [onlyStale,setOnlyStale]=useState(false);
   const [showNew,setShowNew]=useState(false);
@@ -1357,9 +359,10 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   /* روابط بطاقات الرئيسية قابلة للمشاركة: لا تضيع المرشحات بعد نسخ الرابط
      أو تحديث الصفحة. */
   useEffect(()=>{
+    const stage=searchParams.get("stage");
+    setStageFilter(stage && (STAGE_KEYS as string[]).includes(stage) ? stage as StageFilter : "all");
     const status=searchParams.get("status");
-    setStatusFilter(status && ["new","reviewing","needs_edit","rejected","accepted","awaiting_payment","awaiting_trip","paid","verifying","verified","confirmed","cancelled"].includes(status)
-      ? status as BookingStatus : "all");
+    setLegacyStatus(status && (BOOKING_STATUSES as string[]).includes(status) ? status as BookingStatus : null);
     /* رابط التنبيه «أُسند إليك طلب» يفتح الطلب نفسه. */
     const open=searchParams.get("open");
     if(open) setDetailId(open);
@@ -1386,9 +389,17 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     setBulkBusy(false); setBulkOpen(false); setOnlyStale(false);
     void refreshTrips();
   }
-  const selectStatus=(status:"all"|BookingStatus)=>{
+  const selectStage=(stage:StageFilter)=>{
     const next=new URLSearchParams(searchParams);
-    if(status==="all") next.delete("status"); else next.set("status",status);
+    /* اختيار خطوةٍ يُسقط مرشّح الحالة القديم: مرشّحان على العمود نفسه
+       يُنتجان جدولاً فارغاً بلا سببٍ ظاهر. */
+    next.delete("status");
+    if(stage==="all") next.delete("stage"); else next.set("stage",stage);
+    setSearchParams(next, {replace:true});
+  };
+  const clearLegacyStatus=()=>{
+    const next=new URLSearchParams(searchParams);
+    next.delete("status");
     setSearchParams(next, {replace:true});
   };
 
@@ -1444,9 +455,11 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
      على الصفحة القادمة من الخادم كذلك — والعدّ في الشريحة يقول الحقيقة
      الكاملة لأنه محسوبٌ على كل المحمَّل. */
   const staleFilter = (b:Booking)=>!onlyStale||isStale(b,trips.find(t=>t.id===b.tripId),today);
+  const stagePass = (b:Booking)=>stageFilter==="all"||filterStageOf(b)===stageFilter;
   const filtered = bookings.filter(b=>
     staleFilter(b)&&
-    (statusFilter==="all"||b.status===statusFilter)&&
+    stagePass(b)&&
+    (!legacyStatus||b.status===legacyStatus)&&
     (!createdOn||b.createdAt?.startsWith(createdOn))&&
     (!onlyUnlinked||!beneficiaries.some(x=>x.bookingIds.includes(b.id)))&&
     (!search||(b.id+b.clientName+b.clientPhone).toLowerCase().includes(search.toLowerCase()))
@@ -1455,41 +468,48 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
      للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
      ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
-  const pg = usePaged(filtered, `${search}|${statusFilter}|${onlyStale}`);
+  const pg = usePaged(filtered, `${search}|${stageFilter}|${legacyStatus ?? ""}|${onlyStale}`);
 
   /* في Supabase لا نبحث في العناصر المحمّلة: الدالة تفلتر وتُرقّم في
      PostgreSQL. الوضع المحلي يبقى للمشاهدة التجريبية فقط. */
   const srv = useServerPagedSearch({
     fn: "admin_search_bookings",
     args: {
-      q: search, status_filter: statusFilter === "all" ? null : statusFilter,
+      /* `stage_filter` ينزل مع ترحيل 20261004. قبله ترفضه القاعدة فتُعيد
+         الدالّة المحاولة بدونه وتُصفّى الخطوة في المتصفّح — والبحث
+         النصّيّ والتاريخ يبقيان في PostgreSQL كما هما اليوم. */
+      q: search, status_filter: legacyStatus,
+      stage_filter: stageFilter === "all" ? null : stageFilter,
       created_on: createdOn || null, only_unlinked: onlyUnlinked,
     },
-    resetKey: `${search}|${statusFilter}|${createdOn ?? ""}|${onlyUnlinked}`,
+    optional: ["stage_filter"],
+    resetKey: `${search}|${stageFilter}|${legacyStatus ?? ""}|${createdOn ?? ""}|${onlyUnlinked}`,
     all: bookings, idOf: b => b.id, idField: "booking_id",
   });
   const serverSearching = srv.searching;
   const base: Paged<Booking> = srv.supported ? srv.paged : pg;
-  const activePg: Paged<Booking> = onlyStale && srv.supported
-    ? { ...base, rows: base.rows.filter(staleFilter) }
+  /* بُعدان لا تعرفهما القاعدة دائماً: «متأخّرة» صفةٌ مشتقّة لا عمود،
+     والخطوة قبل ترحيل 20261004. كلاهما يُصفّى على صفحة الخادم — فالعدّ
+     فوق الجدول يقول عدد الخادم، والشريحة تقول العدد الكامل للمحمَّل. */
+  const localOnly = onlyStale || srv.degraded;
+  const activePg: Paged<Booking> = localOnly && srv.supported
+    ? { ...base, rows: base.rows.filter(b => staleFilter(b) && (!srv.degraded || stagePass(b))) }
     : base;
 
+  /* العدّ على كل ما حُمِّل — كما كان. الشريحة والبطاقة يقرآن الرقم نفسه
+     فلا يقول أحدهما غير ما يقوله الآخر. */
+  const byStage = (k:StageFilter)=>bookings.filter(b=>filterStageOf(b)===k).length;
   const stats = {
     total:bookings.length,
-    new:bookings.filter(b=>["new","reviewing"].includes(b.status)).length,
-    awaitingPayment:bookings.filter(b=>b.status==="awaiting_payment").length,
-    confirmed:bookings.filter(b=>b.status==="confirmed").length,
+    verify:byStage("verify"),
+    seats:byStage("seats"),
+    payment:byStage("payment"),
+    confirmed:byStage("done"),
     revenue:bookings.filter(b=>["paid","confirmed"].includes(b.status)).reduce((a,b)=>a+b.total,0),
     /* الطلبات التي مضت رحلتها وما زالت مفتوحة — الرقم الذي رآه الفريق
        في البيانات: طلبٌ بتاريخ رحلة ٣٠ يوليو ما زال قيد المراجعة. */
     stale:bookings.filter(b=>isStale(b,trips.find(t=>t.id===b.tripId),today)).length,
   };
-
-  /* الصياغة من المعجم لا مكتوبةً هنا: الشريحة والشارة في الصفّ نفسه
-     كانتا تقولان «مؤكدة» و«مؤكد» لحالةٍ واحدة. الطلب مذكّر. */
-  const filterChips = statusChips(
-    ["new","reviewing","accepted","awaiting_payment","confirmed","cancelled"] as const, "booking",
-  );
 
   const fb=(on:boolean)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s",whiteSpace:"nowrap" as const});
 
@@ -1505,19 +525,26 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
         <>
           {/* Stats */}
           <div className="px-4 md:px-8 pt-4 md:pt-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <StatCard label="إجمالي الطلبات" value={stats.total} sub="كل الحالات" accent/>
-              <StatCard label="طلبات جديدة" value={stats.new} sub="تنتظر المراجعة"/>
-              <StatCard label="بانتظار الدفع" value={stats.awaitingPayment} sub="أُرسل رابط الدفع"/>
-              <StatCard label="مؤكدة" value={stats.confirmed} sub="مكتملة الإجراءات"/>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <StatCard label="إجمالي الطلبات" value={stats.total} sub="كل الخطوات" accent/>
+              <StatCard label="التحقق من البيانات" value={stats.verify} sub="بانتظار مراجعة الموظف"/>
+              <StatCard label="اختيار المقاعد" value={stats.seats} sub="تُحُقِّق منها ولم تُقفل مقاعدها"/>
+              <StatCard label="بانتظار الدفع" value={stats.payment} sub="مقاعدها مقفلة ولم تُسدَّد"/>
+              <StatCard label="مؤكدة" value={stats.confirmed} sub="صدرت فاتورتها وتذكرتها"/>
               <StatCard label="إجمالي الإيرادات" value={sar(stats.revenue)} sub="محصّلة"/>
               <StatCard label="متأخّرة" value={stats.stale} sub={stats.stale?"مضت رحلتها ولم تُغلق":"لا شيء متأخّر"}/>
             </div>
             {/* Filter chips */}
             <div className="flex items-center gap-2 mt-5 flex-wrap">
-              {filterChips.map(([v,l])=>(
-                <button key={v} style={fb(statusFilter===v&&!onlyStale)} onClick={()=>{setOnlyStale(false);selectStatus(v as "all"|BookingStatus);}}>{l}</button>
-              ))}
+              {STAGE_FILTERS.map(([v,l])=>{
+                const n = v==="all" ? bookings.length : byStage(v);
+                return (
+                  <button key={v} style={fb(stageFilter===v&&!onlyStale&&!legacyStatus)}
+                    onClick={()=>{setOnlyStale(false);selectStage(v);}}>
+                    {l}{v==="all"?"":` (${n})`}
+                  </button>
+                );
+              })}
               {/* مرشّحٌ تشغيلي لا حالةٌ في القاعدة: «متأخّرة» صفةٌ تُشتقّ من
                   تاريخ الرحلة، فمكانها بجانب الحالات لا بينها. */}
               <button style={{...fb(onlyStale),borderColor:onlyStale?"#B4530C":B.border}}
@@ -1528,6 +555,15 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                 <button onClick={()=>setBulkOpen(true)} className="px-4 py-1.5 rounded-full text-xs font-bold cursor-pointer"
                   style={{background:"#FCEBDD",border:"1px solid #F3D2B4",color:"#8A3F09"}}>
                   إغلاق الكل بسببٍ واحد ({stats.stale})
+                </button>
+              )}
+              {/* رابطٌ قديم صفّى باسم الحالة: يُقال بأيّه صُفّي ويُزال بضغطة،
+                  فلا يبقى جدولٌ منقوصٌ بلا شريحةٍ مضيئة تفسّره. */}
+              {legacyStatus&&(
+                <button onClick={clearLegacyStatus} title="إزالة مرشّح الحالة القديم"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
+                  style={{background:"#F1E9FA",border:"1px solid #D8BBFA",color:"#7226BE"}}>
+                  الحالة: {statusLabel(legacyStatus,"booking")}<X size={12}/>
                 </button>
               )}
               <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{serverSearching?"جارِ البحث…":`${activePg.total} / ${bookings.length}`}</span>
@@ -1581,7 +617,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                           <td style={{padding:"14px 16px",color:B.text2,fontSize:12,whiteSpace:"nowrap"}}>
                             {b.staff||(b.source==="public"?"من التطبيق":"—")}
                           </td>
-                          <td style={{padding:"14px 16px"}}><StatusBadge status={b.status} entity="booking"/></td>
+                          <td style={{padding:"14px 16px"}}><StageBadge booking={b}/></td>
                           <td className="col-action" style={{padding:"14px 16px"}} onClick={e=>e.stopPropagation()}>
                             <button onClick={()=>setDetailId(b.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
                               style={{background:B.gold,color:B.black,border:"none"}}>فتح الطلب</button>
@@ -1615,7 +651,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
                           <div className="text-xs font-bold mt-1" style={{color:"#B4530C"}}>مضت رحلته ولم يُغلق</div>
                         )}
                       </div>
-                      <StatusBadge status={b.status} entity="booking"/>
+                      <StageBadge booking={b}/>
                     </div>
                     <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{b.clientName}</div>
                     <div className="text-xs mb-3" style={{color:B.muted}}>{pkg?.name??"—"} · {b.persons} معتمر · {b.roomType}</div>
@@ -1641,7 +677,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
         </>
       )}
       <AnimatePresence>
-        {showNew&&<NewOrderModal packages={packages} trips={trips} onCreate={createInternalOrder} onClose={()=>setShowNew(false)}/>}
+        {showNew&&<NewOrderModal packages={packages} trips={trips} transports={transports} onCreate={createInternalOrder} onClose={()=>setShowNew(false)}/>}
         {bulkOpen&&(
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
             className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"

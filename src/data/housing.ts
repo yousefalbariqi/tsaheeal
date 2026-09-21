@@ -13,6 +13,16 @@ import type { RoomPrice, TravellerType } from "@/types";
 export const SHARED_TYPE = "سكن مشترك";
 export const PRIVATE_TYPE = "غرفة خاصة";
 
+/** حجزٌ بلا سكن — مقعدٌ في الحافلة وحده.
+
+    ليس نوع سكنٍ ثالثاً بل غيابُه: `create_public_booking` (ترحيل
+    20260919) تكتب هذا النصّ في `room_type` وتحذف صفوف `booking_rooms`
+    بعد حساب السعر. مكتوبٌ هنا لأن كشف السكن يقرؤه ليستثني صاحبه من
+    الفندق، ونصٌّ مكرَّر في شاشةٍ أخرى يتفارق مع القاعدة عند أول تعديل. */
+export const TRANSPORT_ONLY_TYPE = "مواصلات فقط";
+export const isTransportOnly = (roomType: string): boolean =>
+  (roomType ?? "").trim() === TRANSPORT_ONLY_TYPE;
+
 export type HousingKind = "shared" | "private";
 
 export const HOUSING_KINDS: { value: HousingKind; type: string; label: string }[] = [
@@ -89,9 +99,9 @@ export function tierLabel(type: string, persons: number, lang: "ar" | "en" = "ar
        : `غرفة خاصة · ${beds} أسرّة`;
 }
 
-/** صفٌّ جديد في المحرّر — يبدأ معروضاً للجميع. */
-export const newTier = (id: string, seatCost?: number): RoomPrice => ({
+/** صفٌّ جديد في المحرّر — يبدأ معروضاً للجميع.
+    السكن وحده: المواصلات سعرٌ واحد للباقة لا عمودٌ في كل صفّ. */
+export const newTier = (id: string): RoomPrice => ({
   id, type: PRIVATE_TYPE, persons: 2, perNight: 0,
   audience: [...ALL_AUDIENCE],
-  ...(seatCost === undefined ? {} : { seatCost }),
 });

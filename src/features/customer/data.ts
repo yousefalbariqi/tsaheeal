@@ -1,7 +1,7 @@
 /* طبقة بيانات صفحة العميل (anon).
    القراءة عبر repo (يقرأ Supabase كـ anon بعد الـMigration، أو seed محلياً).
    الإرسال عبر RPC عام create_public_booking (أو محلياً في وضع seed). */
-import type { Pkg, Trip, Hotel, Transport, Pilgrim, CustomRequest, BookingRoom, TravellerType } from "@/types";
+import type { Pkg, Trip, Hotel, Transport, Pilgrim, CustomRequest, BookingPricing, BookingRoom, BookingTravellerCounts, TravellerType } from "@/types";
 import { repo } from "@/data/repository";
 import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
@@ -76,8 +76,10 @@ export interface BookingPayload {
   tripId: string; packageId: string;
   clientName: string; clientPhone: string;
   roomType: string; persons: number; total: number;
-  travellerType: TravellerType;
-  bookingMode?: "full_package" | "transport_only";
+  travellerType?: TravellerType;
+  travellerCounts?: BookingTravellerCounts;
+  /** للعرض المحلي فقط؛ الخادم يشتق ويثبت اللقطة بنفسه. */
+  pricing?: BookingPricing;
   /** توزيع الغرف — يُحفظ في booking_rooms، و roomType يبقى ملخّصه المقروء. */
   rooms?: BookingRoom[];
   pilgrims: { name: string; docType?: string; idNumber: string; nationality: string; gender: string; ageGroup?: string; birthDate: string; phone: string }[];
@@ -113,7 +115,7 @@ export async function submitBooking(p: BookingPayload): Promise<string> {
   writeLocalOnly(() => {
   st.setBookings(prev => [{
     id, tripId: p.tripId, packageId: p.packageId, clientName: p.clientName, clientPhone: p.clientPhone,
-    roomType: p.roomType, rooms: p.rooms, persons: p.persons, travellerType:p.travellerType, total: p.total, status: "reviewing", paymentStatus: "none",
+    roomType: p.roomType, rooms: p.rooms, persons: p.persons, travellerType:p.travellerType, travellerCounts:p.travellerCounts, pricing:p.pricing, total: p.total, status: "reviewing", paymentStatus: "none",
     seats: [], createdAt: new Date().toISOString().slice(0, 10), submittedAt: new Date().toISOString(), staff: "", source: "public", sentDate: "",
     pilgrims: p.pilgrims.map(x => ({ ...x, gender: x.gender as "male" | "female", docType: x.docType as Pilgrim["docType"], ageGroup: x.ageGroup as Pilgrim["ageGroup"] })),
   }, ...prev]);

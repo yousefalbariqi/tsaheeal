@@ -60,12 +60,6 @@ export function packageChecks(p: Pkg): Check[] {
       { key: "rooms",  label: "خيار غرفة واحد على الأقل بسعر",    ok: tiers.length > 0,            tab: "rooms", blocking: true },
     );
   }
-  if (p.transportOnlyEnabled) {
-    list.push(
-      { key: "transportOnlyPrice", label: "سعر مواصلات فقط أكبر من صفر", ok: (p.transportOnlyPrice ?? 0) > 0, tab: "rooms", blocking: true },
-      { key: "transportOnlyTransport", label: "ربط مواصلة لخيار مواصلات فقط", ok: !!p.transportId, tab: "info", blocking: true },
-    );
-  }
   list.push(
     { key: "price",    label: "السعر يبدأ من أكبر من صفر",        ok: startingPrice(p) > 0,         tab: "rooms",    blocking: true },
     { key: "transport",label: "ربط المواصلة",                    ok: !!p.transportId,              tab: "info",     blocking: false },

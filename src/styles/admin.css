@@ -90,3 +90,11 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
    هناك فلا تحتاج تناوباً يفصلها. */
 .day-row { background: #fff; transition: background 0.12s ease; }
 .day-row:hover { background: #FBF7EC; }
+
+/* تقويم موعد الرحلة: اللون الذهبي للتاريخ المختار وحده. مكتبة التقويم
+   تلوّن اليوم الحالي بالأخضر تلقائياً، فيبدو كأن هناك اختيارين. */
+.trip-schedule-calendar .rmdp-day.rmdp-today:not(.rmdp-selected) span {
+  background: transparent !important;
+  color: #201C18 !important;
+  box-shadow: none !important;
+}

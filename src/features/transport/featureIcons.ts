@@ -1,69 +1,67 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Accessibility, AirVent, Armchair, Baby, BatteryCharging, BellRing, Bluetooth,
-  BusFront, Cable, Camera, CarFront, CircleParking, Clock3, Coffee, Nfc,
-  CreditCard, CupSoda, DoorOpen, Droplets, Fan, Fuel, Gauge, Headphones, HeartPulse,
-  Heater, Languages, Lightbulb, Luggage, MapPin, Microwave, Monitor, MoonStar,
-  Navigation, PackageCheck, PlugZap, Radio, Sandwich, ShieldCheck, Snowflake,
-  Sparkles, Sun, Thermometer, Ticket, Toilet, Tv, Usb, Utensils, Volume2, Waves,
-  Wifi, Wine, Zap,
+  Accessibility, Armchair, Baby, BellRing, BusFront, CarFront, Clock3, Coffee,
+  CupSoda, Droplets, HeartPulse, Languages, Lightbulb, Luggage, Navigation,
+  PlugZap, Sandwich, ShieldCheck, Snowflake, Sparkles, Sun, Toilet, Tv, Usb,
+  Utensils, Volume2, Wifi,
 } from "lucide-react";
 
-/** رموز تجهيزات الحافلة. الاسم موجود للقراءة والتخزين فقط؛ المعرض نفسه
-    يرسم الرموز وحدها حتى يظل سريعاً وواضحاً على الشاشة الصغيرة. */
+/** تجهيزات الحافلة — رموزٌ يعرفها الراكب من شكلها وحده.
+
+    القائمة السابقة حملت واحداً وخمسين رمزاً، فيها «مقياسٌ» يعني مراقبة
+    السرعة و«موجاتٌ» تعني مبرّد مياه و«وقودٌ» يعني وقوداً كافياً. الموظف
+    كان يرى شبكةً من الخطوط المتشابهة فيختار على التخمين، والمعتمر يرى
+    نتيجة التخمين. فالباقي هنا ما يُقرأ في لمحة: مكيّفٌ ثلجةٌ، ومياهٌ
+    قطرةٌ، ودورةُ مياهٍ مقعدها. وما يحتاج شرحاً لا يصلح رمزاً.
+
+    والنص يكتبه الموظف لكل تجهيزة كما في الفنادق؛ الرمز يفتح السطر
+    واللفظ يبقى ملكه. */
 export const TRANSPORT_FEATURE_CATALOG: ReadonlyArray<{ id: string; label: string; Icon: LucideIcon }> = [
-  { id:"ac", label:"تكييف", Icon:Snowflake },
-  { id:"wifi", label:"واي فاي", Icon:Wifi },
-  { id:"screen", label:"شاشات", Icon:Tv },
-  { id:"meal", label:"وجبات", Icon:Utensils },
-  { id:"drink", label:"مشروبات", Icon:CupSoda },
-  { id:"wc", label:"دورة مياه", Icon:Toilet },
-  { id:"seat", label:"مقاعد مريحة", Icon:Armchair },
-  { id:"charge", label:"منافذ شحن", Icon:PlugZap },
-  { id:"luggage", label:"مساحة أمتعة", Icon:Luggage },
-  { id:"other", label:"خدمة إضافية", Icon:Sparkles },
-  { id:"usb", label:"شحن USB", Icon:Usb },
-  { id:"battery", label:"شحن الأجهزة", Icon:BatteryCharging },
-  { id:"bluetooth", label:"بلوتوث", Icon:Bluetooth },
-  { id:"headphones", label:"سماعات", Icon:Headphones },
-  { id:"audio", label:"نظام صوتي", Icon:Volume2 },
-  { id:"radio", label:"راديو", Icon:Radio },
-  { id:"microwave", label:"تسخين الطعام", Icon:Microwave },
-  { id:"coffee", label:"قهوة", Icon:Coffee },
-  { id:"water", label:"مياه", Icon:Droplets },
-  { id:"cooler", label:"تبريد", Icon:Thermometer },
-  { id:"heater", label:"تدفئة", Icon:Heater },
-  { id:"airflow", label:"تهوية", Icon:AirVent },
-  { id:"fan", label:"مروحة", Icon:Fan },
-  { id:"lighting", label:"إضاءة قراءة", Icon:Lightbulb },
-  { id:"night", label:"إضاءة ليلية", Icon:MoonStar },
-  { id:"sunshade", label:"ستائر شمسية", Icon:Sun },
-  { id:"navigation", label:"تتبع الرحلة", Icon:Navigation },
-  { id:"map", label:"خرائط", Icon:MapPin },
-  { id:"clock", label:"التزام بالمواعيد", Icon:Clock3 },
-  { id:"driver", label:"سائق محترف", Icon:CarFront },
-  { id:"bus", label:"حافلة حديثة", Icon:BusFront },
-  { id:"fuel", label:"وقود كافٍ", Icon:Fuel },
-  { id:"gauge", label:"مراقبة السرعة", Icon:Gauge },
-  { id:"camera", label:"كاميرات", Icon:Camera },
-  { id:"safety", label:"سلامة", Icon:ShieldCheck },
-  { id:"first_aid", label:"إسعافات أولية", Icon:HeartPulse },
-  { id:"accessible", label:"ملائمة لذوي الإعاقة", Icon:Accessibility },
-  { id:"baby", label:"ملائمة للعائلات", Icon:Baby },
-  { id:"parking", label:"مواقف", Icon:CircleParking },
-  { id:"door", label:"مدخل سهل", Icon:DoorOpen },
-  { id:"ticket", label:"تذكرة رقمية", Icon:Ticket },
-  { id:"contactless", label:"دفع إلكتروني", Icon:Nfc },
-  { id:"card", label:"قبول البطاقات", Icon:CreditCard },
-  { id:"language", label:"خدمة متعددة اللغات", Icon:Languages },
-  { id:"bell", label:"طلب مساعدة", Icon:BellRing },
-  { id:"cable", label:"كابل شحن", Icon:Cable },
-  { id:"monitor", label:"شاشة معلومات", Icon:Monitor },
-  { id:"package", label:"حفظ الأمتعة", Icon:PackageCheck },
-  { id:"waves", label:"مبرد مياه", Icon:Waves },
-  { id:"sandwich", label:"وجبة خفيفة", Icon:Sandwich },
+  { id:"ac",         label:"تكييف",                Icon:Snowflake },
+  { id:"wifi",       label:"واي فاي",              Icon:Wifi },
+  { id:"screen",     label:"شاشات ترفيه",          Icon:Tv },
+  { id:"audio",      label:"نظام صوتي",            Icon:Volume2 },
+  { id:"charge",     label:"منافذ شحن",            Icon:PlugZap },
+  { id:"usb",        label:"منفذ USB",             Icon:Usb },
+  { id:"seat",       label:"مقاعد مريحة",          Icon:Armchair },
+  { id:"wc",         label:"دورة مياه",            Icon:Toilet },
+  { id:"luggage",    label:"مساحة أمتعة",          Icon:Luggage },
+  { id:"meal",       label:"وجبات",                Icon:Utensils },
+  { id:"snack",      label:"وجبة خفيفة",           Icon:Sandwich },
+  { id:"coffee",     label:"قهوة وشاي",            Icon:Coffee },
+  { id:"drink",      label:"مشروبات",              Icon:CupSoda },
+  { id:"water",      label:"مياه",                 Icon:Droplets },
+  { id:"lighting",   label:"إضاءة قراءة",          Icon:Lightbulb },
+  { id:"sunshade",   label:"ستائر شمسية",          Icon:Sun },
+  { id:"safety",     label:"أحزمة وسلامة",         Icon:ShieldCheck },
+  { id:"first_aid",  label:"إسعافات أولية",        Icon:HeartPulse },
+  { id:"accessible", label:"ملائمة لذوي الإعاقة",  Icon:Accessibility },
+  { id:"baby",       label:"ملائمة للعائلات",      Icon:Baby },
+  { id:"driver",     label:"سائق محترف",           Icon:CarFront },
+  { id:"bus",        label:"حافلة حديثة",          Icon:BusFront },
+  { id:"clock",      label:"التزام بالمواعيد",     Icon:Clock3 },
+  { id:"navigation", label:"تتبع الرحلة",          Icon:Navigation },
+  { id:"language",   label:"خدمة بلغات",           Icon:Languages },
+  { id:"bell",       label:"طلب مساعدة",           Icon:BellRing },
+  { id:"other",      label:"خدمة إضافية",          Icon:Sparkles },
 ];
 
+/* المركبات المحفوظة تحمل رموزاً من القائمة القديمة. لو تُركت بلا ترجمة
+   لعادت كلها «نجمةً» عند أول فتح، فيبدو أن البيانات ضاعت وهي موجودة.
+   فكل رمزٍ مُزال يُشار إلى أقرب معنىً باقٍ، والموظف يغيّره إن شاء. */
+const LEGACY_ALIASES: Readonly<Record<string, string>> = {
+  battery:"charge", cable:"charge", contactless:"charge", power:"charge",
+  bluetooth:"audio", headphones:"audio", radio:"audio", monitor:"screen",
+  microwave:"meal", cooler:"water", waves:"water", wine:"drink",
+  heater:"ac", airflow:"ac", fan:"ac", thermometer:"ac",
+  night:"lighting", sun:"sunshade",
+  map:"navigation", gauge:"driver", fuel:"driver", camera:"safety",
+  parking:"bus", door:"accessible", package:"luggage",
+  card:"other", ticket:"other",
+};
+
 const BY_ID = new Map(TRANSPORT_FEATURE_CATALOG.map(item => [item.id, item]));
-export const transportFeatureIcon = (id?: string): LucideIcon => BY_ID.get(id ?? "")?.Icon ?? Sparkles;
-export const transportFeatureLabel = (id?: string): string => BY_ID.get(id ?? "")?.label ?? "خدمة الحافلة";
+const resolve = (id?: string) => BY_ID.get(LEGACY_ALIASES[id ?? ""] ?? id ?? "");
+
+export const transportFeatureIcon = (id?: string): LucideIcon => resolve(id)?.Icon ?? Sparkles;
+export const transportFeatureLabel = (id?: string): string => resolve(id)?.label ?? "خدمة الحافلة";

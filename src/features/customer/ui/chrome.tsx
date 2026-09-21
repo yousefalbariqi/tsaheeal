@@ -58,10 +58,8 @@ export function AppBar({ title, onBack, dir, lang, onLang, t }: {
    حرف يُكتب في نموذج المعتمرين. */
 export const BottomBar = memo(function BottomBar({ screen, home, onNav, t }: {
   screen: Screen;
-  /** الشاشة التي يعنيها تبويب «استكشاف». صارت خاصيّةً لأن للموقع
-      رئيسيتين ما دام القديم محفوظاً: من فتح الاستكشاف القديم يبقى فيه،
-      ومن جاء من الرئيسية الجديدة يعود إليها — فلا يقفز أحدٌ بضغطة
-      تبويبٍ من تجربةٍ إلى أخرى. */
+  /** الشاشة التي يعنيها تبويب «استكشاف». خاصيّةٌ لا ثابتٌ مكتوب: نقل
+      الرئيسية يبقى تعديلَ سطرٍ واحد في routing.ts. */
   home: Screen;
   onNav: (s: Screen, pkgId?: string) => void;
   t: (k: string) => string;

@@ -13,10 +13,23 @@ export interface HotelMedia   { id: string; kind: MediaKind; url: string; primar
 export interface RoomType     { id: string; kind: RoomKind; beds: number; pricePerNight: number; photos?: HotelMedia[]; }
 export interface Hotel {
   id: string; name: string; city: "مكة" | "المدينة";
-  stars: 2 | 3 | 4 | 5; distanceM: number; district: string;
-  phone: string; mapUrl: string; status: HotelStatus; notes: string;
-  features: HotelFeature[]; roomTypes: RoomType[];
-  tasaheelNote: string; reviews: HotelReview[]; media?: HotelMedia[];
+  stars: 2 | 3 | 4 | 5; district: string;
+  mapUrl: string; status: HotelStatus;
+  features: HotelFeature[]; reviews: HotelReview[]; media?: HotelMedia[];
+
+  /* ── حقولٌ متقاعدة من الواجهة، باقيةٌ في الصفّ ──
+     الفندق صار بطاقة تعريف: اسمٌ وحيٌّ وموقعٌ ومرافق وصورٌ وآراء. وما
+     كان تشغيلياً أو تسعيرياً انتقل إلى الباقة (roomPrices فيها هي
+     المصدر)، وما لم يكن يُقرأ في أي شاشة سقط من النموذج.
+
+     تبقى هنا لأن upsert_hotel يكتب أعمدتها وhotelFrom يقرؤها: حذفها من
+     النوع يجعل الحفظ يدهسها بـnull في صفوفٍ قائمة. النموذج يمرّرها كما
+     جاءت ولا يعرضها. لا تُضَف حقول جديدة إلى هذه المجموعة. */
+  roomTypes: RoomType[];      // الغرف وأسعارها → features/packages
+  tasaheelNote: string;       // لم يكن يظهر للعميل في أي شاشة
+  notes: string;              // ملاحظات داخلية لم تُعرض قط
+  phone: string;              // لم يكن في النموذج
+  distanceM: number;          // المسافة عن الحرم — لم تُعرض للعميل
   /* ── بيانات العقد (إدارية، لا يراها العميل) ──
      «أضف بيانات جهة الاتصال، رقم العقد، فترة العقد، وسياسة الإلغاء
      الداخلية». اختيارية كلّها: الفنادق القائمة بلا عقدٍ مسجَّل لا تُكسر. */
@@ -31,6 +44,8 @@ export interface Transport {
   id: string; name: string; mode: VehicleMode;
   vehicleType: string;   // حافلة عادية / حافلة VIP / طيران
   seats: number; seatCost: number;
+  /** عدد المركبات المتطابقة المتاحة من هذا النوع؛ النوع يُسجّل مرة واحدة. */
+  fleetCount?: number;
   /** في الحافلة: الشركة/الموديل. في الطيران: الناقل الجوّي. */
   model: string; year: string; plate: string;
   driver: string; supervisor: string;
@@ -79,7 +94,7 @@ export interface ProgramStage { id:string; order:number; icon:string; day:string
     وحدها. صار بياناً في الصفّ: الإدارة تبني ما تشاء من التوليفات بلا
     تعديل كود. وغيابه (null) يعني الجميع — الباقات القديمة لا تنقلب
     مخفيّةً لأن حقلاً أُضيف بعدها. */
-export interface RoomPrice    { id:string; type:string; persons:number; perNight:number; seatCost?:number; audience?:TravellerType[]; }
+export interface RoomPrice    { id:string; type:string; persons:number; perNight:number; audience?:TravellerType[]; }
 /** رأي الباقة: اسم وتقييم من خمس ونص وصورة اختيارية.
     consent/addedBy/bookingId حقول قديمة للقراءة فقط حتى تمرّ البيانات السابقة. */
 export interface PkgReview    { id:string; name:string; text:string; consent:boolean; image?:string; rating?:number; addedBy?:string; bookingId?:string; }
@@ -88,9 +103,14 @@ export interface Pkg {
   id:string; name:string; order:number;
   productType:string; destination:PkgDest; audience:string;
   days:number; nights:number; status:PkgStatus;
-  marketPrice:number; seatCostOverride?:number;
-  /** خيار بيع مستقل: لا يشمل السكن، وسعره للفرد هو سعر البيع لا تكلفة المقعد. */
-  transportOnlyEnabled?:boolean; transportOnlyPrice?:number;
+  marketPrice:number;
+  /** سعر المواصلات للفرد — ذهاب وعودة، لا يتغيّر بنوع الغرفة.
+
+      الاسم أقدم من معناه: كان «تجاوزاً» لتكلفة المقعد المسجّلة في
+      المركبة، ثم صار هو السعر المعتمد للباقة. تُترك التسمية كما هي لأن
+      العمود `packages.seat_cost_override` يحمل بيانات قائمة، والقيمة
+      المبدئية لا تزال تُؤخذ من المركبة المرتبطة. */
+  seatCostOverride?:number;
   coverImage?:string; gallery?:string[];
   recurring:boolean; recurDay:string; startDate:string;
   transportId:string; hotelId:string;
@@ -100,6 +120,11 @@ export interface Pkg {
 }
 
 export interface TripDriver { id:string; name:string; phone:string; }
+/** محطة صعود ضمن رحلة واحدة؛ الباص يمر عليها بالترتيب نفسه. */
+export interface TripDepartureStop {
+  id:string; branchId:string; city:string; point:string; time:string;
+  mapUrl?:string; address?:string;
+}
 export type TripStatus = "open"|"full"|"cancelled"|"archived";
 export interface TripSettings {
   allowOnlineBooking:boolean;
@@ -118,6 +143,9 @@ export interface Trip {
   busPlate:string; busCode:string;       // رقم لوحة الباص + الرقم التعريفي الداخلي
   departureDate:string; returnDate:string; departureTime:string;
   departurePoint:string; departureMapUrl:string;
+  /** محطات الصعود المرتبة. تبقى حقول الانطلاق القديمة لقطةً لأول محطة
+      لتظل التذاكر والرحلات القديمة متوافقة. */
+  departureStops?:TripDepartureStop[];
   seats:number; bookedSeats:number; waitingSeats:number;
   status:TripStatus; price:number;
   /** سبب الإلغاء وتاريخه — يُطلبان عند الإلغاء ويُعرضان مكان «المتبقي ٠».
@@ -222,6 +250,14 @@ export type BookingStatus = "new"|"reviewing"|"needs_edit"|"rejected"|"accepted"
 export type PaymentStatus = "none"|"sent"|"failed"|"verified";
 /** اختيارٌ مستقل عن السكن: من يسافر في هذا الطلب. */
 export type TravellerType = "male_solo"|"female_solo"|"family";
+/** لقطة عدد المسافرين كما اختارها العميل؛ لا تُستنتج من سجلات المعتمرين
+    لأن الطلب العام يحفظ بيانات صاحب الحجز فقط في البداية. */
+export interface BookingTravellerCounts { men:number; women:number; children:number; }
+/** لقطة تسعير الطلب عند إنشائه، مستقلة عن أي تعديل لاحق على الباقة. */
+export interface BookingPricing {
+  seatPrice:number; transportTotal:number;
+  accommodationNightly:number; roomCount:number; nights:number; accommodationTotal:number;
+}
 /** غرفة واحدة في توزيع سكن حجز. السعر مثبَّت وقت الحجز لا مقروء من الباقة:
     تعديل الموظف لأسعارها لاحقاً يجب ألّا يجعل الإجمالي المحفوظ غير مفسَّر. */
 export interface BookingRoom { tierId?:string; type:string; persons:number; perNight:number; }
@@ -230,8 +266,10 @@ export interface Booking {
   clientName:string; clientPhone:string;
   roomType:string; persons:number;
   travellerType?:TravellerType;
+  travellerCounts?:BookingTravellerCounts;
   /** توزيع السكن مفصّلاً. اختياري: الحجوزات الداخلية والقديمة بلا توزيع. */
   rooms?:BookingRoom[];
+  pricing?:BookingPricing;
   total:number; status:BookingStatus;
   paymentStatus:PaymentStatus;
   payMethod?:string; txnNo?:string; payDate?:string;
@@ -275,7 +313,8 @@ export interface TicketEntry {
 }
 
 /* طلب باقة مخصّصة — لا حجز مباشر: يجمع رغبة العميل ويصله الفريق لتجهيز العرض. */
-export type CustomReqStatus = "new"|"contacted"|"quoted"|"converted"|"closed";
+/** حالة الطلب المخصّص من استلامه إلى عودة المجموعة وإتمامه. */
+export type CustomReqStatus = "new"|"contacted"|"quoted"|"converted"|"executing"|"completed"|"closed";
 export interface CustomRequest {
   id:string;
   departDate:string; returnDate:string; persons:number;

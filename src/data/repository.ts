@@ -154,7 +154,7 @@ const hotelFrom = (r: any): Hotel => ({
   })),
 });
 const transportFrom = (r: any): Transport => ({
-  id: r.id, name: r.name, mode: r.mode, vehicleType: r.vehicle_type, seats: r.seats, seatCost: r.seat_cost,
+  id: r.id, name: r.name, mode: r.mode, vehicleType: r.vehicle_type, seats: r.seats, seatCost: r.seat_cost, fleetCount: Math.max(1, Number(r.fleet_count ?? 1)),
   model: r.model, year: r.year, plate: r.plate, driver: r.driver, supervisor: r.supervisor,
   status: r.status === "active" ? "active" : "inactive", notes: r.notes,
   /* undefined لا "" عند الغياب: الحقل الغائب يختلف عن الحقل المُفرَّغ
@@ -174,12 +174,11 @@ const packageFrom = (r: any): Pkg => ({
   id: r.id, name: r.name, order: r.order_no, productType: r.product_type, destination: r.destination, audience: r.audience,
   days: r.days, nights: r.nights, status: r.status, marketPrice: r.market_price,
   seatCostOverride: r.seat_cost_override ?? undefined, coverImage: r.cover_image ?? undefined,
-  transportOnlyEnabled: r.transport_only_enabled ?? false, transportOnlyPrice: r.transport_only_price ?? undefined,
   recurring: !!r.recurring, recurDay: r.recur_day, startDate: r.start_date,
   transportId: r.transport_id ?? "", hotelId: r.hotel_id ?? "", notes: r.notes,
   features: sortBy(r.package_features).map(mIconFeat),
   program: sortBy(r.package_program_stages).map((p: any) => ({ id: p.item_id, order: p.stage_order, icon: p.icon, day: p.day, time: p.time, title: p.title, desc: p.descr, archived: p.archived ?? undefined })),
-  roomPrices: sortBy(r.package_room_prices).map((rp: any) => ({ id: rp.item_id, type: rp.type, persons: rp.persons, perNight: rp.per_night, seatCost: rp.seat_cost ?? undefined, audience: Array.isArray(rp.audience) ? rp.audience : undefined })),
+  roomPrices: sortBy(r.package_room_prices).map((rp: any) => ({ id: rp.item_id, type: rp.type, persons: rp.persons, perNight: rp.per_night, audience: Array.isArray(rp.audience) ? rp.audience : undefined })),
   reviews: sortBy(r.package_reviews).map(mReview),
   policies: sortBy(r.package_policies).map((x: any) => x.value),
   gallery: sortBy(r.package_gallery).map((x: any) => x.value),
@@ -191,6 +190,10 @@ const tripFrom = (r: any): Trip => ({
   departureCity: r.departure_city ?? undefined,
   departureDate: r.departure_date, returnDate: r.return_date, departureTime: r.departure_time,
   departurePoint: r.departure_point, departureMapUrl: r.departure_map_url,
+  departureStops: Array.isArray(r.departure_stops) ? r.departure_stops.map((s: any) => ({
+    id: s.id ?? crypto.randomUUID(), branchId: s.branchId ?? "", city: s.city ?? "", point: s.point ?? "", time: s.time ?? "",
+    mapUrl: s.mapUrl ?? undefined, address: s.address ?? undefined,
+  })) : undefined,
   /* أعمدة الموجتَين ١ و٢ اختيارية في الصفّ: قبل ترحيلها لا يعيدها select
      فتُقرأ undefined لا null — والنوع يقول اختياري لا فارغ. */
   returnTime: r.return_time ?? undefined, departureAddress: r.departure_address ?? undefined,
@@ -202,6 +205,13 @@ const tripFrom = (r: any): Trip => ({
 const bookingFrom = (r: any): Booking => ({
   id: r.id, tripId: r.trip_id ?? "", packageId: r.package_id ?? undefined, clientName: r.client_name, clientPhone: r.client_phone, roomType: r.room_type, persons: r.persons,
   travellerType: r.traveller_type ?? undefined,
+  travellerCounts: r.traveller_counts && typeof r.traveller_counts === "object" ? {
+    men: Number(r.traveller_counts.men) || 0, women: Number(r.traveller_counts.women) || 0, children: Number(r.traveller_counts.children) || 0,
+  } : undefined,
+  pricing: r.transport_seat_price != null && r.transport_total != null && r.accommodation_nightly != null && r.accommodation_rooms != null && r.accommodation_nights != null && r.accommodation_total != null ? {
+    seatPrice: Number(r.transport_seat_price), transportTotal: Number(r.transport_total), accommodationNightly: Number(r.accommodation_nightly),
+    roomCount: Number(r.accommodation_rooms), nights: Number(r.accommodation_nights), accommodationTotal: Number(r.accommodation_total),
+  } : undefined,
   total: r.total, status: r.status, paymentStatus: r.payment_status, payMethod: r.pay_method ?? undefined, txnNo: r.txn_no ?? undefined, payDate: r.pay_date ?? undefined,
   seats: sortBy(r.booking_seats).map((s: any) => s.seat_no),
   /* undefined لا [] عند الغياب: upsert_booking لا يمسّ الغرف إلا إذا حمل

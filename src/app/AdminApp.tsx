@@ -19,6 +19,7 @@ import { PaymentsPage } from "@/features/payments";
 import { BeneficiariesPage } from "@/features/beneficiaries";
 import { PackagesPage } from "@/features/packages";
 import { TripsPage } from "@/features/trips";
+import { ManifestsPage } from "@/features/manifests";
 import { BranchesPage } from "@/features/branches";
 import { BookingsPage } from "@/features/bookings";
 import { DashboardPage } from "@/features/dashboard";
@@ -169,7 +170,7 @@ export default function AdminApp() {
     return <LoadErrorScreen message="قاعدة بيانات الإنتاج غير مهيأة. لا تُعرض بيانات تجريبية في هذا النشر." onRetry={()=>window.location.reload()}/>;
   }
 
-  const knownViews = ["dashboard","hotels","transport","packages","trips","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support","settings"];
+  const knownViews = ["dashboard","hotels","transport","packages","trips","manifests","branches","bookings","customRequests","beneficiaries","payments","tickets","users","support","settings"];
 
   useEffect(()=>{ useStore.getState().initAuth(); },[]);
   /* الجلب بعد ثبوت أنه موظف — سياسات RLS لا تعيد شيئاً لغيره، فالجلب
@@ -220,6 +221,7 @@ export default function AdminApp() {
         {(activeView==="transport"||keptEditorViews.includes("transport")) && <div hidden={activeView!=="transport"}><TransportPage onMenuOpen={()=>setMobileSidebar(true)}/></div>}
         {(activeView==="packages"||keptEditorViews.includes("packages")) && <div hidden={activeView!=="packages"}><PackagesPage transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/></div>}
         {activeView==="trips"    && <TripsPage packages={packages} transports={transports} hotels={hotels} onMenuOpen={()=>setMobileSidebar(true)}/>}
+        {activeView==="manifests"      && <ManifestsPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="branches"       && <BranchesPage onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="bookings"       && <BookingsPage packages={packages} trips={trips} onMenuOpen={()=>setMobileSidebar(true)}/>}
         {activeView==="customRequests" && <CustomRequestsPage onMenuOpen={()=>setMobileSidebar(true)}/>}

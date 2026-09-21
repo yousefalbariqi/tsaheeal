@@ -17,8 +17,11 @@
 import { useId } from "react";
 import { motion } from "motion/react";
 import { Check } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import type { TravellerType } from "@/types";
 import { C, T, R } from "./tokens";
+import type { TravellerCounts } from "../draft";
+import { travellerCountTotal } from "../draft";
 
 /** لوحة كل نوع: `ink` لون الرسم، و`tint` خلفية القرص والبطاقة المختارة. */
 export const TRAVELLER_PALETTE: Record<TravellerType, { ink: string; tint: string }> = {
@@ -179,4 +182,50 @@ export function TravellerTypeGrid({ value, onPick, t }: {
       })}
     </div>
   );
+}
+
+/** عدادات المعتمرين — صفّان لا ثلاثة. الأطفال لا يُعدّون هنا: عدّهم
+    يفتح تسعيراً ومقاعد بقواعدٍ أخرى لا تحملها هذه الشاشة.
+
+    والرقم ملاصق لصفّه حتى لا يختار العميل العدد في موضعٍ ثم يضطر إلى
+    تخمين من أي فئةٍ هم في موضع آخر. والصفّ اسمٌ واحد بلا وصفٍ تحته:
+    «المعتمرون» لا يزيده «بالغون» معنى. */
+export function TravellerCountPicker({ value, onChange, max, lang }: {
+  value: TravellerCounts;
+  onChange: (value: TravellerCounts) => void;
+  max: number;
+  lang: "ar" | "en";
+}) {
+  const total = travellerCountTotal(value);
+  const rows: { key: keyof TravellerCounts; type: TravellerType; label: string }[] = lang === "ar"
+    ? [
+        { key: "men", type: "male_solo", label: "المعتمرون" },
+        { key: "women", type: "female_solo", label: "المعتمرات" },
+      ]
+    : [
+        { key: "men", type: "male_solo", label: "Pilgrims (men)" },
+        { key: "women", type: "female_solo", label: "Pilgrims (women)" },
+      ];
+  const adjust = (key: keyof TravellerCounts, delta: number) => {
+    if (delta > 0 && total >= max) return;
+    const next = Math.max(0, value[key] + delta);
+    onChange({ ...value, [key]: next });
+  };
+
+  return <div className="ts-traveller-counts" role="group" aria-label={lang === "ar" ? "تفصيل عدد المعتمرين" : "Traveller breakdown"}>
+    {rows.map(({ key, type, label }) => {
+      const palette = TRAVELLER_PALETTE[type];
+      return <article className="ts-traveller-count" key={key}>
+        <span className="ts-traveller-count-icon" style={{ color: palette.ink, background: palette.tint }}>
+          <TravellerIcon type={type} size={42} bg={palette.tint} />
+        </span>
+        <span className="ts-traveller-count-copy"><strong>{label}</strong></span>
+        <div className="ts-traveller-stepper" dir="ltr" aria-label={`${label}: ${value[key]}`}>
+          <button type="button" onClick={() => adjust(key, 1)} disabled={total >= max} aria-label={lang === "ar" ? `زيادة ${label}` : `Increase ${label}`}><Plus size={18}/></button>
+          <output aria-live="polite">{value[key]}</output>
+          <button type="button" onClick={() => adjust(key, -1)} disabled={value[key] === 0} aria-label={lang === "ar" ? `إنقاص ${label}` : `Decrease ${label}`}><Minus size={18}/></button>
+        </div>
+      </article>;
+    })}
+  </div>;
 }

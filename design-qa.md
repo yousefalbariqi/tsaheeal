@@ -1,34 +1,49 @@
-**Source visual truth**
-
-- `/Users/yousefalbariqi/Downloads/goal.png` — customer trips desktop reference.
-- `/Users/yousefalbariqi/Downloads/stage 2.png` — booking desktop reference.
-- `/Users/yousefalbariqi/Downloads/stag4.png` — customer dashboard desktop reference.
-
-**Implementation target**
-
-- Customer desktop routes: packages and listing.
-- Intended viewport: 1440 × 1024, RTL Arabic, packages route.
-
-**Evidence**
-
-- TypeScript and production build pass.
-- Browser-rendered screenshot: unavailable. The supplied in-app browser runtime fails during bootstrap because it requests a missing bundled `browser-service.mjs` version. No substitute visual capture was used.
-
 **Findings**
 
-- [P1] Visual comparison is blocked.
-  Location: desktop packages and listing routes.
-  Evidence: source screenshots are available, but no browser-rendered implementation capture could be produced.
-  Impact: desktop spacing, image crop, and responsive breakpoints cannot be approved against the supplied references.
-  Fix: restore the in-app browser runtime, capture both routes at 1440 × 1024, then compare and iterate.
+- [P1] التحقق البصري محجوب
+  Location: صفحة المستفيد، خط مواعيد الانطلاق للجوال.
+  Evidence: المصدر البصري هو لقطة المستخدم المرجعية في المحادثة؛ خادم المعاينة المحلي يعمل على `http://127.0.0.1:4173/`، لكن لا يوجد سطح متصفح متاح لالتقاط تنفيذ الصفحة أو مقارنة الحالة نفسها.
+  Impact: لا يمكن الجزم بأن تباعد الخط، عرض البطاقة، وحالات اختيار التاريخ تطابق المرجع على هاتف حقيقي.
+  Fix: افتح معاينة محلية في متصفح متاح، التقط صفحة المستفيد بعد اختيار الوجهة ومدينة الانطلاق، ثم قارنها مع المرجع على نفس عرض الجوال.
+
+**Open Questions**
+
+- المرجع يعرض خط المواعيد كبطاقات مكتملة مع سعر وعدد الرحلات؛ التنفيذ الحالي يعرض التاريخ وعدد الرحلات ثم ينقل السعر إلى بطاقة الرحلة المختارة، وهو قرار مقصود لتخفيف ازدحام الخط.
 
 **Implementation Checklist**
 
-1. Capture packages desktop with the three-column trip grid and top navigation.
-2. Capture a selected package / booking state with date, people, and room controls.
-3. Compare typography, spacing, colors, card imagery, and copy with the supplied references.
-4. Fix any P0–P2 differences and update this report.
+1. استُبدل الخط بشريط أسبوعي أفقي من سبعة أيام؛ لا توجد بطاقات أيام كبيرة ولا خط رأسي.
+2. الأيام المتاحة فقط قابلة للاختيار؛ الفارغة مرئية وهادئة بعلامة «—»، واليوم الحالي يحمل «اليوم» مستقلاً عن الاختيار.
+3. اختير أقرب يوم متاح تلقائياً، وتبدل البطاقات في قسم مستقل أسفل الشريط دون تحريك الشريط ذاته.
+4. أُضيف إجراء «الأسبوع القادم» لتبديل الأسبوع بدلاً من إطالة الصفحة بأيام إضافية.
+5. اختُصرت بطاقة الرحلة: اسم الباقة، نقطة الانطلاق، السعر، والصورة؛ البطاقة نفسها تفتح التفاصيل بلا زر حجز أو دعوة إجراء مكررة.
+6. وقت الانطلاق في عمود يسار مستقل: «وقت الانطلاق»، ثم الوقت الكبير مثل `12:00`، ثم الفترة مثل «ظهرًا».
+7. استُبدل الإجراء المنفرد بشريط تنقل ثنائي: «الأسبوع السابق →»، «هذا الأسبوع»، و«← الأسبوع القادم»؛ السابق معطّل في الأسبوع الحالي.
+8. الأسبوع القادم يدخل من اليسار، والسابق من اليمين، داخل شريط الأيام فقط دون إعادة تحميل أو قفز في الصفحة.
+9. شغّل `npm run typecheck` و`npm run build` بنجاح.
 
-**Final result**
+**Follow-up Polish**
 
-blocked
+- اختبر لفّ عنوان باقة طويل على عرض 360px و390px بعد توفر لقطة المتصفح.
+
+Source visual truth: لقطات المستخدم المرفقة في المحادثة، بما فيها مرجع «أقرب رحلات من الخبر إلى مكة».
+
+Implementation screenshot: غير متاح؛ سطح المتصفح غير متاح في هذه الجلسة.
+
+Viewport: غير متاح.
+
+Source and implementation dimensions / density normalization: غير متاح لغياب لقطة تنفيذ المتصفح.
+
+State: مستفيد اختار الوجهة ومدينة الانطلاق، ثم يختار موعدًا من شريط أسبوعي ثابت.
+
+Full-view comparison evidence: محجوب لغياب لقطة التنفيذ.
+
+Focused region comparison evidence: محجوب لغياب لقطة التنفيذ.
+
+Primary interactions tested: فحص النوع والبناء فقط؛ لا يمكن اختبار اختيار اليوم في متصفح.
+
+Console errors checked: غير متاح لغياب المتصفح.
+
+Comparison history: لا توجد مقارنة بصرية قابلة للتنفيذ في هذه الجلسة.
+
+final result: blocked

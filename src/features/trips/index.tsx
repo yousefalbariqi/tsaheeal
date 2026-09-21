@@ -1,13 +1,18 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { sar } from "@/lib/money";
 import { motion, AnimatePresence } from "motion/react";
-import { Plus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, History, Settings2, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check } from "lucide-react";
+import { Calendar, DateObject } from "react-multi-date-picker";
+import gregorian from "react-date-object/calendars/gregorian";
+import gregorian_ar from "react-date-object/locales/gregorian_ar";
+import gregorian_en from "react-date-object/locales/gregorian_en";
+import { Plus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, History, Settings2, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { useRole } from "@/lib/useRole";
 import { EntityGate } from "@/components/States";
-import type { Hotel, Transport, Pkg, Trip, Branch, Booking, TripDriver } from "@/types";
+import type { Hotel, Transport, Pkg, Trip, Branch, Booking, TripDriver, TripDepartureStop } from "@/types";
 import { uid, parseYMD, ymd, newId, openWhatsApp, copyText, money } from "@/lib/utils";
 import {
   tripState, tripBoardState, occupancy, nextTrip, calendarAnchor, dayColor,
@@ -30,6 +35,9 @@ import { Field } from "@/components/Field";
 import { isOperational } from "@/features/transport/readiness";
 
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+/* التقويم في لوحة التشغيل يتسع لأسماء الأيام كاملة؛ الاختصار حرف أو
+   حرفان يحمّل الموظف تخمين «ثن/ثل» بلا مكسب في هذه النافذة الواسعة. */
+const FULL_AR_WEEKDAYS = { ...gregorian_ar, weekDays: gregorian_ar.weekDays.map(([full]) => [full, full]) };
 const tripLabel = (t:Trip, pkgName:string) => pkgName && pkgName!=="—" ? pkgName : (t.departurePoint || t.id);
 const parseYMDDate=(s:string):Date|undefined=>{ const p=parseYMD(s); return p?new Date(p.y,p.m,p.d):undefined; };
 
@@ -52,12 +60,12 @@ const parseYMDDate=(s:string):Date|undefined=>{ const p=parseYMD(s); return p?ne
    جديد لا تعديل. */
 type TripForm = Pick<Trip,"packageId"|"branchId"|"transportId"|"busPlate"|"busCode"|"departureDate"|"returnDate"|"departureTime"|"departurePoint"|"departureMapUrl"|"drivers">
   & { departureCity:string }
-  & { returnTime:string; departureAddress:string };
+  & { returnTime:string; departureAddress:string; departureStops:TripDepartureStop[] };
 
 const emptyForm = ():TripForm => ({
   packageId:"",branchId:"",transportId:"",busPlate:"",busCode:"",
   departureDate:"",returnDate:"",departureTime:"22:00",returnTime:"",
-  departureCity:"",departurePoint:"",departureMapUrl:"",departureAddress:"",
+  departureCity:"",departurePoint:"",departureMapUrl:"",departureAddress:"",departureStops:[{id:uid(),branchId:"",city:"",point:"",time:""}],
   drivers:[{id:uid(),name:"",phone:""}],
 });
 
@@ -70,9 +78,38 @@ const vehicleIds = (v:Transport) => ({
 
 const vehicleOption = (v:Transport):SearchOption => ({
   value:v.id, label:v.name||v.id,
-  sub:`${v.mode==="flight"?`رحلة ${v.flightNo||"—"}`:`لوحة ${v.plate||"—"}`} · ${v.seats} مقعد${isOperational(v.status)?"":" · غير نشطة"}`,
+  sub:v.mode==="flight"
+    ? `رحلة ${v.flightNo||"—"}`
+    : `${Math.max(1,v.fleetCount??1)} ${Math.max(1,v.fleetCount??1)===1?"باص":"باصات"} · ${v.seats} مقعد لكل باص`,
   keywords:[v.plate,v.serialNo,v.flightNo,v.model].filter(Boolean).join(" "),
 });
+
+const legacyStop = (trip: Pick<Trip,"id"|"branchId"|"departureCity"|"departurePoint"|"departureMapUrl"|"departureAddress"|"departureTime">): TripDepartureStop => ({
+  id: `stop-${trip.id}`, branchId: trip.branchId || "", city: trip.departureCity || "", point: trip.departurePoint || "",
+  time: trip.departureTime || "", mapUrl: trip.departureMapUrl || undefined, address: trip.departureAddress || undefined,
+});
+
+/* فلتر التاريخ نافذة حقيقية لا Popover على حافة الشاشة: اختيار اليوم
+   يبقى في موضعه البصري مهما كان عرض الجدول أو اتجاه الصفحة. */
+function TripDateFilterModal({ value, onChoose, onClear, onClose }: { value: string; onChoose: (v: string) => void; onClear: () => void; onClose: () => void }) {
+  const selected = value ? new DateObject({ date: value, format: "YYYY-MM-DD", calendar: gregorian, locale: gregorian_ar }) : undefined;
+  return <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{background:"rgba(14,12,11,.62)",backdropFilter:"blur(3px)"}} onClick={onClose}>
+    <motion.div initial={{opacity:0,y:16,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:16,scale:.98}} className="w-full rounded-2xl overflow-hidden" style={{maxWidth:360,background:"#fff",border:`1px solid ${B.border}`}} onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between px-5 py-4" style={{background:B.primaryDeep}}>
+        <div><div className="font-extrabold text-sm text-white">تصفية حسب التاريخ</div><div className="text-xs mt-1" style={{color:"#CDE7E4"}}>اختر يوم انطلاق واحداً</div></div>
+        <button onClick={onClose} aria-label="إغلاق" className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.15)",color:"#fff"}}><X size={14}/></button>
+      </div>
+      <div className="p-4 flex justify-center" dir="rtl">
+        <Calendar value={selected} calendar={gregorian} locale={FULL_AR_WEEKDAYS} weekStartDayIndex={6} className="teal rmdp-mobile"
+          onChange={(d: DateObject) => { onChoose(d.convert(gregorian, gregorian_en).format("YYYY-MM-DD")); onClose(); }} />
+      </div>
+      <div className="flex gap-2 px-4 py-3" style={{borderTop:`1px solid ${B.border}`}}>
+        <button onClick={()=>{onClear();onClose();}} className="flex-1 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>كل التواريخ</button>
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,border:"none",color:B.black}}>إغلاق</button>
+      </div>
+    </motion.div>
+  </motion.div>;
+}
 
 function TripFormModal({
   mode,initial,packages,branches,prefillPkgId,prefillDate,baseTrip,onSave,onClose
@@ -113,6 +150,7 @@ function TripFormModal({
       departureDate:initial.departureDate,returnDate:initial.returnDate??"",departureTime:initial.departureTime,
       returnTime:initial.returnTime??"",departureCity:initial.departureCity??branches.find(b=>b.id===initial.branchId)?.city??"",departurePoint:initial.departurePoint,departureMapUrl:initial.departureMapUrl,
       departureAddress:initial.departureAddress??"",
+      departureStops:initial.departureStops?.length ? initial.departureStops.map(s=>({...s})) : [legacyStop(initial)],
       drivers:initial.drivers.length?initial.drivers.map(d=>({...d})):[{id:uid(),name:"",phone:""}],
     };
     const f=emptyForm();
@@ -127,6 +165,7 @@ function TripFormModal({
         departureCity:baseTrip.departureCity??branches.find(b=>b.id===baseTrip.branchId)?.city??"",
         departurePoint:baseTrip.departurePoint, departureMapUrl:baseTrip.departureMapUrl,
         departureAddress:baseTrip.departureAddress??"",
+        departureStops:baseTrip.departureStops?.length ? baseTrip.departureStops.map(s=>({...s,id:uid()})) : [legacyStop(baseTrip)],
         departureDate:baseTrip.departureDate, returnDate:baseTrip.returnDate??"",
         departureTime:baseTrip.departureTime, returnTime:baseTrip.returnTime??"",
         drivers:baseTrip.drivers.length?baseTrip.drivers.map(d=>({...d,id:uid()})):[{id:uid(),name:"",phone:""}],
@@ -143,23 +182,18 @@ function TripFormModal({
     if(pkg&&f.departureDate) f.returnDate=defaultReturnDate(f.departureDate,pkg.days);
     return f;
   });
-  const [depMode,setDepMode]=useState<"branch"|"custom">(()=>{
-    const src=initial??baseTrip;
-    return src&&!src.branchId&&(src.departurePoint||src.departureMapUrl)?"custom":"branch";
-  });
   /* تاريخ العودة يُقترح من أيام الباقة ما لم يمسّه الموظف؛ وما مسّه لا
      يُدهَس بتغيير الباقة أو الذهاب بعده. */
   const [returnTouched,setReturnTouched]=useState(isEdit||!!baseTrip);
   const [busy,setBusy]=useState(false);
+  const [launchTab,setLaunchTab]=useState<"basics"|"stops"|"schedule">("basics");
+  const [scheduleTarget,setScheduleTarget]=useState<"departure"|"return">("departure");
   const set=<K extends keyof TripForm>(k:K,v:TripForm[K])=>setForm(f=>({...f,[k]:v}));
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
-  const istOff={...ist,background:B.fill,color:B.text2} as const;
   const req=<span style={{color:B.gold}}>*</span>;
 
   const selPkg=packages.find(p=>p.id===form.packageId);
-  const departureCities=[...new Set(activeBranches.map(b=>b.city).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
-  const departurePoints=activeBranches.filter(b=>!form.departureCity||b.city===form.departureCity);
   const pkgTransport=transports.find(t=>t.id===selPkg?.transportId);
   const vehicles=vehiclesFor(form.packageId);
   /* لا مركبة نشطة مطابقة: إدخالٌ يدوي معلَنٌ لا حجبٌ للإطلاق. الرحلة
@@ -171,7 +205,8 @@ function TripFormModal({
      وعند التعديل تبقى كما أُطلقت — تغييرها يمسّ مقاعداً بيعت. */
   const seats=isEdit?initial!.seats:(manual?(pkgTransport?.seats??0):(selVehicle?.seats??0));
 
-  const conflict=findVehicleConflict(trips,{transportId:effectiveTransportId,departureDate:form.departureDate,returnDate:form.returnDate},initial?.id);
+  const fleetCount=Math.max(1,selVehicle?.fleetCount??1);
+  const conflict=findVehicleConflict(trips,{transportId:effectiveTransportId,departureDate:form.departureDate,returnDate:form.returnDate},initial?.id,fleetCount);
   const conflictName=conflict?(packages.find(p=>p.id===conflict.packageId)?.name??conflict.id):"";
   const returnInvalid=returnBeforeDeparture(form);
   const tooSmall=isEdit&&!!selVehicle&&selVehicle.seats<(initial!.bookedSeats||0);
@@ -193,18 +228,24 @@ function TripFormModal({
     setForm(f=>({...f,departureDate:v,returnDate:(!returnTouched&&selPkg&&v)?defaultReturnDate(v,selPkg.days):f.returnDate}));
   }
   function setReturn(v:string){ setReturnTouched(true); set("returnDate",v); }
-  /* الفرع يُلتقط لا يُشار إليه: الاسم والخريطة والعنوان تُنسخ إلى الرحلة
-     لحظة الاختيار، فتعديل الفرع لاحقاً لا يغيّر ما وُعد به ركّابها. */
-  function pickBranch(bid:string){
-    const b=activeBranches.find(x=>x.id===bid);
-    setForm(f=>({...f,branchId:bid,departureCity:b?.city??f.departureCity,departurePoint:b?b.name:"",departureMapUrl:b?.gmapUrl??"",departureAddress:b?.address??""}));
+  /* كل محطة لقطة من الفرع وقت إطلاق الرحلة؛ تعديل الفرع لاحقاً لا يبدل
+     ما بيع للعميل. أول محطة هي الانطلاق الرسمي المتوافق مع السجلات القديمة. */
+  function pickStop(stopId:string, branchId:string){
+    const branch=activeBranches.find(b=>b.id===branchId);
+    if(!branch) return;
+    setForm(f=>({...f,departureStops:f.departureStops.map(s=>s.id===stopId?{
+      ...s,branchId:branch.id,city:branch.city,point:branch.name,mapUrl:branch.gmapUrl||undefined,address:branch.address||undefined,
+    }:s)}));
   }
+  const addStop=()=>set("departureStops",[...form.departureStops,{id:uid(),branchId:"",city:"",point:"",time:""}]);
+  const removeStop=(id:string)=>set("departureStops",form.departureStops.filter(s=>s.id!==id));
+  const setStopTime=(id:string,time:string)=>set("departureStops",form.departureStops.map(s=>s.id===id?{...s,time}:s));
 
   const addDriver=()=>set("drivers",[...form.drivers,{id:uid(),name:"",phone:""}]);
   const delDriver=(id:string)=>set("drivers",form.drivers.filter(d=>d.id!==id));
   const updDriver=(id:string,field:"name"|"phone",val:string)=>set("drivers",form.drivers.map(d=>d.id===id?{...d,[field]:val}:d));
 
-  const depOk = !!form.departureCity && (depMode==="branch" ? !!form.branchId : (!!form.departureMapUrl.trim()||!!form.departurePoint.trim()));
+  const depOk = form.departureStops.length>0 && form.departureStops.every(s=>!!s.branchId&&!!s.city&&!!s.point&&!!s.time);
   /* السائق ليس شرطاً: تشغيل الحافلات بالتعاقد، والسائق يُسمَّى قبل
      الانطلاق لا قبل فتح الحجز. */
   const baseOk = (manual||!!form.transportId) && !!form.busPlate.trim() && !!form.busCode.trim()
@@ -216,13 +257,14 @@ function TripFormModal({
     if(!canSave||busy) return;
     setBusy(true);
     const drivers:TripDriver[]=form.drivers.filter(d=>d.name.trim()||d.phone.trim());
+    const stops=form.departureStops;
+    const first=stops[0];
     const common={
       transportId:effectiveTransportId,busPlate:form.busPlate.trim(),busCode:form.busCode.trim(),
-      departureTime:form.departureTime,returnDate:form.returnDate,returnTime:form.returnTime||undefined,
-      departureCity:form.departureCity,
-      branchId:depMode==="branch"?form.branchId:"",
-      departurePoint:form.departurePoint,departureMapUrl:form.departureMapUrl,
-      departureAddress:depMode==="branch"?(form.departureAddress||undefined):undefined,
+      departureTime:first.time,returnDate:form.returnDate,returnTime:form.returnTime||undefined,
+      departureCity:first.city, branchId:first.branchId,
+      departurePoint:first.point,departureMapUrl:first.mapUrl||"",
+      departureAddress:first.address||undefined, departureStops:stops,
       drivers,
     };
     if(isEdit&&initial){ onSave({...initial,...common}); return; }
@@ -258,7 +300,13 @@ function TripFormModal({
             <span className="block mt-0.5" style={{color:"#A9CFCB"}}>اختر مركبةً أخرى: الحافلة الواحدة لا تكون في رحلتَين في اليوم نفسه.</span>
           </div>}
         </div>
+        <div className="flex gap-1 p-2" style={{background:B.fill,borderBottom:`1px solid ${B.border}`}}>
+          {([
+            ["basics","الأساسيات",Bus], ["stops","محطات الانطلاق",MapPin], ["schedule","موعد الرحلة",CalendarDays],
+          ] as const).map(([id,label,Icon])=><button key={id} onClick={()=>setLaunchTab(id)} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{background:launchTab===id?"#fff":"transparent",border:launchTab===id?`1px solid ${B.border}`:"1px solid transparent",color:launchTab===id?B.black:B.muted,boxShadow:launchTab===id?"0 1px 3px rgba(0,0,0,.05)":"none"}}><Icon size={13} style={{color:launchTab===id?B.gold:undefined}}/>{label}</button>)}
+        </div>
         <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{scrollbarWidth:"none"}}>
+          {launchTab==="basics"&&<>
           {/* 1) الباقة */}
           <div>
             <Field label={<>الباقة {req}</>}>
@@ -294,7 +342,8 @@ function TripFormModal({
                 <Bus size={12} style={{color:B.gold}}/>
                 <span>اللوحة <b style={{color:B.black}}>{form.busPlate||"—"}</b></span>·
                 <span>الرقم التعريفي <b style={{color:B.black}}>{form.busCode||"—"}</b></span>·
-                <span>السعة <b style={{color:B.black}}>{isEdit?initial!.seats:selVehicle.seats}</b> مقعد {isEdit?"(ثابتة)":"— من المركبة"}</span>
+                <span>السعة <b style={{color:B.black}}>{isEdit?initial!.seats:selVehicle.seats}</b> مقعد لكل باص</span>·
+                <span><b style={{color:B.black}}>{fleetCount}</b> {fleetCount===1?"باص متاح":"باصات متاحة"}</span>
               </div>)}
             {isEdit&&selVehicle&&selVehicle.seats!==initial!.seats&&!tooSmall&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl" style={warn}>
@@ -310,7 +359,7 @@ function TripFormModal({
               </div>)}
             {conflict&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl leading-relaxed" style={danger}>
-                ⚠ المركبة مرتبطة برحلة <b>{conflictName}</b> <span className="font-mono">({conflict.id})</span> من {shortDate(conflict.departureDate)} إلى {shortDate(conflict.returnDate||conflict.departureDate)} — اختر مركبةً أخرى أو غيّر التاريخ.
+                ⚠ كل الباصات المتاحة من هذا النوع ({fleetCount}) مرتبطة برحلات متداخلة، منها <b>{conflictName}</b> <span className="font-mono">({conflict.id})</span> — زد عدد الباصات في سجل النوع أو غيّر التاريخ.
               </div>)}
           </div>
           {/* 3) السائقون */}
@@ -330,51 +379,42 @@ function TripFormModal({
               ))}
             </div>
           </div>
-          {/* 4) نقطة الانطلاق */}
-          <div>
-            <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>مدينة الانطلاق {req}</label>
-            <AppSelect value={form.departureCity} placeholder="اختر مدينة الانطلاق"
-              onChange={city=>setForm(f=>({...f,departureCity:city,branchId:"",departurePoint:"",departureMapUrl:"",departureAddress:""}))}
-              options={departureCities.map(city=>({value:city,label:city}))}/>
-            <label className="block text-xs font-bold mt-4 mb-1.5" style={{color:B.text3}}>نقطة الانطلاق {req}</label>
-            <div className="flex gap-2 mb-2">
-              {([["branch","من الفروع"],["custom","موقع آخر (خريطة)"]] as const).map(([m,lbl])=>(
-                <button key={m} type="button" onClick={()=>setDepMode(m)} className="flex-1 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{border:`1px solid ${depMode===m?B.gold:B.border}`,background:depMode===m?B.gold:"#fff",color:depMode===m?B.black:B.text2}}>{lbl}</button>
-              ))}
+          </>}
+          {launchTab==="stops"&&<>
+          {/* محطات الصعود: رحلة ومقاعد واحدة، والباص يمر بالفروع بالترتيب. */}
+          <div className="rounded-2xl p-4" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div><div className="text-sm font-extrabold" style={{color:B.black}}>محطات الانطلاق {req}</div>
+                <p className="text-xs mt-1" style={{color:B.muted}}>أضف الفروع التي يمر عليها الباص، وحدد وقت الصعود في كل فرع.</p></div>
+              <button onClick={addStop} className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0" style={{background:"#fff",border:`1px solid ${B.border}`,color:"#8A6A08"}}><Plus size={12}/>محطة</button>
             </div>
-            {depMode==="branch"
-              ? <>
-                  <AppSelect value={form.branchId} placeholder={form.departureCity?"اختر نقطة الانطلاق":"اختر المدينة أولاً"} onChange={pickBranch}
-                    disabled={!form.departureCity} options={departurePoints.map(b=>({value:b.id,label:b.name}))}/>
-                  {form.branchId&&form.departureAddress&&<div className="text-xs mt-1.5 flex items-center gap-1.5" style={{color:B.muted}}><MapPin size={11} style={{color:B.gold}}/>{form.departureAddress} <span style={{opacity:.7}}>— يُحفظ مع الرحلة كما هو الآن</span></div>}
-                </>
-              : <div className="flex flex-col gap-2">
-                  <input className={inp} style={ist} value={form.departurePoint} placeholder="اسم نقطة الانطلاق" onChange={e=>setForm(f=>({...f,branchId:"",departureAddress:"",departurePoint:e.target.value}))}/>
-                  <div className="flex items-center gap-2">
-                    <Link2 size={15} style={{color:B.muted,flexShrink:0}}/>
-                    <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.departureMapUrl} placeholder="https://maps.google.com/…" onChange={e=>setForm(f=>({...f,branchId:"",departureAddress:"",departureMapUrl:e.target.value}))}/>
-                  </div>
-                </div>}
+            <div className="flex flex-col gap-2">
+              {form.departureStops.map((stop,index)=><div key={stop.id} className="grid grid-cols-[30px_1fr_116px_32px] gap-2 items-center">
+                <span className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-extrabold" style={{background:index===0?B.gold:"#fff",border:`1px solid ${index===0?B.gold:B.border}`,color:index===0?B.black:B.text2}}>{index+1}</span>
+                <AppSelect value={stop.branchId} placeholder="اختر الفرع" onChange={id=>pickStop(stop.id,id)} options={activeBranches.map(b=>({value:b.id,label:`${b.city} · ${b.name}`}))}/>
+                <input type="time" aria-label={`وقت محطة ${index+1}`} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={stop.time} onChange={e=>setStopTime(stop.id,e.target.value)}/>
+                <button aria-label="حذف المحطة" title="حذف المحطة" disabled={form.departureStops.length===1} onClick={()=>removeStop(stop.id)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:"#BE2626",opacity:form.departureStops.length===1 ? .4 : 1}}><X size={12}/></button>
+              </div>)}
+            </div>
           </div>
-          {/* 5) الذهاب */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><Field label={<>تاريخ الذهاب {req}</>} hint={isEdit?"ثابتٌ بعد الإطلاق — بيعت مقاعد على هذا الموعد.":undefined}>
-                   <ArabicDatePicker value={form.departureDate} onChange={setDeparture} minDate={todayStart()} disabled={isEdit}/>
-                 </Field></div>
-            <div><Field label={<>وقت الانطلاق {req}</>}>
-                   <input type="time" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.departureTime} onChange={e=>set("departureTime",e.target.value)}/>
-                 </Field></div>
+          </>}
+          {launchTab==="schedule"&&<>
+          {/* الموعد تبويب كامل وتقويم ثابت؛ لا نافذةٌ تقفز فوق النموذج. */}
+          <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
+            <div className="flex items-center gap-2 mb-3"><CalendarDays size={16} style={{color:B.gold}}/><div className="text-sm font-extrabold" style={{color:B.black}}>موعد الرحلة</div></div>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button disabled={isEdit} onClick={()=>setScheduleTarget("departure")} className="rounded-xl p-3 text-right cursor-pointer" style={{background:scheduleTarget==="departure"?"#FFF4DE":B.fill,border:`1px solid ${scheduleTarget==="departure"?"#E6C77F":B.border}`,opacity:isEdit ? .65 : 1}}>
+                <span className="block text-xs font-bold" style={{color:B.muted}}>تاريخ الذهاب {req}</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.departureDate?`${dayName(form.departureDate)} · ${shortDate(form.departureDate)}`:"اختر التاريخ"}</span>
+              </button>
+              <button onClick={()=>setScheduleTarget("return")} className="rounded-xl p-3 text-right cursor-pointer" style={{background:scheduleTarget==="return"?"#FFF4DE":B.fill,border:`1px solid ${scheduleTarget==="return"?"#E6C77F":B.border}`}}>
+                <span className="block text-xs font-bold" style={{color:B.muted}}>تاريخ العودة</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.returnDate?`${dayName(form.returnDate)} · ${shortDate(form.returnDate)}`:"اختياري"}</span>
+              </button>
+            </div>
+            <div className="trip-schedule-calendar flex justify-center py-2" dir="rtl">
+              <Calendar value={(scheduleTarget==="departure"?form.departureDate:form.returnDate) ? new DateObject({date:scheduleTarget==="departure"?form.departureDate:form.returnDate,format:"YYYY-MM-DD",calendar:gregorian,locale:gregorian_ar}) : undefined} calendar={gregorian} locale={FULL_AR_WEEKDAYS} weekStartDayIndex={6} className="teal rmdp-mobile" minDate={scheduleTarget==="return"&&form.departureDate?parseYMDDate(form.departureDate):todayStart()} onChange={(d:DateObject)=>{const value=d.convert(gregorian,gregorian_en).format("YYYY-MM-DD"); if(scheduleTarget==="departure") setDeparture(value); else setReturn(value);}} />
+            </div>
           </div>
-          {/* 6) العودة */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><Field label="تاريخ العودة" hint={!isEdit&&selPkg&&!returnTouched&&form.returnDate?`مقترح من أيام الباقة (${selPkg.days}) — يمكن تغييره`:undefined}>
-                   <ArabicDatePicker value={form.returnDate} onChange={setReturn} minDate={form.departureDate?parseYMDDate(form.departureDate):todayStart()} invalid={returnInvalid}/>
-                 </Field></div>
-            <div><Field label="وقت العودة" hint="متى تُعدّ الرحلة منتهية">
-                   <input type="time" className={inp} style={form.returnDate?{...ist,direction:"ltr",textAlign:"right"}:{...istOff,direction:"ltr",textAlign:"right"}} value={form.returnTime} disabled={!form.returnDate} onChange={e=>set("returnTime",e.target.value)}/>
-                 </Field></div>
-          </div>
+          </>}
           {returnInvalid&&<div className="text-xs font-bold -mt-2" style={{color:"#BE2626"}}>
             {form.returnDate===form.departureDate?"وقت العودة يسبق وقت الانطلاق في اليوم نفسه":"تاريخ العودة لا يسبق الذهاب"}
           </div>}
@@ -539,6 +579,7 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
   trip:Trip;pkgName:string;hotelName:string;transportName:string;branch?:Branch;impact:CancelImpact;canEdit:boolean;
   onEdit:()=>void;onExtra:()=>void;onToggleStatus:()=>void;onCancel:(reason:string)=>void;onClose:()=>void;
 }) {
+  const navigate=useNavigate();
   const [confirmCancel,setConfirmCancel]=useState(false);
   const state=tripState(trip);
   const {capacity,booked,available}=seatsOf(trip);
@@ -649,6 +690,12 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
             {isFull?"استئناف الحجز":"إيقاف الحجز مؤقتاً"}</button>}
           {!isCancelled&&!isEnded&&<button onClick={()=>setConfirmCancel(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}><X size={13}/>إلغاء الرحلة</button>}
+          {/* الكشف والكروكي ليسا إجراءً على الرحلة بل قراءةٌ لها، فيبقيان
+              متاحَين بعد انتهائها وبعد إلغائها — تُراجَع ولا تُعدَّل. */}
+          <button onClick={()=>navigate(`/admin/manifests?trip=${encodeURIComponent(trip.id)}`)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+            style={{background:"#fff",color:B.text3,border:`1px solid ${B.border}`}}>
+            <ClipboardList size={13}/>كشف المقاعد والكروكي</button>
           {isEnded&&<span className="flex items-center px-4 py-2.5 text-xs font-bold" style={{color:B.muted}}>انتهت هذه الرحلة — لا إجراءات تشغيلية عليها.</span>}
           <button onClick={onClose} className="mr-auto px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إغلاق</button>
         </div>
@@ -1057,6 +1104,7 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const [pkgFilter,setPkgFilter]=useState("all");
   const [cityFilter,setCityFilter]=useState("all");
   const [dateFilter,setDateFilter]=useState("");
+  const [dateFilterOpen,setDateFilterOpen]=useState(false);
   const [picked,setPicked]=useState<string|null>(null);
   const [showLaunch,setShowLaunch]=useState(false);
   const [launchPkgId,setLaunchPkgId]=useState<string|undefined>(undefined);
@@ -1074,6 +1122,11 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const branchOf=(id:string)=>branches.find(b=>b.id===id);
   /* المدينة من لقطة الرحلة، وتُستكمل من الفرع للرحلات التي سبقت العمود. */
   const cityOf=(t:Trip)=>t.departureCity||branchOf(t.branchId)?.city||"";
+  /* رحلة المحطات المتعددة تظهر تحت كل مدينة يمر عليها الباص، لا تحت
+     أول محطة فقط. عنوان الجدول يبقى مدينة البداية (cityOf). */
+  const citiesOf=(t:Trip)=>t.departureStops?.length
+    ? [...new Set(t.departureStops.map(s=>s.city.trim()).filter(Boolean))]
+    : [cityOf(t)].filter(Boolean);
 
   function toggleStatus(id:string){ setTrips(p=>p.map(t=>t.id===id?{...t,status:t.status==="full"?"open":"full"}:t)); }
   function cancelTrip(trip:Trip,reason:string){
@@ -1099,15 +1152,15 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
   const {upcoming,past}=splitByHorizon(trips);
   const periodTrips = horizon==="past" ? past : upcoming;
 
-  const cities=[...new Set(trips.map(cityOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ar"));
+  const cities=[...new Set(trips.flatMap(citiesOf))].sort((a,b)=>a.localeCompare(b,"ar"));
 
   /* المرشّحات على الحالة المعروضة لا المخزّنة: «ممتلئة» لا تُرجع رحلةً
      أُوقف حجزها وفيها مقاعد، و«مفتوحة» لا تُرجع رحلةً انطلقت أمس. */
   const matches=(t:Trip)=>
     (stateFilter==="all"||tripBoardState(t)===stateFilter)&&
     (pkgFilter==="all"||t.packageId===pkgFilter)&&
-    (cityFilter==="all"||cityOf(t)===cityFilter)&&
-    (!query||t.id.toLowerCase().includes(query.toLowerCase())||pkgName(t.packageId).includes(query)||cityOf(t).includes(query)||t.departurePoint.includes(query)||(t.busPlate||"").includes(query));
+    (cityFilter==="all"||citiesOf(t).includes(cityFilter))&&
+    (!query||t.id.toLowerCase().includes(query.toLowerCase())||pkgName(t.packageId).includes(query)||citiesOf(t).some(city=>city.includes(query))||t.departurePoint.includes(query)||(t.busPlate||"").includes(query));
 
   /* التقويم يقرأ كل ما بقي بعد المرشّحات عدا التاريخ: تحديدُ يومٍ يضيّق
      الجدول ولا يُفرغ الشهر الذي يُقرأ منه التوزيع. */
@@ -1193,8 +1246,9 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
           </div>
           <div style={{minWidth:160,flex:"1 1 160px",maxWidth:200}}>
             <label className="block mb-1 font-bold" style={{fontSize:11,color:B.muted}}>التاريخ</label>
-            {/* اختيار تاريخٍ يضيّق الجدول ويحدّد اليوم في التقويم معاً. */}
-            <ArabicDatePicker value={dateFilter} onChange={v=>{setDateFilter(v); setPicked(v||null);}} placeholder="كل التواريخ"/>
+            <button onClick={()=>setDateFilterOpen(true)} className="w-full h-[42px] px-3.5 rounded-xl flex items-center justify-between text-sm cursor-pointer" style={{background:"#fff",border:`1px solid ${dateFilter?B.gold:B.border}`,color:dateFilter?B.black:B.muted,fontFamily:"inherit"}}>
+              <span>{dateFilter ? `${dayName(dateFilter)} · ${shortDate(dateFilter)}` : "كل التواريخ"}</span><CalendarDays size={15} style={{color:dateFilter?B.gold:B.muted}}/>
+            </button>
           </div>
           {filtersOn&&(
             <button onClick={clearFilters} className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold cursor-pointer"
@@ -1237,6 +1291,7 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
         </EntityGate>
       </main>
       <AnimatePresence>
+        {dateFilterOpen&&<TripDateFilterModal value={dateFilter} onChoose={v=>{setDateFilter(v);setPicked(v);}} onClear={()=>{setDateFilter("");setPicked(null);}} onClose={()=>setDateFilterOpen(false)}/>} 
         {detailTrip&&(
           <TripDetailsModal trip={detailTrip} pkgName={pkgName(detailTrip.packageId)} hotelName={hotelName(detailTrip.hotelId)}
             transportName={transportName(detailTrip.transportId)} branch={branchOf(detailTrip.branchId)}

@@ -10,10 +10,18 @@
 
    ٢٠٢٦-٠٩-١٣: «/» صارت تجربة Focus. النقل في نقطة الدخول وحدها —
    الشاشات وأسماؤها ومنطق الحجز كما هي، والمتغيّر أيُّ شاشةٍ يفتحها
-   الجذر وأين يقع الاستكشاف القديم. */
+   الجذر وأين يقع الاستكشاف القديم.
+
+   ٢٠٢٦-٠٩-١٦: حُذف الاستكشاف القديم وصفحة الباقة القديمة. لم يعودا
+   مسارين بلا وارد: زر ✕ في تسجيل الدخول كان يقذف من بدأ حجزه في
+   Focus إلى /p/:id — تصميمٍ آخر في منتصف مسار. تجربةٌ واحدة أقلّ
+   عطباً من تجربتين إحداهما لا يدخلها أحد قصداً.
+
+   و/p/:id و/classic لا يُحوَّلان: صارا مسارين مجهولين يفتحان الرئيسية.
+   قرار يوسف صراحةً — رابط باقةٍ قديم يصل إلى الرئيسية لا إلى الباقة. */
 export type Screen =
-  | "packages" | "focus" | "focusListing" | "focusConfigure" | "listing" | "custom" | "passengers" | "review"
-  | "success" | "track" | "profile" | "login" | "otp" | "account";
+  | "focus" | "focusListing" | "focusConfigure" | "custom" | "passengers" | "review"
+  | "success" | "track" | "profile" | "login" | "otp" | "account" | "recover";
 
 /** الرئيسية الرسمية. تجربة Focus لم تعد تجربةً جانبية: هي الصفحة التي
     تُفتح على «/» ومسار الحجز الأساسي.
@@ -23,14 +31,9 @@ export type Screen =
     النقل إن ظهر عطب — تعديلُ سطرٍ واحد لا مطاردةُ نداءات. */
 export const HOME: Screen = "focus";
 
-/** الاستكشاف القديم. لم يُحذف ولم يُمسّ تصميمه؛ نُقل إلى مسارٍ داخلي
-    (/classic) ليبقى قابلاً للفتح والمقارنة حتى تستقرّ الرئيسية الجديدة،
-    ولا تُربط إليه الواجهة ولا يُشارَك رابطه. */
-export const LEGACY_HOME: Screen = "packages";
-
 export interface CustomerRoute {
   screen: Screen;
-  /** معرّف الباقة من المسار — في /p/:id و/book/:id/:step. */
+  /** معرّف الباقة من المسار — في /focus/p/:id و/focus/book/:id و/book/:id/:step. */
   packageId?: string;
   /** مسار لا نعرفه. تُرسَم عليه الرئيسية ويُصحَّح العنوان إلى «/»:
       بلا هذه الراية كان /أي-شيء يعرض الصفحة الأولى ويُبقي المسار
@@ -51,10 +54,7 @@ const isBookStep = (s: string): s is BookStep =>
   (BOOK_STEPS as readonly string[]).includes(s);
 
 /** الخطوات التي تحتاج باقة مُحدّدة — بدونها المسار ناقص ويُعاد توجيهه. */
-export const NEEDS_PACKAGE: Screen[] = ["listing", "focusListing", "focusConfigure", ...BOOK_STEPS];
-
-/** ترتيب خطوات المسار — لحساب «الخطوة السابقة» ولمنع القفز للأمام. */
-export const STEP_ORDER: Screen[] = ["listing", "passengers", "review", "success"];
+export const NEEDS_PACKAGE: Screen[] = ["focusListing", "focusConfigure", ...BOOK_STEPS];
 
 export function parseRoute(pathname: string): CustomerRoute {
   const seg = pathname.split("/").filter(Boolean).map(decodeURIComponent);
@@ -65,8 +65,6 @@ export function parseRoute(pathname: string): CustomerRoute {
   /* /focus ما زال يعمل — يفتح الرئيسية نفسها ثم يُصحَّح العنوان إلى «/».
      كلّ رابطٍ أُرسل أيام التجربة يصل إلى نفس الصفحة، لا إلى 404. */
   if (a === "focus") return { screen: "focus", legacyPath: true };
-  if (a === "classic") return { screen: "packages" };
-  if (a === "p" && b) return { screen: "listing", packageId: b };
   if (a === "book" && b) {
     /* خطوة مجهولة في مسار حجز صحيح ⇒ أول خطوة، لا صفحة الاستكشاف:
        الباقة معروفة فلا يُفقد سياق المستفيد على خطأ إملائي في الرابط. */
@@ -77,6 +75,10 @@ export function parseRoute(pathname: string): CustomerRoute {
   if (a === "profile") return { screen: "profile" };
   if (a === "account") return { screen: "account" };
   if (a === "login") return { screen: b === "otp" ? "otp" : "login" };
+  /* وجهة رابط استعادة كلمة المرور. مسارٌ خاصّ لا الجذر: الرمز في
+     ?code يُبدَّل بجلسةٍ مرّةً واحدة، ووضوح المسار يمنع الخلط بينه
+     وبين زيارةٍ عادية للرئيسية. */
+  if (a === "recover") return { screen: "recover" };
   return { screen: HOME, unknown: true };
 }
 
@@ -84,21 +86,17 @@ export function pathOf(screen: Screen, packageId?: string): string {
   const pid = packageId ? encodeURIComponent(packageId) : "";
   switch (screen) {
     case "focus":      return "/";
-    /* مسارات Focus الداخلية تبقى كما هي: كل رابطٍ منشور يعمل بلا تحويل،
-       وتوحيدها تحت «/p» و«/book» يأتي في التنظيف بعد استقرار الرئيسية —
-       لأنه يعني إعادةَ توجيه /p/:id إلى تصميمٍ آخر، وذلك قرارٌ وحده. */
     case "focusListing": return pid ? `/focus/p/${pid}` : "/";
     case "focusConfigure": return pid ? `/focus/book/${pid}` : "/";
-    case "packages":   return "/classic";
     case "custom":     return "/custom";
     case "track":      return "/orders";
     case "profile":    return "/profile";
     case "account":    return "/account";
     case "login":      return "/login";
     case "otp":        return "/login/otp";
-    /* بلا باقة لا معنى للمسار — يعود للاستكشاف بدل مسار مبتور
-       مثل /p/ أو /book//review يفتح صفحة فارغة. */
-    case "listing":    return pid ? `/p/${pid}` : "/classic";
+    case "recover":    return "/recover";
+    /* بلا باقة لا معنى للمسار — يعود للرئيسية بدل مسار مبتور
+       مثل /book//review يفتح صفحة فارغة. */
     default:           return pid ? `/book/${pid}/${screen}` : "/";
   }
 }

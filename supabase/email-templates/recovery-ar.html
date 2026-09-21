@@ -1,0 +1,115 @@
+<!--
+  قالب رسالة «استعادة كلمة المرور» بالعربية.
+
+  لا يقرأ التطبيق هذا الملف: مكانه لوحة Supabase ←
+  Authentication ← Emails ← Reset Password. يُحفَظ هنا لأن النص
+  الموجود في لوحةٍ خارجية لا يُراجَع ولا يُستعاد إذا ضاع، ولأن تغييره
+  تغييرُ ما يقرؤه العميل — شأنه شأن أي نصٍّ في الواجهة.
+
+  عنوان الرسالة (Subject) يُضبط في نفس الصفحة:
+    إعادة تعيين كلمة المرور · تساهيل العمرة
+
+  المتغيّر الوحيد المستعمل {{ .ConfirmationURL }} — يوجّه إلى
+  /auth/v1/verify ثم يعود إلى /recover?code=… في الموقع.
+
+  ⚠️ ذيل «powered by Supabase» و«Opt out of these emails» ليس من هذا
+  القالب ولا يُحذف منه: تضيفه خدمة البريد المشتركة لدى Supabase.
+  يزول وحده عند ضبط SMTP خاص.
+
+  بريد الشركة: جداول لا flexbox، وأنماط داخل السمات لا ورقة أنماط —
+  Outlook وGmail يُسقطان ما عدا ذلك.
+-->
+<div dir="rtl" lang="ar" style="margin:0;padding:0;background:#FAF8F4;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background:#FAF8F4;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:520px;background:#FFFFFF;border:1px solid #E7E0D3;border-radius:16px;overflow:hidden;">
+
+          <!-- الترويسة -->
+          <tr>
+            <td align="center" style="background:#154C48;padding:22px 24px;">
+              <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:19px;font-weight:700;color:#FFFFFF;">
+                تساهيل العمرة
+              </div>
+              <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:11px;color:#E7C271;letter-spacing:1px;margin-top:4px;">
+                TASAHEEL AL-UMRAH
+              </div>
+            </td>
+          </tr>
+
+          <!-- المتن -->
+          <tr>
+            <td style="padding:28px 24px 8px;" dir="rtl">
+              <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:19px;font-weight:700;color:#1B1712;text-align:right;">
+                إعادة تعيين كلمة المرور
+              </div>
+              <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:14px;line-height:1.9;color:#5C5348;text-align:right;margin-top:10px;">
+                السلام عليكم ورحمة الله،<br>
+                وصلنا طلبٌ لإعادة تعيين كلمة مرور حسابك في تساهيل العمرة.
+                اضغط الزر أدناه لاختيار كلمة مرور جديدة.
+              </div>
+            </td>
+          </tr>
+
+          <!-- الزر -->
+          <tr>
+            <td align="center" style="padding:22px 24px 6px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" bgcolor="#C0862C" style="border-radius:12px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:14px 34px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:15px;font-weight:700;color:#1B1712;text-decoration:none;border-radius:12px;">
+                      تعيين كلمة مرور جديدة
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- الرابط نصّاً: بعض العملاء يُسقطون الأزرار أو يمنعون الضغط -->
+          <tr>
+            <td style="padding:14px 24px 0;" dir="rtl">
+              <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:12px;color:#7A7168;text-align:right;line-height:1.8;">
+                لم يعمل الزر؟ انسخ هذا الرابط وافتحه في المتصفح:
+              </div>
+              <div dir="ltr" style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:11px;color:#1F6F6B;word-break:break-all;text-align:left;margin-top:6px;">
+                {{ .ConfirmationURL }}
+              </div>
+            </td>
+          </tr>
+
+          <!-- تنبيه -->
+          <tr>
+            <td style="padding:20px 24px 0;" dir="rtl">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background:#F7EEDC;border:1px solid #E7E0D3;border-radius:12px;">
+                <tr>
+                  <td style="padding:12px 14px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:12px;line-height:1.9;color:#5C5348;text-align:right;">
+                    هذا الرابط يُستعمل مرّةً واحدة وتنتهي صلاحيته بعد مدّة قصيرة.
+                    <br>
+                    وإن لم تطلب هذا فتجاهل الرسالة — كلمة مرورك الحالية لم تتغيّر.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- التذييل -->
+          <tr>
+            <td align="center" style="padding:22px 24px 24px;">
+              <div style="border-top:1px solid #E7E0D3;padding-top:16px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:11px;color:#7A7168;line-height:1.8;">
+                تساهيل العمرة · tasaaheel.sa
+                <br>
+                هذه رسالة آلية — للاستفسار تواصل معنا عبر الموقع.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>

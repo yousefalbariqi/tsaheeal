@@ -21,13 +21,34 @@ export interface Pax {
   gender: "male" | "female"; ageGroup: "adult" | "child";
 }
 
+/** تفصيل عدد المعتمرين في خطوة الحجز. يبقى إجماليهم في `persons` لعقد
+    الحجز الحالي، بينما يحفظ هذا التفصيل واجهة الاختيار ويستنتج منه نوع
+    الجمهور المناسب للسكن. */
+export interface TravellerCounts {
+  men: number;
+  women: number;
+}
+
+export const emptyTravellerCounts = (): TravellerCounts => ({ men: 0, women: 0 });
+export const travellerCountTotal = (counts: TravellerCounts) => counts.men + counts.women;
+
+/** السكن المقيد لا يفهم إلا جمهوراً واحداً. المجموعة المختلطة تعامل
+    كعائلة؛ أما مجموعة المعتمرين أو المعتمرات وحدها فتأخذ فئتها
+    المباشرة. */
+export const travellerTypeForCounts = (counts: TravellerCounts): TravellerType | "" => {
+  if (!travellerCountTotal(counts)) return "";
+  if (counts.men > 0 && counts.women === 0) return "male_solo";
+  if (counts.women > 0 && counts.men === 0) return "female_solo";
+  return "family";
+};
+
 export const emptyPax = (): Pax => ({
   name: "", phone: "", docType: "", idNumber: "", nationality: "",
   birthDate: "", gender: "male", ageGroup: "adult",
 });
 
 const KEY = "tasaheel_booking_draft";
-const VERSION = 5;
+const VERSION = 7;
 /* عمر المسوّدة — تبويب متروك مفتوحاً أياماً لا يعيد أسعاراً ورحلات
    قديمة إلى شاشة المراجعة. الرحلة قد امتلأت أو انطلقت أصلاً. */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -37,8 +58,8 @@ export interface BookingDraft {
   packageId: string;
   tripId: string | null;
   persons: number;
+  travellerCounts: TravellerCounts;
   split: RoomSplit | null;
-  bookingMode: "full" | "transport";
   travellerType: TravellerType | "";
   pax: Pax[];
   agreed: boolean;
@@ -58,7 +79,10 @@ export function readDraft(): BookingDraft | null {
       d && d.v === VERSION &&
       typeof d.packageId === "string" && d.packageId.length > 0 &&
       Array.isArray(d.pax) && d.pax.length > 0 &&
-      typeof d.persons === "number" && d.persons > 0 &&
+      typeof d.persons === "number" && d.persons >= 0 &&
+      !!d.travellerCounts && typeof d.travellerCounts === "object" &&
+      ["men", "women"].every(key => typeof (d.travellerCounts as TravellerCounts)[key as keyof TravellerCounts] === "number" && (d.travellerCounts as TravellerCounts)[key as keyof TravellerCounts] >= 0) &&
+      travellerCountTotal(d.travellerCounts as TravellerCounts) === d.persons &&
       typeof d.savedAt === "number" &&
       Date.now() - d.savedAt < MAX_AGE_MS;
     if (!ok) { clearDraft(); return null; }
@@ -67,8 +91,8 @@ export function readDraft(): BookingDraft | null {
       packageId: d.packageId as string,
       tripId: typeof d.tripId === "string" ? d.tripId : null,
       persons: d.persons as number,
+      travellerCounts: d.travellerCounts as TravellerCounts,
       split: (d.split ?? null) as RoomSplit | null,
-      bookingMode: d.bookingMode === "transport" ? "transport" : "full",
       travellerType: d.travellerType === "male_solo" || d.travellerType === "female_solo" || d.travellerType === "family" ? d.travellerType : "",
       /* كل معتمر يُدمج فوق سجل فارغ: حقلٌ أُضيف بعد كتابة المسوّدة
          يأتي بقيمته الافتراضية بدل undefined يصل إلى القاعدة. */

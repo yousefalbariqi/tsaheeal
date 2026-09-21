@@ -126,6 +126,55 @@ export function typeBadge(t:string) {
   return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:isVip?"rgba(192,134,44,0.12)":"#EEECEA",color:isVip?B.black:B.text2,border:isVip?"1px solid rgba(192,134,44,0.3)":"none"}}>{t}</span>;
 }
 
+type CopySection = "program" | "features" | "policies" | "reviews";
+const COPY_SECTION_LABEL: Record<CopySection, string> = {
+  program: "تفاصيل البرنامج", features: "مميزات الرحلة", policies: "السياسات", reviews: "الآراء",
+};
+
+/* استيراد القسم المقصود وحده يحفظ هوية الباقة الجديدة: لا ننقل الفندق
+   أو السعر أو الغرف عرضاً، بل النصوص المتشابهة فقط التي يكررها الفريق. */
+function CopyFromPackageModal({ section, sources, onImport, onClose }: {
+  section: CopySection; sources: Pkg[];
+  onImport: (source: Pkg, mode: "replace" | "append") => void; onClose: () => void;
+}) {
+  const [sourceId, setSourceId] = useState(sources[0]?.id ?? "");
+  const source = sources.find(p => p.id === sourceId);
+  const count = source ? ({
+    program: source.program.filter(s => !s.archived).length,
+    features: source.features.length,
+    policies: source.policies.filter(x => x.trim()).length,
+    reviews: source.reviews.length,
+  } as Record<CopySection, number>)[section] : 0;
+  const label = COPY_SECTION_LABEL[section];
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(14,12,11,.62)", backdropFilter: "blur(3px)" }} onClick={onClose}>
+      <motion.div initial={{ opacity: 0, y: 16, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }}
+        className="w-full rounded-2xl p-5" style={{ maxWidth: 480, background: "#fff", border: `1px solid ${B.border}` }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 mb-4">
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#FFF4DE", color: "#8A6200" }}><Copy size={17} /></span>
+          <div className="flex-1"><h3 className="text-sm font-extrabold" style={{ color: B.black }}>استيراد {label}</h3>
+            <p className="text-xs mt-1 leading-relaxed" style={{ color: B.muted }}>اختر باقةً جاهزة. لا تُنسخ الأسعار أو الغرف أو الفندق.</p></div>
+          <button onClick={onClose} aria-label="إغلاق" className="w-8 h-8 rounded-lg cursor-pointer" style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}><X size={14} /></button>
+        </div>
+        {sources.length ? <>
+          <Field label="الباقة المصدر"><AppSelect value={sourceId} onChange={setSourceId} options={sources.map(p => ({ value: p.id, label: `${p.name || p.id} · ${p.destination}` }))} /></Field>
+          <div className="mt-3 rounded-xl px-3.5 py-3 text-xs" style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
+            سيُنسخ <b style={{ color: B.black }}>{count}</b> {section === "program" ? "مرحلة" : section === "features" ? "ميزة" : section === "policies" ? "سياسة" : "رأي"} من <b style={{ color: B.black }}>{source?.name || "الباقة المختارة"}</b>.
+          </div>
+          <div className="flex flex-wrap gap-2 mt-5">
+            <button disabled={!source || count === 0} onClick={() => source && onImport(source, "replace")}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{ background: B.gold, border: "none", color: B.black, opacity: !source || count === 0 ? .5 : 1 }}>استبدال محتوى القسم</button>
+            <button disabled={!source || count === 0} onClick={() => source && onImport(source, "append")}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer" style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2, opacity: !source || count === 0 ? .5 : 1 }}>إضافة إلى الموجود</button>
+          </div>
+          <p className="text-xs mt-2" style={{ color: B.muted }}>«استبدال» يحذف محتوى هذا القسم في الباقة الحالية فقط؛ لا يمس الباقة المصدر.</p>
+        </> : <div className="rounded-xl p-4 text-xs leading-relaxed" style={{ background: B.fill, color: B.muted }}>لا توجد باقة أخرى يمكن الاستيراد منها بعد.</div>}
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ─── Add Package Modal ─── */
 /* الحفظ الأول مسودة دائماً — لا خيار حالة في هذا النموذج.
 
@@ -602,7 +651,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
   const [leaving,setLeaving]=useState(false);
   const [draftReady,setDraftReady]=useState(false);
   const [deleting,setDeleting]=useState(false);
+  const [copySection,setCopySection]=useState<CopySection | null>(null);
   const setPackages=useStore(s=>s.setPackages);
+  const packages=useStore(s=>s.packages);
   const {canWrite,isAdmin}=useRole();
   const mayWrite=canWrite("packages");
   const autosaveDelay = useRef(900);
@@ -740,6 +791,31 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
     reader.readAsText(file,"UTF-8");
   };
 
+  const copySources = packages.filter(p => p.id !== pkg.id);
+  const importFromPackage = (source: Pkg, mode: "replace" | "append") => {
+    if (!copySection) return;
+    if (copySection === "program") {
+      const incoming = source.program.filter(s => !s.archived).map(s => ({ ...s, id: uid(), archived: false }));
+      const next = mode === "replace" ? incoming : [...form.program, ...incoming];
+      set("program", next.map((s, index) => ({ ...s, order: index + 1 })));
+    }
+    if (copySection === "features") {
+      const incoming = source.features.map(f => ({ ...f, id: uid() }));
+      set("features", mode === "replace" ? incoming : [...form.features, ...incoming]);
+    }
+    if (copySection === "policies") {
+      const incoming = source.policies.filter(p => p.trim());
+      set("policies", mode === "replace" ? incoming : [...form.policies, ...incoming]);
+    }
+    if (copySection === "reviews") {
+      const incoming = source.reviews.map(r => ({ ...r, id: uid() }));
+      set("reviews", mode === "replace" ? incoming : [...form.reviews, ...incoming]);
+    }
+    saveImmediately();
+    toast.success(`تم استيراد ${COPY_SECTION_LABEL[copySection]} من «${source.name}»`);
+    setCopySection(null);
+  };
+
   const selTransport = transports.find(t=>t.id===form.transportId);
   const selHotel     = hotels.find(h=>h.id===form.hotelId);
   const TABS:{id:PkgTab;label:string}[]=[{id:"info",label:"المعلومات"},{id:"program",label:"تفاصيل البرنامج"},{id:"rooms",label:"الغرف والأسعار"},{id:"features",label:"مميزات الرحلة"},{id:"policies",label:"السياسات"},{id:"reviews",label:"الآراء"},{id:"settings",label:"الإعدادات"}];
@@ -767,7 +843,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             {/* المعاينة تفتح صفحة المستفيد نفسها لا نسخةً منها: نسخةٌ ثانية
                 تتفارق عن الأصل عند أول تعديل، فتُطمئن الموظف على شكلٍ لا
                 يراه أحد. تُفتح في تبويب جديد كي لا يُفقد ما لم يُحفظ. */}
-            <a href={`/p/${encodeURIComponent(form.id)}?preview=1`} target="_blank" rel="noopener noreferrer"
+            <a href={`/focus/p/${encodeURIComponent(form.id)}?preview=1`} target="_blank" rel="noopener noreferrer"
               title={dirty?"المعاينة تعرض آخر نسخة محفوظة — احفظ أولاً لترى تعديلاتك":"معاينة صفحة الباقة كما يراها العميل"}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold no-underline"
               style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
@@ -997,7 +1073,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 {selHotel&&!isPublished(selHotel.status)&&(
                   <div className="rounded-xl px-3.5 py-2.5 text-xs font-bold leading-relaxed"
                     style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#8A6A08"}}>
-                    هذا الفندق {selHotel.status==="draft"?"مسودة":"متوقف"} — لن يراه العميل حتى يُنشر من شاشة الفنادق.
+                    هذا الفندق متوقف — لن يراه العميل حتى يُفعَّل من شاشة الفنادق.
                   </div>
                 )}
                 {selHotel && (()=>{ const cover=selHotel.media?.find(m=>m.primary&&m.kind==="image")?.url||selHotel.media?.find(m=>m.kind==="image")?.url; return (
@@ -1034,8 +1110,12 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold" style={{color:B.black}}>مراحل البرنامج</h3>
-                  <button onClick={addStage} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة مرحلة</button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={()=>setCopySection("program")} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={12}/>استيراد من باقة</button>
+                    <button onClick={addStage} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة مرحلة</button>
+                  </div>
                 </div>
                 <AnimatePresence>{activeStages.map((s,idx)=>(
                   <motion.div key={s.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
@@ -1140,15 +1220,16 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                التدفّق الآن من أعلى إلى أسفل — سعرٌ معلن، ثم سكن، ثم نقل —
                وإلى جانبه بطاقةٌ واحدة تجمع: السكن + النقل = الإجمالي، تتغيّر
                مع كل ضغطة مفتاح. الأرقام تُدخَل مرّةً وتُقرأ مرّة. */
-            const nights=form.nights;
-            const seatOf=(r:RoomPrice)=>r.seatCost ?? (selTransport?.seatCost ?? 0);
-            const stayOf=(r:RoomPrice)=>(r.perNight||0)*nights;
-            const totalOf=(r:RoomPrice)=>stayOf(r)+seatOf(r);
+            /* سعر النقل للباقة كلّها: ما كتبه الموظف، وإلا تكلفة مقعد
+               المركبة المرتبطة. رقمٌ واحد يقرؤه الجدول والملخّص معاً. */
+            const seatPrice=Math.max(0,form.seatCostOverride ?? selTransport?.seatCost ?? 0);
+            const stayOf=(r:RoomPrice)=>r.perNight||0;
+            const totalOf=(r:RoomPrice)=>stayOf(r)+seatPrice;
             /* الخيارات الأربعة تُشتقّ من roomPrices ولا تُخزَّن بجانبها:
                نسخةٌ ثانيةٌ تُزامَن تتفارق مع الأولى عند أول حفظٍ لم يُحسب. */
             /* الصفوف حرّة تُضاف وتُحذف: النوع والسعة والجمهور قرارات
                تجارية تتغيّر مع كل فندق، لا ثوابت تُدفن في الكود. */
-            const addRoom=()=>set("roomPrices",[...form.roomPrices,newTier(uid(),selTransport?.seatCost)]);
+            const addRoom=()=>set("roomPrices",[...form.roomPrices,newTier(uid())]);
             const delRoom=(id:string)=>set("roomPrices",form.roomPrices.filter(r=>r.id!==id));
             const updRoom=(id:string,patch:Partial<RoomPrice>)=>
               set("roomPrices",form.roomPrices.map(r=>r.id===id?{...r,...patch}:r));
@@ -1205,22 +1286,18 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 {/* ② السكن وأسعاره */}
                 <section className="rounded-2xl p-5" style={card}>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
-                    {step(2,BedDouble,"السكن وأسعاره",nights>0
-                      ?"نوع الغرفة وعدد أسرّتها وسعر الليلة للفرد، ولمن تُعرض. الليالي مأخوذة من مدة الباقة."
+                    {step(2,BedDouble,"السكن وأسعاره",form.nights>0
+                      ?"نوع الغرفة وعدد أسرّتها وسعر الليلة للغرفة، ولمن تُعرض. يحدد العميل عدد الغرف عند الحجز."
                       :"الباقة بلا مبيت (صفر ليالٍ) — السكن اختياري هنا.")}
                     <button onClick={addRoom} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
                       style={{background:B.gold,border:"none",color:B.black}}><Plus size={12}/>إضافة غرفة</button>
                   </div>
                   <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                     <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>
-                      × {nights} {nights===1?"ليلة":nights===2?"ليلتان":"ليالٍ"}
+                      سعر الليلة للغرفة الواحدة
                     </span>
-                    {selHotel&&selHotel.roomTypes.length>0&&(
-                      <span className="text-xs" style={{color:B.muted}}>
-                        للاسترشاد — أسعار {cleanHotelName(selHotel.name)}:{" "}
-                        {selHotel.roomTypes.map(rt=>`${rt.kind==="shared"?"مشترك":"خاصة"} ${sarNumber(rt.pricePerNight)}`).join(" · ")}
-                      </span>
-                    )}
+                    {/* لا أسعار «للاسترشاد» من صفّ الفندق: الفندق صار بطاقة
+                        تعريف بلا غرفٍ ولا أسعار، والسعر هنا هو المصدر. */}
                   </div>
                   {/* الصفّ يحمل قراره كاملاً: نوعه وعدد أسرّته وسعره ومن
                       تُعرض عليه. «يظهر لـ» عمودٌ لأنه يتغيّر من غرفةٍ إلى
@@ -1228,7 +1305,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       وحدها، كلها في باقةٍ واحدة. */}
                   <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
                     <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1.25fr .7fr .95fr 1.35fr .9fr 64px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
-                      {["النوع","عدد الأسرّة","سعر الليلة للفرد","يظهر لـ","إجمالي السكن","" ].map((h,i)=>(
+                      {["النوع","عدد الأسرّة","سعر الغرفة","يظهر لـ","إجمالي السكن","" ].map((h,i)=>(
                         <div key={i} className="px-2.5 py-2.5 text-center first:text-right">{h}</div>
                       ))}
                     </div>
@@ -1293,45 +1370,35 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                   </div>
                 </section>
 
-                {/* ③ المواصلات — قسم مستقل لا عمودٌ داخل جدول الغرف */}
+                {/* ③ المواصلات — وسيلةٌ وسعرٌ واحد، لا جدول */}
                 <section className="rounded-2xl p-5" style={card}>
-                  {step(3,BusIcon,"المواصلات","تكلفة المقعد تُضاف إلى سعر السكن لتكوّن الإجمالي للفرد. اخفضها كلما زاد عدد الأشخاص في الغرفة.")}
+                  {step(3,BusIcon,"المواصلات","سعرٌ واحد للفرد يشمل الذهاب والعودة، يُضرب في عدد الأشخاص ثم يُضاف إليه سعر الغرفة.")}
                   {selTransport
                     ? <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl mb-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
                         <span className="text-sm font-bold" style={{color:B.black}}>{selTransport.mode==="bus"?"🚌":"✈️"} {selTransport.name}</span>
-                        <span className="text-sm font-bold" style={{color:B.text2,fontFamily:"var(--font-app)"}}>{sar(selTransport.seatCost)}<span className="text-xs font-normal" style={{color:B.muted}}> /مقعد — القيمة المبدئية</span></span>
+                        <span className="text-xs" style={{color:B.muted}}>تُبدَّل من تبويب «المعلومات»</span>
                       </div>
                     : <div className="rounded-xl px-3.5 py-2.5 mb-3 text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#8A6A08"}}>
-                        لم تُربط مواصلة بعد — تكلفة المقعد المبدئية صفر. اربطها من تبويب «المعلومات».
+                        لم تُربط مواصلة بعد — اربطها من تبويب «المعلومات».
                       </div>}
-                  {form.roomPrices.length>0&&(
-                    <div className="rounded-xl overflow-hidden mb-3" style={{border:`1px solid ${B.border}`}}>
-                      <div className="grid text-xs font-bold" style={{gridTemplateColumns:"1fr 140px",background:B.fill,color:B.muted,borderBottom:`1px solid ${B.border}`}}>
-                        <div className="px-3 py-2.5">تكلفة المقعد لكل نوع سكن</div>
-                        <div className="px-3 py-2.5 text-center">ر.س / فرد</div>
-                      </div>
-                      {form.roomPrices.map(r=>(
-                        <div key={r.id} className="grid items-center" style={{gridTemplateColumns:"1fr 140px",borderTop:`1px solid ${B.border}`,background:"#fff"}}>
-                          <div className="px-3 py-2 text-xs font-bold" style={{color:B.text2}}>{tierLabel(r.type,r.persons)}</div>
-                          <div className="px-3 py-2"><NumericInput min={0} className="w-full border rounded-xl px-2 py-2 text-xs font-bold text-center focus:outline-none"
-                            style={{borderColor:r.seatCost!=null?B.gold:B.border,color:B.text2,fontFamily:"var(--font-app)"}} value={seatOf(r)}
-                            onValueChange={v=>updRoom(r.id,{seatCost:Number(v)})}/></div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="rounded-xl p-3.5" style={{background:form.transportOnlyEnabled?"#F3FAF5":B.fill,border:`1px solid ${form.transportOnlyEnabled?"#C4E4CE":B.border}`}}>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" checked={!!form.transportOnlyEnabled}
-                        onChange={e=>{saveImmediately();set("transportOnlyEnabled",e.target.checked);}} style={{accentColor:B.primary,width:16,height:16}}/>
-                      <span className="text-sm font-bold" style={{color:B.black}}>السماح بحجز مواصلات فقط (بلا سكن)</span>
-                    </label>
-                    {form.transportOnlyEnabled&&<div className="mt-3" style={{maxWidth:240}}>
-                      <Field label="سعر المواصلات للفرد (ر.س)" hint="سعر البيع للعميل، لا تكلفة المقعد الداخلية.">
-                        <NumericInput min={1} className={inp} style={{...ist,color:B.gold,fontWeight:800,direction:"ltr",textAlign:"right"}}
-                          value={form.transportOnlyPrice ?? ""} placeholder="مثال: 75" onValueChange={v=>set("transportOnlyPrice",v===""?undefined:Number(v))}/>
-                      </Field>
-                    </div>}
+                  {/* ٣٠) النقل لا يتبع الغرفة.
+
+                      كان الجدول يسأل عن تكلفة المقعد في كل صفّ سكن —
+                      مشتركة وخاصة وعائلية — والجواب في كل مرّة هو الرقم
+                      نفسه، لأن المقعد في الحافلة واحد مهما كان مبيت
+                      صاحبه. أربعة حقول تُملأ بقيمةٍ واحدة تفتح باب
+                      التفاوت بالسهو: يُعدَّل صفٌّ ويُنسى الباقي فيدفع
+                      اثنان في الحافلة نفسها سعرين.
+
+                      حقلٌ واحد للباقة، قيمته المبدئية من المركبة. */}
+                  <div style={{maxWidth:280}}>
+                    <Field label="سعر المواصلات للفرد — ذهاب وعودة (ر.س)"
+                      hint={selTransport
+                        ? `القيمة المبدئية من «${selTransport.name}» هي ${sarNumber(selTransport.seatCost)} — عدّلها كما تبيع.`
+                        : "سعر البيع للعميل، ولا يتغيّر بنوع الغرفة."}>
+                      <NumericInput min={0} className={inp} style={{...ist,color:B.gold,fontWeight:800,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}
+                        value={seatPrice} placeholder="مثال: 150" onValueChange={v=>set("seatCostOverride",v===""?undefined:Number(v))}/>
+                    </Field>
                   </div>
                 </section>
               </div>
@@ -1353,21 +1420,21 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                         <div key={r.id} className="rounded-xl px-3.5 py-2.5" style={{border:`1px solid ${B.border}`}}>
                           <div className="text-xs font-bold mb-1.5" style={{color:B.black}}>{r.type}</div>
                           <div className="flex items-center justify-between text-xs" style={{color:B.text2}}>
-                            <span>السكن <span style={{color:B.muted}}>({nights}×{sarNumber(r.perNight)})</span></span>
+                            <span>السكن <span style={{color:B.muted}}>(غرفة واحدة · ليلة واحدة)</span></span>
                             <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(stayOf(r))}</span>
                           </div>
                           <div className="flex items-center justify-between text-xs mt-1" style={{color:B.text2}}>
-                            <span>النقل</span>
-                            <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(seatOf(r))}</span>
+                            <span>النقل <span style={{color:B.muted}}>(ذهاب وعودة)</span></span>
+                            <span style={{fontFamily:"var(--font-app)"}}>{sarNumber(seatPrice)}</span>
                           </div>
                           <div className="flex items-center justify-between text-sm font-extrabold mt-2 pt-2" style={{color:B.black,borderTop:`1px solid ${B.border}`}}>
-                            <span>الإجمالي للفرد</span>
+                            <span>إجمالي شخص واحد</span>
                             <span style={{fontFamily:"var(--font-app)",color:B.gold}}>{sar(totalOf(r))}</span>
                           </div>
                         </div>
                       ))}
                       <div className="flex items-center justify-between text-xs font-bold px-1" style={{color:B.text2}}>
-                        <span>أرخص إجمالي فعلي</span>
+                        <span>أرخص إجمالي لشخص واحد</span>
                         <span style={{fontFamily:"var(--font-app)"}}>{sar(cheapest)}</span>
                       </div>
                       {gap&&(
@@ -1379,15 +1446,9 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                       )}
                     </div>
                   : <p className="text-xs leading-relaxed" style={{color:B.muted}}>
-                      أضف نوع سكن بسعر ليلة أكبر من صفر ليظهر الإجمالي للفرد هنا.
+                      أضف نوع سكن بسعر أكبر من صفر ليظهر إجمالي الشخص الواحد هنا.
                     </p>}
 
-                {form.transportOnlyEnabled&&(
-                  <div className="rounded-xl px-3.5 py-2.5 flex items-center justify-between text-xs font-bold" style={{background:"#F3FAF5",border:"1px solid #C4E4CE",color:"#1E7A44"}}>
-                    <span>مواصلات فقط</span>
-                    <span style={{fontFamily:"var(--font-app)"}}>{form.transportOnlyPrice?sar(form.transportOnlyPrice):"—"}</span>
-                  </div>
-                )}
               </aside>
             </div>
           </motion.div>
@@ -1398,8 +1459,12 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
             <div className="flex items-center justify-between">
               <div><h3 className="text-sm font-bold" style={{color:B.black}}>مميزات الرحلة</h3>
                 <p className="text-xs mt-0.5" style={{color:B.muted}}>نصّ الميزة وأيقونة اختيارية — لا أكثر. تظهر للعميل في صفحة الباقة.</p></div>
-              <button onClick={addFeat} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+              <div className="flex gap-2">
+                <button onClick={()=>setCopySection("features")} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                  style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={12}/>استيراد</button>
+                <button onClick={addFeat} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                  style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+              </div>
             </div>
             <AnimatePresence>{form.features.map((f,fi)=>(
               <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-center">
@@ -1436,9 +1501,11 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
           </motion.div>}
 
           {tab==="policies"&&<motion.div role="tabpanel" id="pkg-panel-policies" aria-labelledby="pkg-tab-policies" key="policies" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} style={formBox} className="flex flex-col gap-3">
-            <div>
-              <h3 className="text-sm font-bold" style={{color:B.black}}>سياسات الباقة</h3>
-              <p className="text-xs mt-0.5" style={{color:B.muted}}>سطرٌ لكل سياسة. كل سطرٍ يصير بنداً مستقلاً عند العميل، بترتيب الأسطر نفسه.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div><h3 className="text-sm font-bold" style={{color:B.black}}>سياسات الباقة</h3>
+                <p className="text-xs mt-0.5" style={{color:B.muted}}>سطرٌ لكل سياسة. كل سطرٍ يصير بنداً مستقلاً عند العميل، بترتيب الأسطر نفسه.</p></div>
+              <button onClick={()=>setCopySection("policies")} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0"
+                style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={12}/>استيراد</button>
             </div>
             {/* حقلٌ واحد لا حقلٌ لكل بند: «إضافة سياسة» ثم كتابة ثم إضافة
                 ثانية — ضغطتان لكل سطر، وثمانُ سياساتٍ ستّ عشرة ضغطة قبل
@@ -1490,6 +1557,8 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <p className="text-xs mt-0.5" style={{color:B.muted}}>الاسم والتقييم من 5 والرأي، مع صورة اختيارية.</p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={()=>setCopySection("reviews")} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                  style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={12}/>من باقة</button>
                 <label className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
                   style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
                   <ImagePlus size={12}/>استيراد آراء
@@ -1611,6 +1680,7 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
           onSaveAndLeave={()=>{void ed.save(commit).then(ok=>{ if(ok){setLeaving(false);onBack();} else setLeaving(false); });}}
           onDiscard={()=>{setLeaving(false);onBack();}}
           onCancel={()=>setLeaving(false)}/>}
+        {copySection&&<CopyFromPackageModal section={copySection} sources={copySources} onImport={importFromPackage} onClose={()=>setCopySection(null)}/>} 
       </AnimatePresence>
     </div>
   );

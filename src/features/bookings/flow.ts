@@ -1,4 +1,4 @@
-/* مسار الطلب — الانتقالات وشروطها وآثارها في موضعٍ واحد.
+/* حال الطلب — ما ينقصه، وما يتأخّر منه، وأثر إغلاقه.
 
    سبع ملاحظاتٍ من الفريق جذرها أن هذا المنطق لم يكن له موضع: كان
    `switch(booking.status)` داخل شاشة التفاصيل يبني أزراراً، والشروط
@@ -6,43 +6,23 @@
    أحد يستطيع الإجابة عن «ماذا يحدث للمقعد والفاتورة والتذكرة لو ألغيت؟»
    قبل أن يُلغي فعلاً.
 
-   وملاحظة «الطلب الأول حالته مقبول لكنه ليس بانتظار الدفع» صحيحةٌ ولا
-   خطأ في الحالة نفسها: «مقبول» مرحلةٌ حقيقية قبل إرسال رابط الدفع.
-   الخطأ أن الشاشة لا تقول ما ينتظره الطلب — فصار لكل حالةٍ نصٌّ يقوله.
+   وكان هنا أيضاً جدولُ الانتقالات بين اثنتي عشرة حالة، وجدولٌ يشرح لكل
+   حالةٍ ما تنتظره. سقط الاثنان حين صار المسار أربع خطواتٍ يقودها النظام
+   (stages.ts): الخطوة تقول ما يُفعل الآن، فلا حاجة لشرح معنى «مقبول».
+   وبقي هنا ما هو وصفٌ لحال الطلب لا لواجهته:
 
-   وحدة نقيّة بلا React ولا نداءات قاعدة: تُقرأ من شاشة التفاصيل، ومن
-   الجدول، ومن نافذة التأكيد، وستُقرأ من دوالّ القاعدة في الموجة الأولى
-   حين تصير الانتقالات مفروضةً لا موصوفة. */
+     • النواقص (bookingGaps) — وهي موانع الزرّ في كل خطوة.
+     • التأخّر (isStale · staleDays) — طلبٌ مضت رحلته وما زال مفتوحاً.
+     • أثر الرفض والإلغاء — يُعرض في نافذة السبب قبل الضغطة لا بعدها.
+
+   وحدة نقيّة بلا React ولا نداءات قاعدة: تقرؤها شاشة الطلب وجدول
+   الطلبات ووحدة الخطوات. */
 import type { Booking, BookingStatus, Pkg, Trip } from "@/types";
-import { allVerified, needsRecheck } from "./verification";
+import { needsRecheck } from "./verification";
 import { sar } from "@/lib/money";
 import { isSaudiMobile } from "@/lib/phone";
-import { statusLabel } from "@/lib/status";
 
 export type Tone = "primary" | "ok" | "warn" | "risk" | "neutral";
-
-/* ═══ ما ينتظره الطلب ══════════════════════════════════════════════
-   الحالة تقول ما وصل إليه الطلب، وهذا يقول ما ينتظره — وهو ما كان
-   ناقصاً. تُعرض تحت الشارة مباشرةً في رأس الطلب. */
-const WAITING: Partial<Record<BookingStatus, string>> = {
-  new:              "وصل من التطبيق ولم يُراجَع بعد",
-  reviewing:        "بانتظار تحقّق الموظف من بيانات المعتمرين",
-  needs_edit:       "بانتظار تعديل العميل لبياناته",
-  accepted:         "بانتظار إرسال رابط الدفع أو تحصيل المبلغ كاشاً",
-  awaiting_payment: "أُرسل رابط الدفع — بانتظار سداد العميل",
-  awaiting_trip:    "بانتظار تحديد رحلة",
-  /* محطّةٌ لم تعد تُسلَك: تأكيد الدفع يُنهي الطلب في نفس الضغطة. النصّ
-     باقٍ لطلباتٍ سُجّلت قبل دمج الخطوتين (٢٠٢٦-٠٩-١١). */
-  paid:             "وصل المبلغ — بانتظار إتمام الطلب",
-  verifying:        "بانتظار تحقّق الموظف",
-  verified:         "بانتظار التأكيد النهائي",
-  confirmed:        "مكتمل — صدرت الفاتورة والتذكرة",
-  rejected:         "مرفوض — المقاعد محرَّرة",
-  cancelled:        "ملغى — المقاعد محرَّرة",
-};
-
-/** سطرٌ واحد يقول ما ينتظره الطلب الآن. */
-export const waitingFor = (s: BookingStatus): string => WAITING[s] ?? statusLabel(s, "booking");
 
 /* ═══ البيانات الناقصة ════════════════════════════════════════════ */
 
@@ -59,8 +39,6 @@ export interface FlowCtx {
   pkg?: Pkg;
   /* تحقّق الموظف لم يعد يُمرَّر من الشاشة: صار محفوظاً على المعتمر
      نفسه فيُقرأ من `booking.pilgrims` — لا حالةَ جلسةٍ تُنسى بالتحديث. */
-  /** فعّل «تم استلام الدفع فعلياً» في لوحة الإجراءات. */
-  payReceived?: boolean;
   /** فاتورةٌ موجودة فعلاً في القاعدة لهذا الطلب. */
   hasInvoice?: boolean;
   /** تذكرةٌ صادرة فعلاً. */
@@ -71,7 +49,7 @@ export interface FlowCtx {
   today?: string;
 }
 
-/** كل ما ينقص هذا الطلب — تُعرض شريطاً أعلى الصفحة.
+/** كل ما ينقص هذا الطلب — موانعُ زرّ الخطوة الحالية، تُكتب تحته بنصّها.
 
     الملاحظة تطلب تحذيراً «إن لم توجد بيانات المستفيد، الهوية، الغرفة،
     الدفع أو المقاعد» — وهذه هي الخمسة بأسمائها، ومعها ما ظهر أثناء
@@ -82,8 +60,10 @@ export function bookingGaps(ctx: FlowCtx): Gap[] {
   const persons = Math.max(1, b.persons || 1);
   const pilgrims = b.pilgrims ?? [];
 
-  if (pilgrims.length < persons) {
-    gaps.push({ key: "pilgrims", label: `بيانات المعتمرين ناقصة (${pilgrims.length} من ${persons})`, blocking: true });
+  /* بيانات الحجز تُطلب لصاحب الطلب فقط. عدد الأشخاص يحدد المقاعد
+     والتسعير، لا عدد نماذج الهويات التي يجب تعبئتها. */
+  if (pilgrims.length === 0) {
+    gaps.push({ key: "pilgrims", label: "بيانات صاحب الطلب ناقصة", blocking: true });
   }
   const noId = pilgrims.filter(p => !(p.idNumber ?? "").trim()).length;
   if (noId > 0) {
@@ -107,9 +87,9 @@ export function bookingGaps(ctx: FlowCtx): Gap[] {
   }
 
   /* «بانتظار التحقق» ليس نقصاً في كل طلب: طلبٌ جديد كلُّ معتمريه كذلك،
-     وهو ترتيبٌ لا خلل — ويمنع القبولَ وحده (انظر transitionsFor). النقص
-     أن يُعدَّل معتمرٌ بعد تحقّقٍ تمّ، أو يُوسَم بخطأ: هنا طلب النظام
-     مراجعةً ولم تُجب، فيمنع ما بعده. */
+     وهو ترتيبٌ لا خلل — وخطوةُ التحقق نفسها هي التي تُزيله. والنقص أن
+     يُعدَّل معتمرٌ بعد تحقّقٍ تمّ: يُوسَم هنا ليُقرأ، ولا يُعيد الطلب
+     خطوةً إلى الوراء (stages.ts تستثنيه من موانع الأزرار). */
   const recheck = needsRecheck(pilgrims).length;
   if (recheck > 0) {
     gaps.push({ key: "verify", label: `${recheck} معتمر يحتاج تحقّقاً جديداً بعد تعديل بياناته`, blocking: true });
@@ -128,16 +108,10 @@ export function bookingGaps(ctx: FlowCtx): Gap[] {
 
 export const blockingGaps = (ctx: FlowCtx): Gap[] => bookingGaps(ctx).filter(g => g.blocking);
 
-/** التذكرة لا تُصدر قبل استيفاء الدفع والبيانات — نصّ الملاحظة حرفياً. */
-export function ticketBlockers(ctx: FlowCtx): string[] {
-  const out: string[] = [];
-  if (ctx.booking.paymentStatus !== "verified") out.push("الدفع غير متحقَّق");
-  const gaps = blockingGaps(ctx);
-  if (gaps.length) out.push(`بيانات ناقصة: ${gaps.map(g => g.label).join(" · ")}`);
-  return out;
-}
-
-export const canIssueTicket = (ctx: FlowCtx): boolean => ticketBlockers(ctx).length === 0;
+/* لا حارسَ هنا لإصدار التذكرة: الفاتورة والتذكرة تصدران من القاعدة
+   لحظةَ صيرورة الطلب مؤكداً (حارس trg_booking_confirm_docs)، والتأكيد
+   لا يقع إلا بعد قفل المقاعد وتسجيل المبلغ — فالبوابة في صفّ العمل
+   نفسه لا في دالّةٍ تُسأل بعده. */
 
 /* ═══ الطلب المتأخّر ══════════════════════════════════════════════
    ما رآه الفريق: طلبٌ بتاريخ رحلة ٣٠ يوليو ما زال «قيد المراجعة» في
@@ -170,14 +144,10 @@ export interface Transition {
   blockers: string[];
   /** ما سيحدث فعلاً — يُعرض في نافذة التأكيد قبل الضغط لا بعده. */
   effects: string[];
-  /** يفتح كروكي المقاعد بدل التنفيذ المباشر. */
-  opensSeatMap?: boolean;
   /** يحتاج نافذة سبب: الرفض سببٌ داخلي ورسالة، والإلغاء سببٌ واحد. */
   reason?: "reject" | "cancel";
-  /** إجراءٌ لا يُبرَز: يُعرض صغيراً جانباً لا زرّاً رئيسياً. الطلب المؤكد
-      عمله طباعةٌ وإرسال، والإلغاء استثناءٌ لا واجهة. */
+  /** إجراءٌ لا يُبرَز: موضعه قائمة «⋯» لا بجانب زرّ الخطوة. */
   secondary?: boolean;
-  patch?: Partial<Booking>;
 }
 
 /** مهلة رابط الدفع بالساعات — من إعدادات الرحلة ثم الباقة ثم الافتراضي. */
@@ -215,123 +185,4 @@ export function rejectEffects(ctx: FlowCtx): string[] {
     "تُرسل رسالة العميل التي تكتبها أنت — لا نصّ آليّ",
     "لا يمكن التراجع: الطلب المرفوض لا يُعاد فتحه",
   ];
-}
-
-/** الانتقالات المتاحة من الحالة الحالية، بشروطها وآثارها. */
-export function transitionsFor(ctx: FlowCtx): Transition[] {
-  const b = ctx.booking;
-  const hours = payDeadlineHours(ctx);
-  const gaps = blockingGaps(ctx);
-  const gapText = gaps.length ? `بيانات ناقصة: ${gaps.map(g => g.label).join(" · ")}` : null;
-
-  switch (b.status) {
-    case "new":
-    case "reviewing": {
-      const acceptBlockers: string[] = [];
-      if (!allVerified(b.pilgrims ?? [])) acceptBlockers.push("لم يُتحقّق من جميع المعتمرين");
-      /* المقاعد تُراجَع وتُؤكَّد في الكروكي نفسه، فغيابها ليس مانعاً هنا.
-         والتحقق قيل قبل سطرين بنصٍّ أوضح من نصّ النقص. */
-      gaps.filter(g => g.key !== "seats" && g.key !== "verify").forEach(g => acceptBlockers.push(g.label));
-      return [
-        {
-          to: "accepted", label: "قبول الطلب واختيار المقعد", tone: "ok",
-          blockers: acceptBlockers, opensSeatMap: true,
-          effects: [
-            "تُقفل المقاعد المؤكَّدة باسم العميل في نفس اللحظة",
-            "الطلب لا يصير مؤكداً — الدفع ما زال مطلوباً",
-          ],
-        },
-        {
-          to: "rejected", label: "رفض الطلب", tone: "risk",
-          blockers: [], reason: "reject", effects: rejectEffects(ctx),
-        },
-        {
-          to: "cancelled", label: "إلغاء الطلب", tone: "neutral",
-          blockers: [], reason: "cancel", effects: cancelEffects(ctx),
-        },
-      ];
-    }
-
-    case "accepted":
-      return [
-        {
-          to: "awaiting_payment", label: "إرسال رابط الدفع", tone: "primary",
-          blockers: gapText ? [gapText] : [],
-          effects: [
-            `يُفتح رابط دفعٍ صالح ${hours} ساعة بمبلغ ${sar(b.total)}`,
-            "تبقى المقاعد مقفلة باسم العميل حتى انتهاء المهلة",
-          ],
-        },
-        {
-          /* ضغطةٌ واحدة تُنهي الطلب: الدفع المستلَم كاشاً لا ينتظر خطوة
-             «تحقّق وتأكيد» بعده — الموظف قبض المال وهو مسؤول عن صحّته. */
-          to: "confirmed", label: "تم الدفع كاش في الفرع", tone: "ok",
-          blockers: gapText ? [gapText] : [],
-          patch: { paymentStatus: "verified", payMethod: "كاش في الفرع" },
-          effects: [
-            `يُسجَّل استلام ${sar(b.total)} كاشاً باسمك وبتاريخ اليوم`,
-            "يصير الطلب مؤكداً في نفس الضغطة — لا خطوة تحقّقٍ بعدها",
-            "تُصدر الفاتورة والتذكرة تلقائياً",
-          ],
-        },
-      ];
-
-    case "awaiting_payment":
-      return [
-        {
-          /* قرار ٢٠٢٦-٠٩-١١: «تم استلام الدفع» ثم «تأكيد الدفع» ثم نافذة
-             «هل أنت متأكد؟» ثلاثُ خطواتٍ لقرارٍ واحد. بقيت الأولى شرطاً
-             والثانية تنفيذاً، وسقطت الثالثة ومعها محطّة «تم الدفع». */
-          to: "confirmed", label: "تأكيد الدفع", tone: "ok",
-          blockers: [
-            ...(ctx.payReceived === false ? ["فعّل «تم استلام الدفع فعلياً» أولاً"] : []),
-            ...(gapText ? [gapText] : []),
-          ],
-          patch: { paymentStatus: "verified" },
-          effects: [
-            `يُسجَّل ${sar(b.total)} محصَّلاً بالطريقة والتاريخ`,
-            "يُوقف رابط الدفع المُرسَل",
-            "يصير الطلب مؤكداً وتصدر الفاتورة والتذكرة تلقائياً",
-          ],
-        },
-        {
-          to: "cancelled", label: "إلغاء الطلب", tone: "neutral",
-          blockers: [], reason: "cancel", effects: cancelEffects(ctx),
-        },
-      ];
-
-    /* محطّةٌ لا يصلها المسار الجديد. تبقى لطلباتٍ سُجّلت «مدفوعة» قبل
-       دمج الخطوتين: بلا إجراءٍ هنا تبقى عالقةً بلا فاتورةٍ ولا تذكرة. */
-    case "paid":
-      return [
-        {
-          to: "confirmed", label: "إتمام الطلب وإصدار التذكرة", tone: "ok",
-          /* هذا هو موضع منع التذكرة: حارس القاعدة يُصدر الفاتورة والتذكرة
-             لحظةَ صيرورة الطلب «مؤكداً» — فالبوابة هنا لا عند زرّ التذكرة. */
-          blockers: ticketBlockers(ctx),
-          effects: [
-            "تُصدر الفاتورة والتذكرة تلقائياً",
-            "يصير الطلب نهائياً ويظهر للعميل في تطبيقه",
-          ],
-        },
-        {
-          to: "cancelled", label: "إلغاء الطلب", tone: "neutral",
-          blockers: [], reason: "cancel", effects: cancelEffects(ctx),
-        },
-      ];
-
-    /* الطلب المؤكد عمله طباعةٌ وإرسال — وهي مستنداتٌ لا انتقالات، فموضعها
-       شريط «إجراءات ما بعد الحجز» في الشاشة. ولا يبقى هنا إلا الإلغاء
-       ثانوياً غير بارز. */
-    case "confirmed":
-      return [
-        {
-          to: "cancelled", label: "إلغاء الطلب المؤكد", tone: "risk", secondary: true,
-          blockers: [], reason: "cancel", effects: cancelEffects(ctx),
-        },
-      ];
-
-    default:
-      return [];
-  }
 }

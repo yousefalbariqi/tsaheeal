@@ -4,67 +4,7 @@
 @import './admin.css';
 
 /* واجهة المعتمر: خلفية جميلة من الحرم والمسجد النبوي */
-.ts-explore-shell { width: 100%; max-width: 1280px; margin-inline: auto; }
-.ts-umrah-hero {
-  position: relative;
-  overflow: hidden;
-  padding-bottom: 40px;
-  background:
-    linear-gradient(135deg, rgba(232,212,168,.15) 0%, rgba(212,190,160,.25) 50%, rgba(232,212,168,.15) 100%),
-    url("/bg-haram.jpg") center / cover fixed no-repeat,
-    linear-gradient(180deg, rgba(17,11,3,.25) 0%, rgba(17,11,3,.15) 50%, rgba(17,11,3,.35) 100%),
-    #fff;
-  background-blend-mode: overlay, normal, normal, normal;
-  box-shadow: inset 0 0 60px rgba(17,11,3,.2);
-  min-height: 280px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 2px solid rgba(232,212,168,.2);
-}
-.ts-journey-helper {
-  position: relative;
-  z-index: 1;
-  padding: 20px;
-  background: linear-gradient(135deg, rgba(255,255,255,.98) 0%, rgba(255,250,240,.96) 100%);
-  border: 1.5px solid rgba(232,212,168,.35);
-  border-radius: 18px;
-  box-shadow: 0 16px 32px -20px rgba(91,65,19,.55);
-  backdrop-filter: blur(8px);
-}
-.ts-trust-promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.ts-trust-promise { 
-  display: flex; 
-  align-items: center; 
-  gap: 12px; 
-  min-width: 0; 
-  padding: 14px; 
-  background: linear-gradient(135deg, rgba(247,238,220,.8) 0%, rgba(255,255,255,.6) 100%);
-  border: 1px solid rgba(232,212,168,.4);
-  border-radius: 14px; 
-  color: #5C421B;
-  transition: all 0.3s ease;
-}
-.ts-trust-promise:hover {
-  border-color: rgba(180,137,63,.5);
-  box-shadow: 0 8px 20px rgba(180,137,63,.15);
-  transform: translateY(-2px);
-}
-.ts-trust-promise b, .ts-trust-promise small { display: block; }
-.ts-trust-promise b { font-size: 13px; font-weight: 600; }
-.ts-trust-promise small { margin-top: 2px; color: #626052; font-size: 11px; line-height: 1.5; font-weight: 400; }
-.ts-trust-icon { 
-  display: grid; 
-  flex: 0 0 auto; 
-  place-items: center; 
-  width: 40px; 
-  height: 40px; 
-  border-radius: 50%; 
-  background: linear-gradient(135deg, #F7EEDC 0%, #EFE8D8 100%);
-  color: #8C6423; 
-  font-size: 18px;
-  box-shadow: 0 4px 12px rgba(180,137,63,.15);
-}
+
 .ts-desktop-nav { display:none; }
 
 /* واجهات المستفيد لا تستخدم خطاً استعراضياً أو زخارف كتابية؛ DG Shamael
@@ -86,12 +26,13 @@
   padding:18px 20px 6px;
 }
 .ts-destination-brand,.ts-destination-actions button { border:0; background:transparent; cursor:pointer; }
-.ts-destination-brand { padding:0; color:#3f2a18; }
+.ts-destination-brand { padding:0; color:#3f2a18; transform:translateY(5px); }
 .ts-destination-actions { display:flex; align-items:center; gap:8px; }
-.ts-destination-content { max-width:460px; margin:0 auto; padding:40px 20px calc(30px + env(safe-area-inset-bottom)); text-align:center; }
+.ts-destination-content { max-width:460px; margin:0 auto; padding:34px 20px 0; text-align:center; }
 .ts-destination-overline { margin:0 0 10px; color:#967033; font-size:12px; font-weight:700; letter-spacing:.04em; }
 .ts-destination-content h1 { margin:0; color:#17130f; font-family:var(--font-display); font-size:clamp(30px,8vw,39px); font-weight:700; line-height:1.18; }
-.ts-destination-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:32px; text-align:start; }
+.ts-destination-lead { max-width:29ch; margin:10px auto 0; color:#847466; font-size:14px; font-weight:600; line-height:1.65; }
+.ts-destination-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:28px; text-align:start; }
 .ts-destination-card { position:relative; overflow:hidden; min-width:0; padding:0; border:1px solid rgba(105,76,32,.12); border-radius:20px; background:#fff; cursor:pointer; box-shadow:0 12px 30px rgba(63,40,11,.14); transition:transform .18s ease,box-shadow .18s ease; }
 .ts-destination-card:first-child { border-color:#a27a32; }
 .ts-destination-card:hover,.ts-destination-card:focus-visible { transform:translateY(-3px); box-shadow:0 18px 35px rgba(63,40,11,.22); outline:none; }
@@ -106,11 +47,29 @@
 .ts-destination-trust { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; color:#725d46; }
 .ts-destination-trust span { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10px; font-weight:600; line-height:1.4; }
 .ts-destination-trust svg { color:#8a6a08; }
+.ts-destination-reviews { margin-top:34px; }
+.ts-destination-reviews h2 { display:flex; align-items:center; justify-content:center; gap:10px; margin:0 0 16px; color:#4f3921; font-family:var(--font-display); font-size:20px; font-weight:700; line-height:1.3; }
+.ts-destination-reviews h2::before,.ts-destination-reviews h2::after { content:""; width:34px; height:1px; background:#c6a365; }
+.ts-destination-review-carousel { position:relative; min-height:126px; overflow:hidden; }
+.ts-destination-review-track { display:flex; width:100%; gap:8px; direction:ltr; will-change:transform; animation:ts-destination-review-chain 60s linear infinite; }
+@keyframes ts-destination-review-chain { from { transform:translateX(0); } to { transform:translateX(calc(-400% - 32px)); } }
+@media (prefers-reduced-motion:reduce) { .ts-destination-review-track { animation:none; } }
+.ts-destination-review { display:flex; flex:0 0 calc((100% - 16px) / 3); min-width:0; min-height:126px; flex-direction:column; align-items:center; justify-content:center; margin:0; padding:11px 8px; border:1px solid #eee4d5; border-radius:16px; background:rgba(255,255,255,.86); box-shadow:0 8px 20px rgba(63,40,11,.07); }
+.ts-destination-review-stars { display:flex; gap:1px; color:#c18b20; }
+.ts-destination-review blockquote { margin:10px 0 8px; color:#625141; font-size:11px; font-weight:600; line-height:1.6; }
+.ts-destination-review figcaption { color:#9a8b7c; font-size:10px; font-weight:600; }
+.ts-destination-footer { position:relative; display:flex; min-height:176px; flex-direction:column; align-items:center; justify-content:flex-end; margin:20px -20px 0; padding:0 20px calc(24px + env(safe-area-inset-bottom)); overflow:hidden; }
+.ts-destination-footer::before { position:absolute; z-index:0; inset:28% 0 0; content:""; background:rgba(255,248,236,.72); }
+.ts-destination-footer img { position:absolute; z-index:0; inset-inline:50%; bottom:-2px; width:max(620px,165vw); max-width:none; transform:translateX(-50%); opacity:.64; }
+.ts-destination-footer p,.ts-destination-footer small { position:relative; z-index:1; margin:0; }
+.ts-destination-footer p { color:#6a4e2a; font-family:var(--font-display); font-size:22px; font-weight:700; }
+.ts-destination-footer small { margin-top:6px; color:#9b8261; font-size:12px; font-weight:600; }
 @media (min-width:760px) {
   .ts-destination-header { max-width:1240px; margin:auto; padding:24px 40px 8px; }
-  .ts-destination-content { max-width:1120px; padding:58px 40px 42px; }
+  .ts-destination-content { max-width:1120px; padding:52px 40px 0; }
   .ts-destination-overline { font-size:15px; }
   .ts-destination-content h1 { font-size:clamp(46px,4.8vw,66px); }
+  .ts-destination-lead { max-width:none; font-size:17px; }
   .ts-destination-cards { gap:28px; margin-top:46px; }
   .ts-destination-card { border-radius:26px; }
   .ts-destination-card > img { aspect-ratio:1.55 / 1; }
@@ -120,10 +79,12 @@
   .ts-destination-prompt { margin:32px 0 25px; font-size:15px; }
   .ts-destination-trust { max-width:740px; margin:auto; gap:28px; }
   .ts-destination-trust span { font-size:12px; }
+  .ts-destination-reviews { max-width:740px; margin-inline:auto; }
+  .ts-destination-review-carousel { min-height:144px; }
+  .ts-destination-review { min-height:144px; padding:16px; }
+  .ts-destination-review blockquote { font-size:13px; }
+  .ts-destination-footer { min-height:215px; margin-inline:-40px; }
 }
-.ts-change-destination { display:flex; align-items:center; gap:7px; min-width:0; flex:1; height:40px; padding:0 12px; color:#155049; background:#f5faf8; border:1px solid #b9d8d2; border-radius:20px; cursor:pointer; font:inherit; text-align:start; }
-.ts-change-destination span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:700; }
-.ts-change-destination small { margin-inline-start:auto; color:#4c796f; font-size:11px; font-weight:600; white-space:nowrap; }
 
 /* ═══ تجربة Focus: الوجهة ثم الأيام القادمة والرحلات الحقيقية ═══ */
 .ts-focus-trips { min-height:100dvh; background:#fffaf4; color:#44311e; }
@@ -136,26 +97,10 @@
 .ts-focus-title h1 { margin:0; font-family:var(--font-display); font-size:42px; font-weight:700; line-height:1.1; }
 .ts-focus-title p { margin:8px 0 0; font-size:16px; font-weight:600; color:#f4ead9; }
 .ts-focus-body { position:relative; z-index:1; max-width:600px; margin:-18px auto 0; padding:20px 16px calc(34px + env(safe-area-inset-bottom)); border-radius:22px 22px 0 0; background:#fffaf4; }
-.ts-focus-calendar-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 4px 12px; }
-.ts-focus-calendar-head > div:first-child { display:flex; flex-direction:column; gap:2px; }
-.ts-focus-calendar-head span { color:#513a22; font-size:14px; font-weight:800; }
-.ts-focus-calendar-head small { color:#8e7a64; font-size:11px; font-weight:500; text-align:start; }
-.ts-focus-week-actions { display:flex; align-items:center; gap:5px; }
-.ts-focus-week-actions button { min-height:30px; padding:0 9px; color:#775b35; border:1px solid #dfcfb8; border-radius:10px; background:#fff; cursor:pointer; font-family:var(--font-app); font-size:11px; font-weight:700; }
-.ts-focus-week-actions button:last-child { color:#fff; border-color:#a8782c; background:#a8782c; }.ts-focus-week-actions button:disabled { color:#b8aa98; border-color:#eee4d8; background:#faf8f5; cursor:not-allowed; }
-.ts-focus-days { display:grid; align-items:stretch; gap:4px; width:100%; padding:2px 0 10px; }
-.ts-focus-day { position:relative; display:flex; min-width:0; min-height:62px; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:6px 1px 4px; color:#a99e91; background:#f7f6f4; border:1px solid #efebe6; border-radius:12px; cursor:pointer; font-family:var(--font-app); }
-.ts-focus-day > span { max-width:100%; overflow:hidden; font-size:10px; font-weight:600; white-space:nowrap; text-overflow:ellipsis; }
-.ts-focus-day > b { color:#817568; font-family:var(--font-display); font-size:18px; line-height:1; }.ts-focus-day > i { min-height:8px; color:transparent; font-size:11px; font-style:normal; font-weight:800; line-height:1; }
+
 /* الأيام الفارغة تفصل الزمن فقط: رمادية وهادئة. اليوم الحالي وحده ذهبي،
    ولا يأخذ يومٌ آخر اللون الذهبي لمجرد اختياره. */
-.ts-focus-day.has-trip { min-height:74px; color:#735c40; background:#fff; border-color:#e7d9c8; box-shadow:0 5px 15px rgba(85,54,20,.05); }.ts-focus-day.has-trip > b { color:#4e3821; font-size:21px; }.ts-focus-day.has-trip > i { display:grid; place-items:center; color:#af7d29; }
-.ts-focus-day.is-today { min-height:78px; color:#fff; background:#a8782c; border-color:#a8782c; box-shadow:0 8px 18px rgba(143,96,28,.27); }.ts-focus-day.is-today > b,.ts-focus-day.is-today > i { color:#fff; }
-.ts-focus-day.is-active:not(.is-today) { min-height:82px; color:#715326; border:2px solid #a8782c; background:#fffaf1; box-shadow:0 7px 16px rgba(143,96,28,.16); }.ts-focus-day.is-active:not(.is-today) > b { color:#5b401d; font-size:23px; }
-.ts-focus-list-head { display:flex; justify-content:space-between; align-items:center; margin:16px 4px 11px; }
-.ts-focus-list-head h2 { margin:0; color:#513a22; font-family:var(--font-display); font-size:20px; font-weight:700; }
-.ts-focus-list-head span { color:#957e63; font-size:12px; font-weight:600; }
-.ts-focus-trip-list { display:grid; gap:13px; }
+
 .ts-focus-trip-card { position:relative; display:grid; grid-template-columns:42% 58%; overflow:hidden; width:100%; min-height:158px; padding:0; direction:rtl; text-align:start; color:inherit; border:1px solid #e7ded2; border-radius:18px; background:#fff; cursor:pointer; box-shadow:0 8px 18px rgba(58,38,15,.1); transition:transform .18s ease,box-shadow .18s ease; }
 .ts-focus-trip-card:hover,.ts-focus-trip-card:focus-visible { transform:translateY(-2px); box-shadow:0 18px 30px rgba(58,38,15,.2); outline:none; }
 .ts-focus-trip-card:focus-visible { box-shadow:0 0 0 3px #fffaf4,0 0 0 6px #a8782c; }
@@ -166,11 +111,7 @@
 .ts-focus-trip-info em { margin-top:2px; color:#8c6423; font-weight:800; }
 .ts-focus-trip-info small svg,.ts-focus-trip-info em svg { flex:0 0 auto; color:#82705c; }.ts-focus-trip-info em svg { color:#a8782c; }
 .ts-focus-trip-arrow { position:absolute; inset-inline-end:12px; top:50%; display:grid; place-items:center; width:34px; height:34px; border-radius:50%; color:#765629; background:#f0efed; transform:translateY(-50%); }
-.ts-focus-next-trip { display:flex; align-items:center; width:100%; min-height:94px; gap:12px; padding:15px; color:#513a22; text-align:start; border:1px solid #e5d7c3; border-radius:18px; background:linear-gradient(135deg,#fffdf9,#faf1e2); cursor:pointer; box-shadow:0 7px 18px rgba(72,48,20,.07); transition:transform .18s ease,box-shadow .18s ease; font-family:var(--font-app); }
-.ts-focus-next-trip:hover,.ts-focus-next-trip:focus-visible { transform:translateY(-2px); box-shadow:0 12px 23px rgba(72,48,20,.13); outline:none; }.ts-focus-next-trip:focus-visible { box-shadow:0 0 0 3px #fffaf4,0 0 0 6px #a8782c; }
-.ts-focus-next-icon { display:grid; flex:0 0 auto; place-items:center; width:42px; height:42px; border-radius:14px; color:#a8782c; background:#fff; border:1px solid #eedfca; }
-.ts-focus-next-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }.ts-focus-next-copy strong { color:#553d23; font-family:var(--font-display); font-size:17px; }.ts-focus-next-copy small { color:#8a7256; font-size:12px; font-weight:700; }
-.ts-focus-next-action { display:flex; flex:0 0 auto; align-items:center; gap:2px; color:#9a6d22; font-size:12px; font-weight:800; }
+
 .ts-focus-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:36px 18px; color:#8a7560; text-align:center; border:1px dashed #d9cbb9; border-radius:18px; background:#fffdf9; }
 .ts-focus-empty svg { color:#c0a373; }
 .ts-focus-empty strong { color:#553d23; font-family:var(--font-display); font-size:17px; font-weight:700; }
@@ -200,48 +141,105 @@
 .ts-focus-timeline-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 4px 12px; }.ts-focus-timeline-head>div:first-child { display:grid; gap:2px; }.ts-focus-timeline-head span { color:#513a22; font-family:var(--font-display); font-size:20px; font-weight:700; }.ts-focus-timeline-head small { color:#947e63; font-size:11px; font-weight:700; }.ts-focus-calendar-switch { display:flex; flex:0 0 auto; padding:3px; border:1px solid #e8ddcd; border-radius:10px; background:#fffdf9; }.ts-focus-calendar-switch button { min-height:27px; padding:0 8px; color:#a19384; border:0; border-radius:7px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:10px; font-weight:800; }.ts-focus-calendar-switch button.active { color:#fff; background:#a8782c; }.ts-focus-calendar-switch button:focus-visible { outline:2px solid #a8782c; outline-offset:2px; }
 .ts-focus-timeline { position:relative; display:grid; gap:0; padding-bottom:2px; }.ts-focus-timeline::before { content:""; position:absolute; top:42px; bottom:12px; inset-inline-start:14px; width:1px; background:#dfd8cf; }.ts-focus-timeline-group { position:relative; }.ts-focus-month { margin:8px 0 3px 38px; color:#806647; font-family:var(--font-display); font-size:13px; font-weight:700; }.ts-focus-timeline-day { position:relative; min-height:35px; }.ts-focus-timeline-marker { position:relative; z-index:1; display:flex; align-items:center; gap:10px; min-height:35px; }.ts-focus-timeline-marker>span { display:block; flex:0 0 auto; width:9px; height:9px; margin-inline:10px 9px; border-radius:50%; background:#d2cbc3; box-shadow:0 0 0 4px #fffaf4; }.ts-focus-timeline-marker>div { display:flex; align-items:baseline; gap:5px; color:#a19487; }.ts-focus-timeline-marker em { padding:2px 6px; color:#8d6a32; border-radius:7px; background:#f3e8d4; font-size:10px; font-style:normal; font-weight:800; }.ts-focus-timeline-marker b { font-size:12px; font-weight:700; }.ts-focus-timeline-marker time { font-family:var(--font-display); font-size:15px; font-weight:700; }
 .ts-focus-timeline-day.has-trip { padding-bottom:15px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker { min-height:43px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>span { width:15px; height:15px; margin-inline:7px 6px; background:#a8782c; box-shadow:0 0 0 4px #fffaf4,0 0 0 5px #d8b981; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>div { color:#6e522a; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker b { font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker time { color:#8c6423; font-size:20px; }
-.ts-focus-timeline-trips { display:grid; gap:9px; margin-block:2px 0; margin-inline-start:40px; }.ts-focus-timeline-trips .ts-focus-trip-card { min-height:143px; }.ts-focus-timeline-trips .ts-focus-trip-card>img { min-height:143px; }.ts-focus-next-week { display:flex; align-items:center; justify-content:center; gap:5px; width:calc(100% - 40px); min-height:46px; margin-inline-start:40px; color:#8c6423; border:1px dashed #d8c19a; border-radius:13px; background:#fffdf8; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; }
+.ts-focus-timeline-trips { display:grid; gap:9px; margin-block:2px 0; margin-inline-start:40px; }.ts-focus-timeline-trips .ts-focus-trip-card { min-height:143px; }.ts-focus-timeline-trips .ts-focus-trip-card>img { min-height:143px; }
 .ts-focus-load-more { display:flex; align-items:center; justify-content:center; gap:6px; width:calc(100% - 40px); min-height:48px; margin-inline-start:40px; color:#8c6423; border:1px dashed #d8c19a; border-radius:13px; background:#fffdf8; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; transition:background .16s ease,transform .16s ease; }.ts-focus-load-more:hover,.ts-focus-load-more:focus-visible { background:#fbf3e5; transform:translateY(-1px); outline:none; }.ts-focus-load-more:disabled { cursor:wait; opacity:.7; transform:none; }
 
-/* ═══ صفحات التفاصيل والتخصيص لتجربة Focus ═══ */
-.ts-focus-detail { width:100%; max-width:100%; min-height:100dvh; overflow-x:clip; padding-bottom:20px; background:#fffaf4; color:#50391f; }.ts-focus-detail-hero { position:relative; height:252px; overflow:hidden; background:#5c4931; }.ts-focus-detail-hero>img { width:100%; height:100%; object-fit:cover; display:block; }.ts-focus-detail-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(20,17,12,.08),rgba(20,17,12,.52)); }.ts-focus-detail-back { position:absolute; top:18px; inset-inline-start:18px; display:grid; place-items:center; width:42px; height:42px; color:#fff; border:0; border-radius:50%; background:rgba(15,15,13,.3); cursor:pointer; backdrop-filter:blur(8px); }
-.ts-focus-detail-main { box-sizing:border-box; width:100%; max-width:680px; margin:-24px auto 0; padding:21px 18px 28px; position:relative; border-radius:24px 24px 0 0; background:#fffaf4; }.ts-focus-detail-title { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.ts-focus-detail-title>div { min-width:0; }.ts-focus-detail-title h1 { overflow-wrap:anywhere; margin:2px 0 0; font-family:var(--font-display); font-size:25px; line-height:1.2; }.ts-focus-detail-title p { overflow-wrap:anywhere; margin:0; color:#8a7256; font-size:12px; font-weight:600; }.ts-focus-detail-title>span { flex:0 0 auto; padding:7px 9px; color:#846125; background:#f8ecd5; border-radius:10px; font-size:11px; font-weight:800; }
-.ts-focus-feature-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:22px 0; }.ts-focus-feature-grid>div { display:flex; min-width:0; flex-direction:column; align-items:center; gap:6px; text-align:center; }.ts-focus-feature-grid span { display:grid; place-items:center; width:40px; height:40px; color:#a8782c; border-radius:50%; background:#f9f0e1; }.ts-focus-feature-grid small { color:#705d49; font-size:10px; font-weight:700; line-height:1.35; }
-.ts-focus-detail-copy,.ts-focus-program { margin-top:22px; }.ts-focus-detail-copy h2,.ts-focus-program h2 { margin:0 0 7px; font-family:var(--font-display); font-size:19px; }.ts-focus-detail-copy p { margin:0; color:#74614d; font-size:13px; line-height:1.8; }.ts-focus-service-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:22px; }.ts-focus-service-card { overflow:hidden; border:1px solid #eadfce; border-radius:16px; background:#fff; }.ts-focus-service-card>img { width:100%; height:96px; object-fit:cover; display:block; }.ts-focus-service-card>div { display:flex; flex-direction:column; gap:3px; padding:10px; }.ts-focus-service-card span { color:#a8782c; font-size:10px; font-weight:800; }.ts-focus-service-card strong { overflow:hidden; color:#50391f; font-family:var(--font-display); font-size:14px; white-space:nowrap; text-overflow:ellipsis; }.ts-focus-service-card small { overflow:hidden; color:#83715f; font-size:10px; white-space:nowrap; text-overflow:ellipsis; }
-.ts-focus-program>div { position:relative; display:grid; gap:0; padding-inline-start:8px; }.ts-focus-program>div::before { content:""; position:absolute; top:16px; bottom:16px; inset-inline-start:17px; width:1px; background:#ddc79f; }.ts-focus-program article { position:relative; display:flex; align-items:flex-start; gap:12px; max-width:100%; padding:9px 0; }.ts-focus-program article>span { position:relative; z-index:1; display:grid; place-items:center; flex:0 0 auto; width:19px; height:19px; color:#fff; border-radius:50%; background:#aa7b30; font-size:10px; font-weight:800; }.ts-focus-program article div { display:flex; min-width:0; flex:1 1 0; flex-direction:column; gap:2px; }.ts-focus-program article strong { overflow-wrap:anywhere; color:#563f25; font-size:13px; }.ts-focus-program article small { display:flex; flex-wrap:wrap; gap:2px 5px; max-width:100%; color:#897561; font-size:11px; line-height:1.55; }.ts-focus-program article small span { min-width:0; overflow-wrap:anywhere; }
-.ts-focus-detail-cta { position:fixed; z-index:20; right:0; bottom:0; left:0; display:flex; align-items:center; justify-content:space-between; gap:12px; max-width:680px; margin:auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid #eadfce; background:rgba(255,253,249,.96); backdrop-filter:blur(10px); }.ts-focus-detail-cta>div { display:flex; flex-direction:column; }.ts-focus-detail-cta small { color:#8a7256; font-size:11px; }.ts-focus-detail-cta strong { color:#744e17; font-family:var(--font-display); font-size:20px; }.ts-focus-detail-cta button,.ts-focus-configure-cta button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 21px; color:#fff; border:0; border-radius:24px; background:linear-gradient(120deg,#c3974d,#8b6021); cursor:pointer; font-family:var(--font-app); font-size:14px; font-weight:800; }
+/* صفحة الرحلات: هرم واضح — تخصيص ثم موعد ثم باقة. الهيدر أخف عمداً
+   حتى لا يسبق قرار الحجز، والخط الزمني لا يعرض يوماً بلا رحلة. */
+.ts-focus-hero { height:228px; }.ts-focus-hero-shade { background:linear-gradient(180deg,rgba(17,30,27,.14),rgba(17,27,23,.44)); }.ts-focus-title { bottom:20px; text-shadow:0 2px 10px rgba(0,0,0,.36); }.ts-focus-title h1 { font-size:34px; }.ts-focus-title p { margin-top:4px; font-size:14px; }.ts-focus-body { margin-top:-12px; padding-top:16px; }
+.ts-focus-customize { display:flex; align-items:center; gap:11px; width:100%; min-height:72px; margin:0 0 20px; padding:11px 13px; color:#50391f; text-align:start; border:1px solid #e5d7c3; border-radius:17px; background:#fffdfa; box-shadow:0 7px 18px rgba(72,48,20,.06); cursor:pointer; font-family:var(--font-app); transition:transform .18s ease,box-shadow .18s ease; }.ts-focus-customize:hover,.ts-focus-customize:focus-visible { transform:translateY(-1px); box-shadow:0 12px 22px rgba(72,48,20,.12); outline:none; }.ts-focus-customize>span:nth-child(2) { display:grid; flex:1; min-width:0; gap:3px; }.ts-focus-customize strong { color:#50391f; font-family:var(--font-display); font-size:18px; }.ts-focus-customize small { color:#8a7256; font-size:11px; font-weight:700; line-height:1.45; }.ts-focus-customize>svg { flex:0 0 auto; color:#9b702f; }.ts-focus-customize-icon { display:grid; flex:0 0 auto; place-items:center; width:43px; height:43px; border-radius:13px; color:#a8782c; background:#f9edda; }
+.ts-focus-timeline-head { margin:0 4px 10px; }.ts-focus-timeline-head small { font-weight:600; }.ts-focus-timeline { padding-bottom:0; }.ts-focus-timeline::before { top:39px; bottom:20px; }.ts-focus-month { margin:10px 0 5px 40px; }.ts-focus-timeline-day { display:block; width:100%; min-height:0; padding:0 0 9px; color:inherit; text-align:start; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); }.ts-focus-timeline-marker { min-height:44px; }.ts-focus-timeline-marker>i { display:block; flex:0 0 auto; width:11px; height:11px; margin-inline:9px 8px; border-radius:50%; background:#d2cbc3; box-shadow:0 0 0 4px #fffaf4; }.ts-focus-timeline-marker>.ts-focus-timeline-copy { display:flex; align-items:center; flex:1; width:auto; height:auto; margin:0; padding:0; color:#796957; border-radius:0; background:transparent; box-shadow:none; }.ts-focus-timeline-copy b { font-size:15px; }.ts-focus-timeline-copy time { margin-inline-start:5px; color:#725532; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-copy small { margin-inline-start:auto; padding:4px 8px; color:#926a29; border-radius:8px; background:#f8eddb; font-size:10px; font-weight:800; white-space:nowrap; }.ts-focus-timeline-day.active .ts-focus-timeline-marker>i { width:15px; height:15px; margin-inline:7px 6px; background:#a8782c; box-shadow:0 0 0 4px #fffaf4,0 0 0 5px #d8b981; }.ts-focus-timeline-day.active .ts-focus-timeline-copy b { color:#5e4322; font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.active .ts-focus-timeline-copy time { color:#8c6423; font-size:20px; }.ts-focus-timeline-day:focus-visible { outline:2px solid #a8782c; outline-offset:3px; border-radius:10px; }
+.ts-focus-timeline-day.is-empty { cursor:default; opacity:.56; }.ts-focus-more-dates { display:flex; align-items:center; justify-content:center; width:100%; min-height:42px; margin-top:13px; color:#8c6423; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; text-decoration:underline; }.ts-focus-more-dates:disabled { cursor:wait; opacity:.6; }
+.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy { width:auto; height:auto; margin:0; padding:0; color:#796957; border-radius:0; background:transparent; box-shadow:none; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy b { font-family:var(--font-app); font-size:15px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy time { color:#725532; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-day.has-trip.active .ts-focus-timeline-marker>.ts-focus-timeline-copy b { color:#5e4322; font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.has-trip.active .ts-focus-timeline-marker>.ts-focus-timeline-copy time { color:#8c6423; font-size:20px; }
+.ts-focus-timeline-day.active { margin-bottom:3px; border-radius:12px; background:#fbf2e3; }.ts-focus-timeline-day.active .ts-focus-timeline-copy { padding-inline-end:10px; }.ts-focus-timeline-packages { margin:4px 0 16px; padding:14px 0 0 40px; border-top:1px solid #eadfce; }.ts-focus-timeline-packages>header { display:flex; align-items:center; justify-content:space-between; gap:9px; margin:0 0 10px; }.ts-focus-timeline-packages h2 { margin:0; color:#513a22; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-packages>header>span { display:flex; align-items:center; gap:4px; flex:0 0 auto; padding:5px 7px; color:#80633c; border:1px solid #eadfce; border-radius:8px; background:#fffdf9; font-size:10px; font-weight:700; white-space:nowrap; }.ts-focus-timeline-packages>header svg { color:#a8782c; }.ts-focus-package-list { display:grid; gap:9px; }.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:36% 64%; height:142px; min-height:0; border-radius:16px; }.ts-focus-package-list .ts-focus-trip-card>img { height:100%; min-height:0; min-width:0; object-fit:cover; }.ts-focus-package-list .ts-focus-trip-info { min-height:0; gap:3px; padding:11px 42px 11px 10px; }.ts-focus-package-list .ts-focus-trip-info strong { font-size:16px; }.ts-focus-package-list .ts-focus-trip-info small,.ts-focus-package-list .ts-focus-trip-info em { font-size:11px; }.ts-focus-package-list .ts-focus-trip-arrow { inset-inline-end:9px; width:29px; height:29px; }.ts-focus-all-trips { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:48px; margin-top:16px; color:#8c6423; border:1px solid #d8c19a; border-radius:13px; background:#fffdf8; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:800; }.ts-focus-all-trips:hover,.ts-focus-all-trips:focus-visible { background:#fbf3e5; outline:none; }
+@media (min-width:760px) { .ts-focus-hero { height:260px; }.ts-focus-body { max-width:680px; }.ts-focus-customize { min-height:78px; }.ts-focus-package-list .ts-focus-trip-card { height:224px; min-height:0; }.ts-focus-package-list .ts-focus-trip-card>img { height:100%; min-height:0; } }
+@media (max-width:759px) { .ts-focus-package-list { width:92%; margin-inline:auto; }.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:32% 68%; height:124px; }.ts-focus-package-list .ts-focus-trip-info { padding:9px 38px 9px 8px; }.ts-focus-package-list .ts-focus-trip-info strong { font-size:15px; }.ts-focus-package-list .ts-focus-trip-info small,.ts-focus-package-list .ts-focus-trip-info em { font-size:10px; }.ts-focus-package-list .ts-focus-trip-arrow { width:27px; height:27px; } }
 
-.ts-focus-configure { min-height:100dvh; padding-bottom:114px; background:#fffaf4; color:#50391f; }.ts-focus-configure-head { display:grid; grid-template-columns:42px 1fr 42px; align-items:center; min-height:65px; padding:0 14px; border-bottom:1px solid #efe4d6; background:#fff; }.ts-focus-configure-head button { display:grid; place-items:center; width:38px; height:38px; color:#563f25; border:0; border-radius:50%; background:#f7f2ea; cursor:pointer; }.ts-focus-configure-head h1 { margin:0; text-align:center; font-family:var(--font-display); font-size:20px; }.ts-focus-configure main { max-width:620px; margin:auto; padding:16px; }.ts-focus-configure-trip { display:flex; align-items:center; gap:10px; padding:9px; border:1px solid #eadfce; border-radius:15px; background:#fff; }.ts-focus-configure-trip img { width:62px; height:54px; object-fit:cover; border-radius:10px; }.ts-focus-configure-trip div { display:flex; flex-direction:column; gap:5px; }.ts-focus-configure-trip strong { font-family:var(--font-display); font-size:15px; }.ts-focus-configure-trip small { display:flex; align-items:center; gap:5px; color:#806d59; font-size:11px; font-weight:600; }
-.ts-focus-configure-inline-head { display:flex; align-items:center; gap:10px; margin:31px 0 0; padding-top:24px; border-top:1px solid #e8dbc9; }.ts-focus-configure-inline-head>span { display:grid; place-items:center; flex:0 0 auto; width:28px; height:28px; color:#fff; border-radius:50%; background:#a8782c; font-size:12px; font-weight:800; }.ts-focus-configure-inline-head div { display:flex; flex-direction:column; gap:2px; }.ts-focus-configure-inline-head h2 { margin:0; font-family:var(--font-display); font-size:21px; }.ts-focus-configure-inline-head p { margin:0; color:#866f55; font-size:11px; }
+/* خط المواعيد: اختيار تاريخ فقط. صفوف ثابتة لا تتمدد بالبطاقات، لذلك
+   يبقى السياق الزمني أمام المستفيد بينما تتغير الباقات في القسم التالي. */
+.ts-focus-timeline { gap:8px; padding-inline:2px; }.ts-focus-timeline::before { top:28px; bottom:28px; }.ts-focus-month { margin:4px 0 2px 38px; }.ts-focus-timeline-day { min-height:64px; padding:0; overflow:hidden; border:1px solid #eee5d9; border-radius:14px; background:#fffdf9; }.ts-focus-timeline-day.has-trip { padding:0; }.ts-focus-timeline-day.is-empty { opacity:1; color:#a79b8c; background:#f3f0eb; border-color:transparent; }.ts-focus-timeline-marker { min-height:64px; }.ts-focus-timeline-marker>i { position:relative; z-index:2; margin-inline:8px 9px; }.ts-focus-timeline-marker>.ts-focus-timeline-copy { display:flex; align-items:center; gap:9px; min-width:0; padding:0 10px 0 0; }.ts-focus-date { display:grid; flex:0 0 76px; gap:2px; }.ts-focus-date b { color:#4f3920; font-size:14px; font-weight:900; }.ts-focus-date time { margin:0; color:#9a896f; font-family:var(--font-app); font-size:10px; font-weight:700; }.ts-focus-availability { display:grid; flex:1; min-width:0; gap:2px; }.ts-focus-availability strong { color:#513a22; font-size:13px; font-weight:900; }.ts-focus-availability small { margin:0; padding:0; color:#9a6b27; border:0; border-radius:0; background:transparent; font-size:11px; font-weight:800; white-space:nowrap; }.ts-focus-timeline-copy>em { flex:0 0 auto; padding:6px 10px; color:#946928; border-radius:9px; background:#fbebcc; font-size:11px; font-style:normal; font-weight:900; white-space:nowrap; }.ts-focus-timeline-copy>svg { flex:0 0 auto; color:#9b702f; }.ts-focus-empty-day { flex:1; color:#a69b8e; font-size:12px; font-weight:700; }.ts-focus-timeline-day.active { margin:0; border-color:#c99032; background:#fff9ee; box-shadow:0 5px 13px rgba(158,111,32,.1); }.ts-focus-timeline-day.active .ts-focus-timeline-marker>i { background:#a8782c; }.ts-focus-timeline-day.active .ts-focus-date b,.ts-focus-timeline-day.active .ts-focus-availability strong { color:#694714; }.ts-focus-timeline-packages { margin:18px 0 14px; padding:16px 0 0; border-top:1px solid #e4d7c6; }.ts-focus-timeline-packages>header { margin-bottom:12px; }.ts-focus-timeline-packages h2 { font-size:19px; }.ts-focus-package-list { gap:10px; }
+@media (max-width:420px) { .ts-focus-date { flex-basis:68px; }.ts-focus-availability strong { font-size:12px; }.ts-focus-timeline-copy>em { padding:5px 8px; font-size:10px; } }
+
+/* أسبوع واحد، لا Timeline: الأيام بدائل مستقلة للموعد ولا توجد صلة
+   بصرية مضللة بينها وبين بطاقات الرحلات. */
+.ts-week-picker { margin:8px 0 12px; padding:12px; overflow:hidden; border:1px solid #e9dfd1; border-radius:17px; background:#fff; }.ts-week-picker>header { display:flex; align-items:center; justify-content:center; margin-bottom:10px; color:#755631; font-family:var(--font-display); font-size:14px; font-weight:800; }.ts-week-picker>header>span { display:inline-flex; align-items:center; gap:6px; }.ts-week-picker>header svg { color:#b47a22; }.ts-week-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; direction:rtl; }.ts-week-day { display:grid; place-items:center; align-content:center; min-width:0; min-height:82px; padding:5px 2px; color:#b2a89b; border:1px solid transparent; border-radius:12px; background:#f5f2ed; font-family:var(--font-app); text-align:center; }.ts-week-day.available { color:#543b1f; background:#fffdfa; cursor:pointer; }.ts-week-day.available:hover,.ts-week-day.available:focus-visible { border-color:#d5b477; background:#fff8e9; outline:none; }.ts-week-day.today { border-color:#ddd4c8; background:#fff; }.ts-week-day.selected { color:#4f3515; border-color:#c88b2b; background:#fff3dc; box-shadow:0 4px 10px rgba(173,119,31,.12); }.ts-week-day b { display:block; overflow:hidden; max-width:100%; font-size:11px; font-weight:800; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }.ts-week-day time { display:block; margin:3px 0 2px; font-family:var(--font-display); font-size:21px; font-weight:900; line-height:1; }.ts-week-day small { display:block; overflow:hidden; max-width:100%; color:inherit; font-size:9px; font-weight:800; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }.ts-week-day.selected small { color:#9b6720; }.ts-week-nav { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:5px; margin-top:9px; }.ts-week-nav button { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-height:36px; padding:0 6px; color:#765426; border:1px solid transparent; border-radius:9px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:11px; font-weight:900; white-space:nowrap; }.ts-week-nav button:first-child { justify-content:flex-start; }.ts-week-nav button:last-child { justify-content:flex-end; }.ts-week-nav button:hover:not(:disabled),.ts-week-nav button:focus-visible:not(:disabled) { border-color:#eadfce; background:#fff5e4; outline:none; }.ts-week-nav button.current { color:#8e7e6a; border-color:#eadfce; background:#fffdf9; }.ts-week-nav button:disabled { cursor:default; opacity:.4; }.ts-focus-timeline-packages { margin-top:10px; padding-top:12px; }.ts-focus-timeline-packages>header { align-items:flex-start; }.ts-focus-timeline-packages>header>span { border:0; padding:2px 0; color:#9c7540; background:transparent; }
+@media (max-width:420px) { .ts-week-picker { margin-inline:-2px; padding:10px 8px; }.ts-week-days { gap:3px; }.ts-week-day { min-height:74px; border-radius:10px; }.ts-week-day b { font-size:10px; }.ts-week-day time { font-size:19px; }.ts-week-day small { font-size:8px; } }
+
+/* بطاقة الموعد: الضغط على البطاقة هو الإجراء، لذلك لا زرٌ مكرر داخلها.
+   الوقت وحده يأخذ العمود الأيسر كي تقع عليه العين قبل بقية التفاصيل. */
+.ts-focus-package-list .ts-focus-trip-info { display:grid; grid-template-columns:minmax(0,1fr) 78px; align-items:center; gap:8px; padding:10px 10px 10px 12px; }
+.ts-focus-trip-copy { display:flex; flex-direction:column; justify-content:center; min-width:0; gap:4px; }
+.ts-focus-trip-copy strong,.ts-focus-trip-copy small,.ts-focus-trip-copy em { overflow:hidden; text-overflow:ellipsis; }
+.ts-focus-trip-time { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:96px; padding-inline-start:8px; border-inline-start:1px solid #eadfce; text-align:center; }
+.ts-focus-trip-time small { display:block; color:#9a856b; font-size:9px; font-weight:800; white-space:nowrap; }
+.ts-focus-trip-time b { color:#573717; direction:ltr; font-family:var(--font-display); font-size:28px; font-weight:900; line-height:1; letter-spacing:-.03em; }
+.ts-focus-trip-time em { margin-top:3px; color:#9b6a23; font-size:10px; font-style:normal; font-weight:800; }
+@media (max-width:420px) { .ts-focus-package-list .ts-focus-trip-info { grid-template-columns:minmax(0,1fr) 68px; gap:5px; padding-inline:7px; }.ts-focus-trip-time { min-height:88px; padding-inline-start:5px; }.ts-focus-trip-time b { font-size:24px; }.ts-focus-trip-time small { font-size:8px; }.ts-focus-trip-time em { font-size:9px; } }
+
+/* ═══ صفحات التفاصيل والتخصيص لتجربة Focus ═══ */
+.ts-focus-detail { width:100%; max-width:100%; min-height:100dvh; overflow-x:clip; padding-bottom:20px; background:#fffaf4; color:#50391f; }.ts-focus-detail-hero { position:relative; height:252px; overflow:hidden; background:#5c4931; }.ts-focus-detail-hero>img { width:100%; height:100%; object-fit:cover; display:block; }.ts-focus-detail-back { position:absolute; top:18px; inset-inline-start:18px; display:grid; place-items:center; width:42px; height:42px; color:#fff; border:0; border-radius:50%; background:rgba(15,15,13,.3); cursor:pointer; backdrop-filter:blur(8px); }
+.ts-focus-detail-main { box-sizing:border-box; width:100%; max-width:680px; margin:-24px auto 0; padding:21px 18px 28px; position:relative; border-radius:24px 24px 0 0; background:#fffaf4; }
+
+.ts-focus-detail-copy,.ts-focus-program { margin-top:22px; }.ts-focus-detail-copy h2,.ts-focus-program h2 { margin:0 0 7px; font-family:var(--font-display); font-size:19px; }
+.ts-focus-program>div { position:relative; display:grid; gap:0; padding-inline-start:8px; }.ts-focus-program>div::before { content:""; position:absolute; top:16px; bottom:16px; inset-inline-start:17px; width:1px; background:#ddc79f; }.ts-focus-program article { position:relative; display:flex; align-items:flex-start; gap:12px; max-width:100%; padding:9px 0; }.ts-focus-program article>span { position:relative; z-index:1; display:grid; place-items:center; flex:0 0 auto; width:19px; height:19px; color:#fff; border-radius:50%; background:#aa7b30; font-size:10px; font-weight:800; }.ts-focus-program article div { display:flex; min-width:0; flex:1 1 0; flex-direction:column; gap:2px; }.ts-focus-program article strong { overflow-wrap:anywhere; color:#563f25; font-size:13px; }.ts-focus-program article small { display:flex; flex-wrap:wrap; gap:2px 5px; max-width:100%; color:#897561; font-size:11px; line-height:1.55; }.ts-focus-program article small span { min-width:0; overflow-wrap:anywhere; }
+.ts-focus-detail-cta button,.ts-focus-configure-cta button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 21px; color:#fff; border:0; border-radius:24px; background:linear-gradient(120deg,#c3974d,#8b6021); cursor:pointer; font-family:var(--font-app); font-size:14px; font-weight:800; }
+
+.ts-focus-configure { min-height:100dvh; padding-bottom:114px; background:#fffaf4; color:#50391f; }.ts-focus-configure-head { display:grid; grid-template-columns:42px 1fr 42px; align-items:center; min-height:65px; padding:0 14px; border-bottom:1px solid #efe4d6; background:#fff; }.ts-focus-configure-head button { display:grid; place-items:center; width:38px; height:38px; color:#563f25; border:0; border-radius:50%; background:#f7f2ea; cursor:pointer; }.ts-focus-configure-head h1 { margin:0; text-align:center; font-family:var(--font-display); font-size:20px; }.ts-focus-configure main { max-width:620px; margin:auto; padding:16px; }
+
 .ts-focus-configure-section { margin-top:23px; }.ts-focus-section-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }.ts-focus-section-heading>div { display:flex; flex-direction:column; gap:2px; }.ts-focus-section-heading h2,.ts-focus-price-summary h2 { margin:0; font-family:var(--font-display); font-size:19px; }.ts-focus-section-heading small { color:#88735e; font-size:11px; }.ts-focus-section-heading>svg { color:#a8782c; }.ts-focus-counter { display:grid; grid-template-columns:54px 1fr 54px; align-items:center; max-width:220px; overflow:hidden; border:1px solid #eadfce; border-radius:15px; background:#fff; }.ts-focus-counter button { display:grid; place-items:center; height:52px; color:#9d7026; border:0; background:#fbf6ee; cursor:pointer; }.ts-focus-counter button:disabled { color:#c8bcae; cursor:not-allowed; }.ts-focus-counter strong { text-align:center; color:#4b351c; font-family:var(--font-display); font-size:25px; }
+.ts-traveller-counts { display:grid; gap:10px; }.ts-traveller-count { display:flex; align-items:center; gap:11px; min-height:88px; padding:10px 11px; border:1px solid #eadfce; border-radius:17px; background:linear-gradient(105deg,#fff 42%,#fffaf3); box-shadow:0 5px 14px rgba(92,62,25,.045); }.ts-traveller-count-icon { display:grid; place-items:center; flex:0 0 auto; width:62px; height:62px; border-radius:50%; }.ts-traveller-count-copy { display:grid; flex:1; min-width:0; gap:3px; }.ts-traveller-count-copy strong { color:#4b351c; font-family:var(--font-display); font-size:20px; }.ts-traveller-stepper { display:grid; grid-template-columns:43px 52px 43px; flex:0 0 auto; align-items:center; overflow:hidden; border:1px solid #eadfce; border-radius:13px; background:#fff; }.ts-traveller-stepper button { display:grid; place-items:center; height:45px; color:#9d7026; border:0; background:#fcf7ef; cursor:pointer; }.ts-traveller-stepper button:disabled { color:#cbbfad; cursor:not-allowed; }.ts-traveller-stepper output { color:#4b351c; text-align:center; font-family:var(--font-display); font-size:23px; font-weight:800; }
 .ts-focus-room-list { display:grid; gap:9px; }.ts-focus-room-list>button { display:flex; align-items:center; gap:10px; width:100%; min-height:90px; padding:8px; color:#50391f; text-align:start; border:1px solid #eadfce; border-radius:16px; background:#fff; cursor:pointer; font-family:var(--font-app); }.ts-focus-room-list>button.active { border:2px solid #a8782c; background:#fffaf0; }.ts-focus-room-list>button>img { width:74px; height:72px; object-fit:cover; border-radius:11px; }.ts-focus-room-list>button>svg { flex:0 0 auto; margin-inline-start:auto; color:#fff; border-radius:50%; background:#a8782c; padding:2px; }.ts-focus-room-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:4px; }.ts-focus-room-copy strong { color:#50391f; font-family:var(--font-display); font-size:15px; }.ts-focus-room-copy small { color:#806e5b; font-size:11px; }.ts-focus-room-copy em { color:#986b20; font-size:12px; font-style:normal; font-weight:800; }.ts-focus-room-empty { margin:0; padding:16px; color:#836f5b; text-align:center; border:1px dashed #ddcdb8; border-radius:14px; font-size:12px; }
-.ts-focus-included { display:flex; gap:11px; margin-top:22px; overflow:hidden; border:1px solid #e7dac7; border-radius:16px; background:#fcf4e7; }.ts-focus-included>img { width:92px; object-fit:cover; }.ts-focus-included>div { display:flex; flex-direction:column; justify-content:center; gap:5px; padding:10px 0; }.ts-focus-included strong { font-family:var(--font-display); font-size:15px; }.ts-focus-included span { display:flex; align-items:center; gap:5px; color:#7f6c58; font-size:11px; font-weight:600; }.ts-focus-included svg { color:#a8782c; }
+
 .ts-focus-price-summary { margin-top:22px; padding:15px; border:1px solid #eadfce; border-radius:17px; background:#fff; }.ts-focus-price-summary h2 { margin-bottom:10px; }.ts-focus-price-summary>div,.ts-focus-price-summary footer { display:flex; align-items:center; justify-content:space-between; padding:5px 0; color:#7a6652; font-size:12px; }.ts-focus-price-summary b { color:#5b4022; }.ts-focus-price-summary footer { margin-top:7px; padding-top:12px; color:#563f25; border-top:1px solid #eee4d8; font-family:var(--font-display); font-size:17px; }.ts-focus-price-summary footer strong { color:#986b20; font-size:21px; }
 .ts-focus-configure-cta { position:fixed; z-index:20; right:0; bottom:0; left:0; display:flex; max-width:620px; flex-direction:column; gap:5px; margin:auto; padding:11px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid #eadfce; background:rgba(255,253,249,.97); backdrop-filter:blur(10px); }.ts-focus-configure-cta button { width:100%; }.ts-focus-configure-cta button:disabled { opacity:.45; cursor:not-allowed; }.ts-focus-configure-cta small { color:#876f54; text-align:center; font-size:10px; }
 
 /* في صفحة التفاصيل: التخصيص ليس صفحة مقطوعة، بل القسم التالي الطبيعي. */
 .ts-focus-configure.embedded { min-height:0; padding:0; background:transparent; }.ts-focus-configure.embedded main { padding:16px 0 0; }.ts-focus-configure.embedded .ts-focus-configure-cta { position:static; max-width:none; margin-top:20px; padding:0; border:0; background:transparent; backdrop-filter:none; }
 @media (min-width: 760px) {
-  .ts-focus-detail-hero { height:360px; }.ts-focus-detail-main { max-width:980px; padding:30px 34px 42px; }.ts-focus-detail-title h1 { font-size:32px; }.ts-focus-feature-grid { max-width:580px; gap:12px; }.ts-focus-feature-grid span { width:48px; height:48px; }.ts-focus-feature-grid small { font-size:11px; }.ts-focus-detail-copy { max-width:720px; }.ts-focus-service-grid { grid-template-columns:repeat(2,minmax(0,1fr)); max-width:760px; }.ts-focus-service-card>img { height:160px; }.ts-focus-program { max-width:760px; }
+  .ts-focus-detail-hero { height:360px; }.ts-focus-detail-main { max-width:980px; padding:30px 34px 42px; }.ts-focus-program { max-width:760px; }
   .ts-focus-configure.embedded main { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); column-gap:28px; align-items:start; }.ts-focus-configure.embedded .ts-focus-configure-trip { grid-column:1/-1; }.ts-focus-configure.embedded .ts-focus-travellers { grid-column:1; }.ts-focus-configure.embedded .ts-focus-accommodation { grid-column:2; }.ts-focus-configure.embedded .ts-focus-included { grid-column:1; }.ts-focus-configure.embedded .ts-focus-price-summary { grid-column:2; }.ts-focus-configure.embedded .ts-focus-configure-cta { grid-column:1/-1; max-width:410px; justify-self:end; width:100%; }
 }
 .ts-focus-empty svg { color:#a8782c; }.ts-focus-empty strong { color:#60462a; font-size:14px; }.ts-focus-empty span { font-size:12px; }
 
+/* ── حجز الرحلة: الملخص أولاً، ثم قرار واحد في كل مرة ── */
+.ts-focus-detail { padding-bottom:112px; background:#fffdf9; }
+.ts-focus-detail-hero { height:132px; }
+.ts-focus-detail-hero::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,rgba(37,27,16,.15),rgba(37,27,16,.04)); pointer-events:none; }
+.ts-focus-detail-hero>img { filter:saturate(.85); }
+.ts-focus-detail-back { z-index:1; top:12px; inset-inline-start:12px; width:38px; height:38px; }
+.ts-focus-detail-main { max-width:680px; margin:-12px auto 0; padding:16px 16px calc(96px + env(safe-area-inset-bottom)); border-radius:18px 18px 0 0; background:#fffdf9; }
+.ts-focus-trip-summary { display:flex; align-items:stretch; justify-content:space-between; gap:12px; padding:16px; border:1px solid #e5d8c7; border-radius:16px; background:#fff; }
+.ts-focus-trip-summary-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:7px; }
+.ts-focus-trip-summary-copy h1 { margin:0; color:#3f2d19; font-family:var(--font-display); font-size:23px; line-height:1.25; }
+.ts-focus-trip-summary-copy p { display:flex; align-items:center; gap:6px; margin:0; color:#735f4a; font-size:12px; font-weight:600; line-height:1.5; }
+.ts-focus-trip-summary-copy svg { flex:0 0 auto; color:#9b702f; }
+.ts-focus-departure-time { display:flex; flex:0 0 auto; flex-direction:column; align-items:center; justify-content:center; min-width:104px; padding-inline-start:12px; border-inline-start:1px solid #eee3d6; text-align:center; }
+.ts-focus-departure-time small { color:#8c7255; font-size:10px; font-weight:700; white-space:nowrap; }
+.ts-focus-departure-time strong { color:#5a3710; direction:ltr; font-family:var(--font-display); font-size:30px; line-height:1.05; letter-spacing:-.03em; white-space:nowrap; }
+.ts-focus-departure-time em { margin-top:3px; color:#9b6a23; font-size:11px; font-style:normal; font-weight:800; }
+.ts-focus-includes { display:flex; align-items:center; flex-wrap:wrap; gap:8px 15px; margin:15px 2px 0; color:#59442e; }.ts-focus-includes strong { font-family:var(--font-display); font-size:17px; }.ts-focus-includes span { display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; font-weight:700; }.ts-focus-includes svg { flex:0 0 auto; color:#9f732f; }
+.ts-focus-program-compact { margin-top:15px; overflow:hidden; border:1px solid #e6dacb; border-radius:13px; background:#fff; }.ts-focus-program-compact>button { display:flex; align-items:center; width:100%; min-height:48px; gap:9px; padding:0 13px; color:#4d3924; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); text-align:start; }.ts-focus-program-compact>button>span { font-family:var(--font-display); font-size:17px; }.ts-focus-program-compact>button small { margin-inline-start:auto; color:#85632c; font-size:12px; font-weight:800; }.ts-focus-program-compact>button svg { transition:transform .18s ease; }.ts-focus-program-compact>button[aria-expanded="true"] svg { transform:rotate(180deg); }
+.ts-focus-program-timeline { position:relative; display:grid; gap:0; margin:0 13px; padding:3px 0 8px; border-top:1px solid #eee5da; }.ts-focus-program-timeline::before { content:""; position:absolute; top:20px; bottom:21px; inset-inline-start:9px; width:1px; background:#d9c39f; }.ts-focus-program-timeline article { position:relative; z-index:1; display:flex; align-items:flex-start; gap:9px; padding:9px 0; }.ts-focus-program-timeline article>span { display:grid; place-items:center; flex:0 0 auto; width:19px; height:19px; color:#fff; border-radius:50%; background:#a8782c; font-size:10px; font-weight:800; }.ts-focus-program-timeline article>div { display:grid; gap:2px; min-width:0; }.ts-focus-program-timeline strong { color:#553d24; font-size:12px; }.ts-focus-program-timeline small { color:#7c6854; font-size:11px; line-height:1.55; }
+.ts-focus-configure.embedded { padding:0; background:transparent; }.ts-focus-configure.embedded main { display:block; padding:0; }
+.ts-focus-configure-section { margin-top:24px; }.ts-focus-configure-section:first-child { margin-top:24px; }
+.ts-focus-audience { padding:14px; border:1px solid #eadfce; border-radius:15px; background:#fffaf1; }
+.ts-focus-hotel-once { display:flex; align-items:center; gap:10px; margin-bottom:9px; overflow:hidden; border:1px solid #eadfce; border-radius:12px; background:#fff; }.ts-focus-hotel-once img { width:66px; height:54px; object-fit:cover; }.ts-focus-hotel-once div { display:grid; gap:2px; min-width:0; }.ts-focus-hotel-once strong { overflow:hidden; color:#51391f; font-family:var(--font-display); font-size:15px; text-overflow:ellipsis; white-space:nowrap; }.ts-focus-hotel-once small { color:#806b55; font-size:11px; }
+.ts-focus-room-list { gap:7px; }.ts-focus-room-list>button { gap:10px; min-height:52px; padding:8px 11px; border-radius:12px; }.ts-focus-room-list>button>img { display:none; }.ts-focus-room-list>button.active { border:2px solid #9a6b2b; background:#fffaf0; }.ts-focus-room-radio { display:grid; place-items:center; flex:0 0 auto; width:20px; height:20px; color:#fff; border:1.5px solid #8d7761; border-radius:50%; }.active .ts-focus-room-radio { border-color:#9a6b2b; background:#9a6b2b; }.ts-focus-room-copy { gap:0; }.ts-focus-room-copy strong { font-size:14px; }.ts-focus-room-list>button>em { flex:0 0 auto; color:#7b5520; font-size:12px; font-style:normal; font-weight:800; white-space:nowrap; }
+.ts-focus-price-summary { margin-top:20px; padding:14px; border-radius:14px; }.ts-focus-price-summary h2 { font-size:18px; }
+.ts-focus-room-choice { display:grid; gap:7px; }.ts-focus-room-choice>button { display:flex; align-items:center; gap:10px; width:100%; min-height:52px; padding:8px 11px; color:#50391f; text-align:start; border:1px solid #eadfce; border-radius:12px; background:#fff; cursor:pointer; font-family:var(--font-app); }.ts-focus-room-choice>button.active { border:2px solid #9a6b2b; background:#fffaf0; }.ts-focus-room-choice .ts-focus-room-copy { gap:2px; }.ts-focus-room-choice .ts-focus-room-copy small { color:#7b5520; font-size:12px; font-style:normal; font-weight:800; }.ts-focus-room-quantity { display:flex; align-items:center; justify-content:space-between; padding:2px 12px 9px 42px; color:#6d5944; font-size:12px; font-weight:700; }.ts-focus-room-quantity>div { display:grid; grid-template-columns:34px 42px 34px; align-items:center; overflow:hidden; border:1px solid #eadfce; border-radius:10px; background:#fff; direction:ltr; }.ts-focus-room-quantity button { display:grid; place-items:center; height:34px; color:#9d7026; border:0; background:#fbf6ee; cursor:pointer; }.ts-focus-room-quantity button:disabled { color:#c8bcae; cursor:not-allowed; }.ts-focus-room-quantity strong { text-align:center; color:#4b351c; font-family:var(--font-display); font-size:17px; }
+.ts-focus-configure-cta,.ts-focus-configure.embedded .ts-focus-configure-cta { position:fixed; z-index:30; right:0; bottom:0; left:0; display:flex; max-width:680px; flex-direction:row; align-items:center; gap:12px; margin:auto; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border:1px solid #eadfce; border-bottom:0; border-radius:16px 16px 0 0; background:rgba(255,253,249,.97); backdrop-filter:blur(10px); }.ts-focus-configure-cta>div { display:flex; flex:1; min-width:0; flex-direction:column; }.ts-focus-configure-cta small { color:#806c56; text-align:start; font-size:11px; }.ts-focus-configure-cta strong { color:#593d19; font-family:var(--font-display); font-size:20px; white-space:nowrap; }.ts-focus-configure-cta button { flex:1.25; width:auto; min-height:49px; border-radius:12px; }.ts-focus-configure-cta button:disabled { opacity:.45; cursor:not-allowed; }
+/* واتساب داخل الشريط: دائرةٌ ثابتة لا تطفو فوق شيء. الانتقاء أدقّ من
+   قاعدة الأزرار الذهبية أعلاه فيغلبها وحده. */
+.ts-focus-configure-cta button.ts-wa-inline { flex:0 0 auto; width:46px; min-width:46px; height:46px; min-height:46px; padding:0; color:#fff; border-radius:50%; background:#25D366; }
+.ts-focus-configure-cta button.ts-wa-inline:active { transform:scale(.94); }
+@media (min-width:760px) { .ts-focus-detail-hero { height:170px; }.ts-focus-detail-main { max-width:760px; padding-inline:24px; }.ts-focus-configure.embedded main { display:block; }.ts-focus-configure.embedded .ts-focus-configure-cta { position:fixed; max-width:680px; justify-self:auto; width:auto; }.ts-focus-trip-summary-copy h1 { font-size:26px; } }
+
 /* ── شبكة الباقات وقائمتها ──
    عمودان على الجوال (الشبكة وحدها)، وأربعة أعمدة أو قائمة أفقية على
    الديسكتوب — انظر استعلام 1024 أدناه. */
-.ts-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap:14px; }
-.ts-list { display:grid; gap:12px; }
 
 /* صفّ القائمة يعمل على الجوال كذلك: من بدّل العرض على الحاسب ثم صغّر
    النافذة يجد الصورة فوق والتفاصيل تحتها، لا صفّاً أفقياً مضغوطاً. */
-.ts-list-row { display:grid; grid-template-columns:1fr; gap:10px; width:100%; padding:10px; background:#fff; border:1px solid #EDE4D6; border-radius:14px; }
-.ts-list-row > img { width:100%; aspect-ratio:16 / 10; object-fit:cover; border-radius:10px; display:block; }
-.ts-list-main { display:flex; flex-direction:column; gap:6px; min-width:0; }
-.ts-list-title { font-family:var(--font-display); font-size:18px; font-weight:600; color:#5C421B; }
-.ts-list-meta { display:flex; flex-wrap:wrap; gap:12px; font-size:12px; font-weight:500; color:#625B4D; }
-.ts-list-incl { font-size:11px; font-weight:400; color:#A69D8E; }
-.ts-list-side { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 
 /* زر «عرض الرحلة» لا يتحرّك ولا يتغير نصه؛ النبض محصور في لون حدّه
    كي يلفت العين بهدوء من دون أن يهزّ شبكة البطاقات أو يزعج القراءة. */
@@ -249,103 +247,18 @@
   0%, 100% { border-color:rgba(255,255,255,.32); }
   50%      { border-color:rgba(255,245,214,.96); }
 }
-@media (max-width: 1023px) {
-  .ts-trip-cta { animation:ts-trip-cta-border 2.6s ease-in-out infinite; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ts-trip-cta { animation:none; }
-}
 
 /* شريط الأدوات وبطاقة VIP للديسكتوب وحده؛ وعلى الجوال بطاقة الطلب
    الكبيرة أسفل الصفحة هي التي تظهر. */
-.ts-explore-toolbar { display:none; }
-.ts-vip-card { display:none; }
 
 /* ═══ بنر الحديث — الحرمان خلفيةً جميلة مع تأثيرات ديناميكية ═══ */
-.ts-sacred {
-  position:relative; isolation:isolate; overflow:hidden;
-  display:grid; place-items:center; min-height:280px;
-  margin:12px 16px 4px; padding:40px 20px; border-radius:22px;
-  border:2px solid rgba(232,212,168,.45);
-  background:
-    linear-gradient(135deg, rgba(140,100,35,.1) 0%, rgba(180,150,100,.08) 50%, rgba(140,100,35,.1) 100%),
-    url("/bg-haram.jpg") center / cover,
-    #1A0F06;
-  background-attachment: fixed;
-  box-shadow: 
-    0 20px 60px rgba(17,11,3,.4),
-    inset 0 1px 0 rgba(255,255,255,.05);
-}
+
 /* الحجاب الناعم: تدرج شعاعي متوازن يرفع الظلام تجاه النص */
-.ts-sacred::after {
-  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
-  background:radial-gradient(ellipse 150% 120% at 50% 50%, 
-    rgba(17,11,3,.50) 0%, 
-    rgba(17,11,3,.68) 40%, 
-    rgba(17,11,3,.85) 100%);
-}
 
-.ts-sacred-bg { position:absolute; inset:0; z-index:-2; }
-.ts-sacred-bg img { position:absolute; inset-block:0; width:56%; height:100%; object-fit:cover; object-position:center 55%; }
-.ts-sacred-bg .mak { left:0;  -webkit-mask:linear-gradient(to right,#000 62%,transparent); mask:linear-gradient(to right,#000 62%,transparent); }
-.ts-sacred-bg .mad { right:0; }
-[dir="rtl"] .ts-sacred-bg .mak { left:auto; right:0; -webkit-mask:linear-gradient(to left,#000 62%,transparent); mask:linear-gradient(to left,#000 62%,transparent); }
-[dir="rtl"] .ts-sacred-bg .mad { right:auto; left:0; }
-
-.ts-sacred-copy { position:relative; max-width:26ch; text-align:center; }
-.ts-sacred-kind { 
-  margin:0 0 16px; 
-  color:#F0D89A; 
-  font-family:var(--font-app); 
-  font-size:13px; 
-  font-weight:700; 
-  letter-spacing:.16em; 
-  text-transform: uppercase;
-  opacity: 0.95;
-}
 /* Mobile: Show marketing copy by default */
-.ts-sacred-mobile-text { display:block; }
-.ts-sacred-hadith { display:none !important; }
-.ts-sacred-hadith-eng { display:none !important; }
-.ts-sacred-mobile-meaning { display:block; }
-
-.ts-sacred-text {
-  margin:0; color:#fff; font-family:var(--font-quote);
-  font-size:24px; font-weight:400; line-height:1.85; overflow-wrap:break-word;
-  text-shadow:
-    0 2px 8px rgba(0,0,0,.5),
-    0 0 30px rgba(232,212,168,.15);
-  letter-spacing: 0.5px;
-}
-.ts-sacred-meaning { 
-  margin:14px auto 0; 
-  max-width:40ch; 
-  color:rgba(255,255,255,.85); 
-  font-family:var(--font-app); 
-  font-size:13px; 
-  line-height:1.75;
-  font-weight: 400;
-}
-.ts-sacred-src { 
-  margin:16px 0 0; 
-  color:rgba(255,255,255,.68); 
-  font-family:var(--font-app); 
-  font-size:12px;
-  font-weight: 500;
-}
 
 /* رأس الجوال عملي وقصير؛ الهوية لا تحتاج كتلة مستقلة قبل الباقات. */
-.ts-mobile-explore-header { 
-  display:flex; 
-  align-items:center; 
-  justify-content:space-between; 
-  min-height:66px; 
-  border-bottom:1px solid #E6DFCF;
-  background: linear-gradient(135deg, rgba(255,255,255,.97) 0%, rgba(255,250,240,.95) 100%);
-  padding-inline: 16px;
-}
-.ts-mobile-explore-brand { display:flex; align-items:center; border:0; background:transparent; color:#3F2A18; cursor:pointer; padding:4px 0; }
-.ts-mobile-explore-actions { display:flex; align-items:center; gap:8px; }
+
 .ts-mobile-explore-actions .ts-mobile-auth { 
   display:inline-flex; 
   align-items:center; 
@@ -366,62 +279,23 @@
   background: #F8F3EB;
   box-shadow: 0 2px 8px rgba(180,137,63,.15);
 }
-.ts-mobile-explore-actions > div button { height:38px !important; padding-inline:11px !important; font-size:12px !important; }
-.ts-mobile-filter-row { display:flex; align-items:center; gap:8px; }
-.ts-mobile-view-switch { 
-  display:inline-flex; 
-  flex:0 0 auto; 
-  gap:2px; 
-  padding:4px; 
-  border:1px solid rgba(232,212,168,.3);
-  border-radius:12px; 
-  background: linear-gradient(135deg, #FBF9F5 0%, rgba(247,238,220,.8) 100%);
-}
-.ts-mobile-view-switch button { 
-  display:grid; 
-  width:36px; 
-  height:34px; 
-  place-items:center; 
-  border:0; 
-  border-radius:10px; 
-  background:transparent; 
-  color:#8B7D70; 
-  cursor:pointer;
-  transition: all 0.2s ease;
-}
-.ts-mobile-view-switch button.on { 
-  background:linear-gradient(135deg, #fff 0%, rgba(255,250,240,.95) 100%);
-  color:#8C6423; 
-  box-shadow:0 2px 6px rgba(79,51,16,.12);
-}
-.ts-mobile-city-tabs { flex:1; min-width:0; padding-bottom:2px; }
-.ts-mobile-city-tabs::-webkit-scrollbar { display:none; }
 
 @media (max-width: 1023px) {
-  .ts-sacred { min-height:260px; padding:32px 18px; }
-  .ts-sacred-text { font-size:22px; line-height:1.8; }
-  .ts-sacred-kind { margin-bottom:12px; font-size:11px; }
+
+  
 
   /* وضع القائمة هو صف خدمات مضغوط، لا نسخة ثانية من بطاقة الشبكة: صورة
      وهوية الباقة بالأعلى، والسعر والإجراء في شريط واحد أسفلها. */
-  .ts-list-row { grid-template-columns:106px minmax(0,1fr); gap:10px; padding:8px; }
-  .ts-list-row > img { grid-column:1; grid-row:1; width:106px; height:106px; aspect-ratio:auto; }
-  .ts-list-main { grid-column:2; grid-row:1; gap:5px; padding-top:2px; }
-  .ts-list-title { font-size:17px; }
-  .ts-list-meta { gap:5px 9px; font-size:11px; }
-  .ts-list-incl { display:none; }
-  .ts-list-side { grid-column:1 / -1; grid-row:2; padding-top:8px; border-top:1px solid #F0EADD; }
-  .ts-list-side .ts-card-cta { min-width:132px; }
+
+  
+
+  
 
   /* رأس تفاصيل الباقة مستقلّ عن النص؛ زر العودة كبير بارتفاع لمسي واضح
      ولا يختفي داخل الكتلة بعد تصفّح الصور. */
-  .ts-mobile-listing-header { display:flex; align-items:center; justify-content:space-between; min-height:62px; padding-inline:16px; border-bottom:1px solid #F0EADD; background:#fff; }
+  
   .ts-mobile-custom-header { display:flex; align-items:center; justify-content:space-between; min-height:62px; margin:-16px -16px 0; padding-inline:16px; border-bottom:1px solid #F0EADD; background:#fff; }
   .ts-mobile-listing-back { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#5C421B; font-family:var(--font-app); font-size:14px; font-weight:700; cursor:pointer; }
-}
-
-@media (max-width: 620px) {
-  .ts-trust-promises { grid-template-columns: 1fr; }
 }
 
 /* الديسكتوب ليس نسخة مكبّرة من الهاتف: إطار ثابت، تنقّل علوي، وشبكة مقارنة. */
@@ -523,80 +397,51 @@
 
   /* لا رأس ترويجي على الديسكتوب: صفحة النتائج تبدأ بالنتائج — الهيدر
      ثم شريط الأدوات ثم الباقات، بلا لافتةٍ تدفع أول صفٍّ خارج الشاشة. */
-  .ts-umrah-hero, .ts-mobile-explore-header, .ts-mobile-head, .ts-trust-promises, .ts-custom-hero { display:none !important; }
 
-  .ts-explore-shell { max-width:none; padding-bottom:32px !important; }
-  .ts-explore-shell > div:not(.ts-explore-toolbar) { max-width:1280px; width:100%; margin-inline:auto; }
-  .ts-explore-body { padding-inline:40px !important; margin-top:22px !important; }
+  
 
   /* شريط الأدوات: صفٌّ واحد لاصقٌ تحت الهيدر — العدد ومبدّل العرض.
      خلفيته بعرض الشاشة ومحتواه على عرض المحتوى، فيبدو امتداداً للهيدر. */
-  .ts-explore-toolbar { display:block; position:sticky; top:76px; z-index:30; background:#fff; border-bottom:1px solid #EDE4D6; }
-  .ts-toolbar-inner { max-width:1280px; margin-inline:auto; padding:14px 40px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
-  .ts-toolbar-title { display:flex; align-items:baseline; gap:10px; margin:0; font-family:var(--font-display); font-size:22px; font-weight:700; color:#3F2A18; }
-  .ts-toolbar-title span { font-family:var(--font-app); font-size:13px; font-weight:500; color:#8B7D70; }
-  .ts-view-switch { display:inline-flex; gap:3px; padding:3px; border:1px solid #E6DFCF; border-radius:999px; background:#FBF9F5; }
-  .ts-view-switch button { display:inline-flex; align-items:center; gap:6px; height:34px; padding-inline:16px; border:1px solid transparent; border-radius:999px; background:none; color:#5C421B; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:600; }
-  .ts-view-switch button.on { background:#fff; border-color:#E6DFCF; box-shadow:0 1px 3px rgba(79,51,16,.14); color:#8C6423; }
+
+  
+
+  
 
   /* أربع بطاقات في الصف: لا خريطة ولا عمود فلاتر يقتطع العرض، فالمساحة
      كلها للباقات. والبطاقة أقصر — صورة 16/11 وعنوان أصغر — حتى يظهر
      صفّان في الشاشة الأولى بدل صفٍّ واحد. */
-  .ts-grid { grid-template-columns:repeat(4, minmax(0, 1fr)) !important; gap:18px !important; }
+  
   .ts-explore-shell .ts-seq { padding:10px !important; border:1px solid #EDE4D6; box-shadow:0 10px 28px -24px rgba(79,51,16,.52); transition:transform .18s ease,box-shadow .18s ease; }
   .ts-explore-shell .ts-seq:hover { transform:translateY(-4px); box-shadow:0 18px 36px -24px rgba(79,51,16,.45); }
-  .ts-grid-card > img { aspect-ratio:16 / 11 !important; }
-  .ts-grid-card > span:nth-of-type(1) { font-size:15px !important; }
 
   /* القائمة: صفٌّ أفقي بالعرض الكامل — صورة، تفاصيل، ثم عمود السعر
      والإجراء مفصولٌ بخطّ كصفّ نتائج Booking. */
-  .ts-list { gap:14px; }
-  .ts-list-row { grid-template-columns:250px minmax(0,1fr) 226px; align-items:stretch; gap:18px; padding:14px; transition:box-shadow .18s ease; }
-  .ts-list-row:hover { box-shadow:0 14px 30px -26px rgba(79,51,16,.5); }
-  .ts-list-row > img { height:100%; aspect-ratio:auto; min-height:168px; }
-  .ts-list-main { gap:8px; padding-block:2px; }
-  .ts-list-title { font-size:20px; }
-  .ts-list-side { flex-direction:column; align-items:flex-end; justify-content:center; gap:10px; padding-inline-start:18px; border-inline-start:1px solid #F0EADD; text-align:end; }
-  .ts-list-side .ts-card-cta { width:100%; }
+
+  
+
+  
 
   /* رحلة حسب الطلب: بطاقةٌ بين الباقات لا قسمٌ مستقل. لونها يميّزها
      كخيارٍ مختلف، وحجمها حجم أخواتها فلا تزاحم ما يُحجَز. */
-  .ts-vip-card { display:flex; flex-direction:column; justify-content:flex-end; gap:9px; padding:16px; border:1px solid #E4CE9E; border-radius:14px; background:linear-gradient(158deg,#A2762C 0%,#6B4E1D 62%,#5C421B 100%); color:#fff; }
-  .ts-vip-badge { display:inline-flex; align-items:center; align-self:flex-start; gap:6px; height:26px; padding-inline:10px; border-radius:999px; background:rgba(255,255,255,.18); color:#fff; font-size:11px; font-weight:700; letter-spacing:.06em; }
-  .ts-vip-title { font-family:var(--font-display); font-size:19px; font-weight:600; }
-  .ts-vip-note { font-size:12.5px; font-weight:400; line-height:1.6; color:rgba(255,255,255,.88); }
-  .ts-vip-cta { display:flex; align-items:center; justify-content:center; gap:8px; height:42px; margin-top:3px; border-radius:999px; background:#fff; color:#6B4E1D; font-size:14px; font-weight:600; }
-  .ts-vip-card.as-row { flex-direction:row; align-items:center; justify-content:flex-start; gap:20px; padding:18px 22px; }
-  .ts-vip-card.as-row .ts-vip-badge { align-self:center; }
-  .ts-vip-card.as-row .ts-vip-note { flex:1; min-width:0; }
-  .ts-vip-card.as-row .ts-vip-cta { flex:0 0 auto; margin-top:0; padding-inline:24px; }
 
-  .ts-sacred {
-    width:calc(100% - 80px); max-width:1280px; margin:20px auto 0;
-    min-height:220px; padding:36px 40px; border-radius:24px;
-    border: 2px solid rgba(232,212,168,.5);
-  }
-  .ts-sacred-copy { max-width:22ch; }
-  .ts-sacred-text { font-size:32px; line-height:1.7; }
-  .ts-sacred-kind { margin-bottom:16px; font-size:12px; }
-  .ts-sacred-src { margin-top:18px; font-size:12px; }
+  
+
+  
+
+  
+
+  
+
+  
   
   /* Desktop: Show hadith, hide marketing copy */
-  .ts-sacred-mobile-text { display:none !important; }
-  .ts-sacred-hadith { display:block !important; }
-  .ts-sacred-hadith-eng { display:block !important; }
-  .ts-sacred-mobile-meaning { display:none !important; }
-  
-  .ts-sacred-meaning {
-    font-size:13px;
-    line-height:1.7;
-    margin:12px auto 0;
-  }
 
-  .ts-listing-shell { max-width:1280px; width:100%; margin-inline:auto; box-shadow:0 20px 48px -42px rgba(67,41,13,.6); }
-  .ts-listing-shell > .flex-1 { padding-bottom:106px !important; }
-  .ts-listing-shell section { padding-inline:40px !important; }
-  .ts-listing-shell .ts-booking-steps { border:1px solid #EDE4D6; border-radius:20px; margin:0 40px 24px; padding:28px !important; }
+  
+
+  
+
+  
+
   .ts-listing-shell .ts-sticky-bar { max-width:1280px; width:100%; left:auto; right:auto; padding-inline:40px !important; }
 }
 
@@ -616,23 +461,14 @@
   .ts-custom-shell, .ts-custom-success { width:min(680px,calc(100vw - 48px)); margin-inline:auto; padding-top:34px !important; padding-bottom:40px !important; }
   .ts-custom-two-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 
-  .ts-account-name-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-}
-
-@media (max-width: 1023px) {
-  .ts-account-name-grid { display:grid; grid-template-columns:1fr; gap:12px; }
 }
 
 /* ══════════════ صفحة الباقة ══════════════
    خليّتا الحجز وصفّ «تمّ الاختيار» يعملان على العرضين: الأكورديون المرقّم
    سقط لأن الخطوة المنتهية كانت تُطوى فيغيب ما اختاره المستفيد. */
-.ts-book-grid { display:grid; gap:14px; }
-.ts-book-cell { min-width:0; background:#fff; border:1px solid #EDE4D6; border-radius:14px; padding:14px; }
-.ts-book-cell-title { margin-bottom:10px; color:#5C421B; font-size:14px; font-weight:600; }
+
 /* المرحلة التالية لا تبقى بيضاء مثل ما قبلها: التدرج الذهبي الخفيف يلفت
    النظر إلى القرار المطلوب من دون أن يبدو كتنبيه خطأ. */
-.ts-book-cell.ts-book-active { background:#FFF8EA; border-color:#D6A957; box-shadow:0 10px 26px -24px rgba(141,97,27,.65); }
-.ts-book-cell.ts-book-active .ts-book-cell-title { color:#7D561A; }
 
 .ts-done-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:11px 13px; border:1px solid #E9E3D6; border-radius:12px; background:#F6F4EF; }
 .ts-done-check { display:grid; place-items:center; flex-shrink:0; width:20px; height:20px; border-radius:999px; background:#1E7A44; color:#fff; }
@@ -643,82 +479,57 @@
 
 /* ما يظهر على الديسكتوب وحده — والعكس مضمون بلا صنف: العنصر بلا الصنف
    يظهر في العرضين. */
-@media (max-width: 1023px) {
-  .ts-only-desktop { display:none !important; }
-}
 
 /* ══════════ صفحة الباقة على الديسكتوب ══════════
    شبكة اثني عشر عموداً لا أقساماً بعرض الصفحة تحت بعضها: الصور والمعلومات
    صفّاً أول، والحجز مع ملخّصه صفّاً ثانياً، ثم أزواج، ثم ثلاثيات،
    والتقييمات أربعٌ في صفّ. البياض بين اللوحات مقصود، والصفحة تقصر. */
 @media (min-width: 1024px) {
-  .ts-listing-shell > .ts-listing-grid {
-    display:grid; grid-template-columns:repeat(12, minmax(0,1fr));
-    gap:20px; align-items:start;
-    max-width:1280px; margin-inline:auto; padding:22px 40px 44px !important;
-  }
+  
   /* الملخّص الجانبي يحلّ محلّ الشريط السفلي، فلا يُدفَع الحجز إلى الأسفل. */
   .ts-listing-shell .ts-sticky-bar { display:none !important; }
 
   /* كل لوحة بطاقةٌ قائمة بنفسها: الحدّ يفصل، فلا حاجة لأشرطة لونية متناوبة. */
-  .ts-panel { min-width:0; background:#fff; border:1px solid #EDE4D6; border-radius:16px; padding:20px !important; }
-  .ts-panel > section { background:transparent !important; padding:0 !important; }
-  .ts-panel > section > div:first-child { margin-bottom:12px !important; }
+
+  
 
   /* عناوين أصغر: الديسكتوب يقرأ سلّم أحجامٍ أهدأ من الجوال. */
-  .ts-listing-shell h1 { font-size:23px !important; line-height:1.3 !important; }
-  .ts-listing-shell h2 { font-size:16px !important; }
-  .ts-listing-shell .ts-gallery-title { display:none; }
 
-  .ts-p-gallery { order:-1; grid-column:span 7; padding:12px !important; }
-  .ts-p-head    { grid-column:span 5; }
-  .ts-p-book    { grid-column:span 8; }
-  .ts-p-aside   { grid-column:span 4; position:sticky; top:92px; padding:0 !important; border:none !important; background:transparent !important; }
-  .ts-p-toggle  { display:none; }
-  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport { grid-column:span 6; }
+  
+
+  
+
+  
+  
   /* الترتيب: المعلومات المختصرة قبل التقييمات — والاثنتان بعد الأزواج. */
-  .ts-p-know    { grid-column:span 12; order:5; }
-  .ts-p-reviews { grid-column:span 12; order:6; }
 
   /* حقائق الرحلة بجانب الصور — تشغل ما كان فراغاً في صدر الصفحة. */
-  .ts-facts { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid #F0EADD; }
-  .ts-fact { display:flex; align-items:center; gap:8px; min-width:0; }
-  .ts-fact svg { flex-shrink:0; color:#B7893F; }
-  .ts-fact small { display:block; color:#8B7D70; font-size:11px; }
-  .ts-fact b { display:block; overflow:hidden; color:#5C421B; font-size:13px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+
+  
 
   /* التاريخ والعدد جنباً إلى جنب، والسكن يمتدّ تحتهما. */
-  .ts-book-grid { grid-template-columns:1fr 1fr; gap:16px; }
-  .ts-book-room { grid-column:1 / -1; }
 
   /* ملخّص الحجز */
-  .ts-aside-card { padding:18px; border:1px solid #EDE4D6; border-radius:16px; background:#fff; box-shadow:0 12px 30px -26px rgba(79,51,16,.5); }
-  .ts-aside-head { margin-bottom:12px; color:#3F2A18; font-family:var(--font-display); font-size:16px; font-weight:700; }
-  .ts-aside-rows { display:flex; flex-direction:column; gap:9px; padding-bottom:12px; border-bottom:1px solid #F0EADD; }
-  .ts-aside-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; color:#625B4D; font-size:13px; }
-  .ts-aside-row b { color:#5C421B; font-weight:600; text-align:end; }
-  .ts-aside-total { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-block:13px; }
-  .ts-aside-total span { color:#5C421B; font-size:13.5px; font-weight:600; }
-  .ts-aside-total b { color:#3F2A18; font-size:19px; font-weight:700; }
-  .ts-aside-missing { margin-top:9px; color:#8C6423; font-size:12px; text-align:center; }
+
+  
+
+  
+
+  
 
   /* الإلغاء · الشروط · الملاحظات — صفٌّ واحد من ثلاثة أعمدة. */
   /* auto-fit لا repeat(3): باقةٌ بلا ملاحظات لها بندان، وثلاثة أعمدة
      تترك ثلثاً فارغاً بلا سبب. */
-  .ts-know-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:0 26px; }
 
   /* أربع بطاقات رأي في صفّ، والرابط تحتها متوسّطاً. */
   /* أربعٌ حين تتوفّر، وأقلّ منها يتوسّع ليملأ الصفّ بدل بطاقتين نحيلتين. */
-  .ts-reviews-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; }
-  .ts-review-card { display:flex; flex-direction:column; gap:9px; min-width:0; padding:14px; border:1px solid #EDE4D6; border-radius:14px; background:#fff; cursor:pointer; text-align:start; font-family:var(--font-app); }
-  .ts-review-card:hover { border-color:#E4CE9E; }
-  .ts-review-head { display:flex; align-items:center; gap:8px; min-width:0; }
-  .ts-review-avatar { display:grid; place-items:center; flex-shrink:0; width:30px; height:30px; border-radius:999px; background:#F7EEDC; color:#B7893F; font-size:13px; font-weight:600; }
-  .ts-review-name { overflow:hidden; color:#5C421B; font-size:13px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
-  .ts-review-score { margin-inline-start:auto; flex-shrink:0; padding:2px 7px; border-radius:8px; background:#F7EEDC; color:#8C6423; font-size:11px; font-weight:700; }
-  .ts-review-text { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3; color:#625B4D; font-size:12.5px; line-height:1.7; }
-  .ts-reviews-all { margin-top:14px; text-align:center; }
-  .ts-reviews-all button { padding:10px 22px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#5C421B; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:600; }
+
+  
+
+  
+
+  
+  
 }
 
 /* ══════════ تسلسل قرار الحجز على الديسكتوب ══════════
@@ -726,68 +537,46 @@
    والبرنامج والفندق فتأتي بعده عند طلبها. هذه الطبقة في آخر الملف عمداً
    لتستبدل شبكة البطاقات القديمة من دون تغيير تجربة الجوال. */
 @media (min-width: 1024px) {
-  .ts-listing-shell > .ts-listing-grid {
-    display:grid;
-    grid-template-columns:repeat(2, minmax(0, 1fr));
-    gap:16px;
-    max-width:1080px;
-    padding:28px 40px 52px !important;
-  }
 
   /* الصور تعريفٌ بالباقة، لذا تبقى في الأعلى دائماً وليست من التفاصيل.
      المعرض نفسه يبقى Slider على سطح المكتب كذلك؛ تحويله إلى شبكة صور
      ثابتة كان يلغي السحب والانتقال الناعم اللذين يراهما مستخدم الجوال. */
-  .ts-p-head { order:0; width:100%; grid-column:1 / -1; }
-  .ts-p-gallery { order:-1; width:100%; grid-column:1 / -1; padding:12px !important; }
+
   /* الفندق والسكن يستخدمان النسق نفسه: ثلاث صور متساوية، وآخرها يوضح
      أن في المعرض صوراً إضافية من دون أن يمدّد الأولى. */
   .ts-media-triplet { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; height:190px; }
   .ts-media-triplet button { position:relative; overflow:hidden; min-width:0; padding:0; border:0; border-radius:10px; background:#F3EFE8; cursor:pointer; }
   .ts-media-triplet img { display:block; width:100%; height:100%; object-fit:cover; }
   .ts-media-triplet span { position:absolute; inset:0; display:grid; place-items:center; background:rgba(35,24,12,.56); color:#fff; font-size:18px; font-weight:700; }
-  .ts-info-collapsed { display:none !important; }
+  
   /* فاصل التفاصيل: لا يبدأ القسم كسلسلة بطاقات؛ يظهر كحدٍّ واضح بعد الحجز. */
-  .ts-listing-shell .ts-p-toggle { display:block; order:4; width:100%; grid-column:1 / -1; padding:18px 0 !important; border:0; border-top:1px solid #EDE4D6; border-bottom:1px solid #EDE4D6; border-radius:0; background:transparent !important; }
-  .ts-p-toggle button { max-width:420px; margin-inline:auto; border-color:transparent !important; pointer-events:none; }
-  .ts-facts { grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-top:14px; padding-top:13px; }
-  .ts-fact { padding-inline:8px; }
-  .ts-fact + .ts-fact { border-inline-start:1px solid #F0EADD; }
+
+  
 
   /* المراحل في مسار عمودي هادئ: موعد ← عدد ← سكن، لا أربع بطاقات
      متنافسة في الشاشة نفسها. */
-  .ts-p-book { order:1; width:100%; grid-column:1 / -1; }
-  .ts-book-grid { display:flex; flex-direction:column; gap:10px; }
-  .ts-book-cell, .ts-book-room { width:100%; }
-  .ts-book-cell { padding:16px 18px; border-radius:14px; }
-  .ts-book-cell-title { display:flex; align-items:center; gap:8px; margin-bottom:13px; font-size:15px; }
-  .ts-book-cell-title::before { content:""; width:7px; height:7px; border-radius:50%; background:#B7893F; box-shadow:0 0 0 4px #FBF3E5; }
-  .ts-room-options { display:grid !important; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); align-items:stretch; }
+
+  
+
+  
 
   /* الشريط الثابت هو ملخص الحجز الوحيد على الديسكتوب؛ لا نكرر بطاقة
      ثانية داخل الصفحة ثم نترك القرار يختفي عند نزول المستفيد للتفاصيل. */
-  .ts-p-aside { display:none; }
-  .ts-aside-card { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:18px; padding:14px 18px; border-radius:14px; }
-  .ts-aside-head { grid-column:1; grid-row:1; margin:0; font-size:15px; }
-  .ts-aside-rows { grid-column:1; grid-row:2; display:flex; flex-direction:row; flex-wrap:wrap; gap:8px 18px; padding:0; border:0; }
-  .ts-aside-row { gap:6px; font-size:12.5px; }
-  .ts-aside-row + .ts-aside-row { padding-inline-start:18px; border-inline-start:1px solid #EDE4D6; }
-  .ts-aside-total { grid-column:2; grid-row:1 / span 2; flex-direction:column; align-items:flex-end; gap:3px; padding:0; }
-  .ts-aside-total b { font-size:21px; white-space:nowrap; }
-  .ts-aside-card > button { grid-column:3; grid-row:1 / span 2; width:180px; }
-  .ts-aside-missing { grid-column:1 / -1; margin:0; text-align:start; }
-  .ts-aside-card > div[style*="text-align"] { display:none; }
+
+  
+
+  
+
+  
 
   /* التفاصيل تأتي في تسلسل واحد أسفل زرها، لا في صفوف متكسّرة. */
-  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport, .ts-p-know, .ts-p-reviews { width:100%; }
+  
   /* القاعدة الأقدم كانت تجعل هذه البطاقات تمتد 6 أعمدة من شبكة سابقة؛
      في شبكة العمودين يجب أن يأخذ كل زوج خانة واحدة فقط. */
-  .ts-p-offers, .ts-p-program, .ts-p-stay, .ts-p-transport { grid-column:auto; }
-  .ts-p-offers { order:6; }
-  .ts-p-program { order:7; }
-  .ts-p-stay { order:8; }
-  .ts-p-transport { order:9; }
-  .ts-p-reviews { order:10; grid-column:1 / -1; }
-  .ts-p-know { order:11; grid-column:1 / -1; }
+
+  
+
+  
 
   /* الملخص وزر التالي يتبعان المستفيد خلال قسم التفاصيل أيضاً. */
   .ts-listing-shell .ts-sticky-bar {
@@ -804,7 +593,7 @@
     border-radius:16px;
     box-shadow:0 16px 40px -18px rgba(67,41,13,.35);
   }
-  .ts-listing-shell > .ts-listing-grid { padding-bottom:130px !important; }
+  
 }
 
 /* ════════════════════════════════════════════════════════════

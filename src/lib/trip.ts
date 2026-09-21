@@ -281,15 +281,18 @@ export function findVehicleConflict(
   trips: Trip[],
   probe: Pick<Trip, "transportId" | "departureDate" | "returnDate">,
   excludeId?: string,
+  fleetCount = 1,
 ): Trip | undefined {
   if (!probe.transportId) return undefined;
   const w = tripWindow(probe);
   if (!w) return undefined;
-  return trips
-    .filter(t => t.id !== excludeId && t.transportId === probe.transportId
-      && t.status !== "cancelled" && t.status !== "archived")
+  /* سجل النقل يمثل نوعاً (مثلاً مرسيدس 2027) وقد يملك ست حافلات
+     متطابقة. لا يتعارض النوع إلا بعد أن تُشغّل كل وحداته. */
+  const all = trips.filter(t => t.id !== excludeId && t.transportId === probe.transportId
+    && t.status !== "cancelled" && t.status !== "archived")
     .filter(t => { const tw = tripWindow(t); return !!tw && windowsOverlap(w, tw); })
-    .sort((a, b) => a.departureDate.localeCompare(b.departureDate))[0];
+    .sort((a, b) => a.departureDate.localeCompare(b.departureDate));
+  return all.length >= Math.max(1, fleetCount) ? all[0] : undefined;
 }
 
 /* ═══ أثر الإلغاء ══════════════════════════════════════════════════ */
