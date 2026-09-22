@@ -16,6 +16,99 @@
   --font-quote:'DG Shamael', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+/* ═══ اليوم الوطني السعودي ═══
+   خلفية خضراء هادئة للمستفيد، مستلهمة من أخضر الهوية في التصميم المرفق.
+   الطبقات لا تستقبل اللمس ولا تحمل نصاً ضرورياً، لذلك تبقى كل الشاشة قابلة
+   للاستخدام وتظهر الزخرفة كخلفية لا كواجهةٍ فوق المحتوى. */
+.ts-national-day { isolation:isolate; }
+.ts-national-day-backdrop {
+  position:fixed;
+  z-index:0;
+  inset:0;
+  pointer-events:none;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255,255,255,.16) 0 1px, transparent 1.5px) 0 0 / 22px 22px,
+    radial-gradient(ellipse 74% 52% at 112% -10%, rgba(255,255,255,.16), transparent 70%),
+    radial-gradient(ellipse 60% 44% at -10% 105%, rgba(0,25,14,.34), transparent 72%),
+    linear-gradient(135deg, #006c35 0%, #004127 53%, #002e1b 100%);
+}
+.ts-national-day-backdrop::before,
+.ts-national-day-backdrop::after {
+  position:absolute;
+  color:rgba(255,255,255,.10);
+  font-family:var(--font-display);
+  font-weight:700;
+  line-height:1;
+  white-space:nowrap;
+  content:"نحلم ونحقق";
+  transform:rotate(-16deg);
+}
+.ts-national-day-backdrop::before { top:12%; inset-inline-end:-4%; font-size:clamp(70px,13vw,190px); }
+.ts-national-day-backdrop::after { bottom:8%; inset-inline-start:-4%; font-size:clamp(54px,10vw,150px); }
+@media (prefers-reduced-motion: reduce) {
+  .ts-national-day-backdrop { background-color:#004127; }
+}
+
+/* الصفحة الرئيسية كانت تغطي الخلفية بالكامل بلون عاجي؛ لذلك لا يكفي وضع
+   طبقة خلفها. هذه الدرجة هي سطح الصفحة نفسها في أيام الحملة، مع الحفاظ
+   على البطاقات البيضاء كي تظل خيارات الرحلة واضحة وسهلة القراءة. */
+.ts-national-day .ts-destination-choice {
+  isolation:isolate;
+  background:
+    radial-gradient(ellipse 70% 45% at 110% 0%, rgba(255,255,255,.16), transparent 72%),
+    linear-gradient(145deg, #006c35, #004127 58%, #00331e);
+  color:#f7fff9;
+}
+.ts-national-day .ts-destination-choice::before {
+  position:absolute;
+  z-index:0;
+  top:108px;
+  inset-inline-end:-50px;
+  bottom:0;
+  width:clamp(138px,25vw,320px);
+  content:"";
+  pointer-events:none;
+  opacity:.78;
+  background-image:
+    linear-gradient(90deg, #004127 0%, rgba(0,65,39,.42) 46%, transparent 100%),
+    linear-gradient(180deg, rgba(0,65,39,.22), transparent 14%, transparent 86%, rgba(0,46,27,.64)),
+    url("/national-day-weave.jpg");
+  background-repeat:no-repeat;
+  background-position:center, center, center top;
+  background-size:100% 100%, 100% 100%, cover;
+  filter:saturate(.9) contrast(1.08);
+}
+.ts-national-day .ts-destination-header,
+.ts-national-day .ts-destination-content { position:relative; z-index:1; }
+/* في الجوال مساحة الصفحة أطول بكثير من سطح المكتب؛ نمد الحلية رأسياً
+   لتبقى مرافقة للمحتوى حتى نهاية الشاشة بدلاً من أن تبدو كقصاصة قصيرة. */
+@media (max-width: 640px) {
+  .ts-national-day .ts-destination-choice::before {
+    top:64px;
+    inset-inline-end:-62px;
+    width:clamp(154px,34vw,210px);
+    min-height:calc(100% - 64px);
+  }
+}
+.ts-national-day .ts-destination-brand { color:#fff; }
+.ts-national-day .ts-destination-overline { color:#c9ead8; }
+.ts-national-day .ts-destination-content h1,
+.ts-national-day .ts-destination-reviews h2,
+.ts-national-day .ts-destination-footer p { color:#fff; }
+.ts-national-day .ts-destination-lead,
+.ts-national-day .ts-destination-trust { color:#dcf3e5; }
+.ts-national-day .ts-destination-prompt { color:#e8f7ee; }
+.ts-national-day .ts-destination-prompt::before,
+.ts-national-day .ts-destination-prompt::after { background:rgba(232,247,238,.62); }
+.ts-national-day .ts-destination-trust svg { color:#fff; }
+.ts-national-day .ts-destination-reviews h2::before,
+.ts-national-day .ts-destination-reviews h2::after { background:rgba(232,247,238,.58); }
+.ts-national-day .ts-destination-review { background:rgba(255,255,255,.94); }
+.ts-national-day .ts-destination-footer::before { background:rgba(0,65,39,.36); }
+.ts-national-day .ts-destination-footer img { opacity:.28; filter:brightness(0) invert(1); }
+.ts-national-day .ts-destination-footer small { color:#d7efdf; }
+
 /* ═══ مرحلة اختيار الوجهة ═══ */
 .ts-destination-choice {
   position:relative; min-height:100dvh; overflow:hidden;

@@ -104,7 +104,7 @@ function DestinationChoice({ onChoose, signedIn, onAccount, t, lang, setLang }: 
       key: "مكة والمدينة" as const,
       title: lang === "ar" ? "مكة والمدينة المنورة" : "Makkah & Madinah",
       note: lang === "ar" ? "إلى المسجد الحرام والمسجد النبوي" : "The Two Holy Mosques",
-      image: "/gallery/destination-madinah.jpg",
+      image: "/gallery/makkah-madinah-together.jpg",
       fallback: "/gallery/quba.jpg",
     },
   ];

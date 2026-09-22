@@ -169,6 +169,16 @@ const FLOW_SCREENS:Screen[]=["login","otp","account","passengers","review","succ
 const TABBED_SCREENS:Screen[]=["track","profile"];
 const BOOKING_RESUME_KEY="tsaheel.booking.resume";
 
+/* الحملة لا تعتمد على ساعة جهاز المستفيد: تاريخ الرياض هو المرجع، حتى لا
+   تظهر الزينة باكراً أو تتأخر لمن يفتح الموقع من بلدٍ آخر. نتركها لثلاثة
+   يومين (22–23 سبتمبر) لتشمل ليلة الاحتفال ويوم الوطن، ثم تعود الواجهة
+   تلقائياً إلى مظهرها المعتاد من دون إجراءٍ يدوي. */
+function isSaudiNationalDayCampaign(now=new Date()){
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Riyadh",month:"numeric",day:"numeric"}).formatToParts(now);
+  const part=(type:"month"|"day")=>Number(parts.find(p=>p.type===type)?.value);
+  return part("month")===9&&part("day")>=22&&part("day")<=23;
+}
+
 export function CustomerApp(){
   /* اللغة تُحفظ: «زر EN يجب أن يحفظ اختيار المستخدم». المتصفّح وحده
      يعرفها — لا تُرسل لأحد. */
@@ -810,6 +820,10 @@ export function CustomerApp(){
   const primaryBtn=(on=true)=>({background:on?G.gold:"#d6cfc6",color:on?B.black:"#a09688",border:"none",cursor:on?"pointer":"not-allowed"} as const);
 
   const isFlow=FLOW_SCREENS.includes(screen);
+  const nationalDayCampaign=isSaudiNationalDayCampaign();
+  /* الاحتفال واجهة ترحيب فقط: ما إن يختار المستفيد وجهته، تعود شاشات
+     الرحلات والحجز إلى ألوانها المعتادة التي تخدم القراءة والمقارنة. */
+  const nationalDayHome=nationalDayCampaign&&screen==="focus";
   /* وجهة ✕ و«رجوع» من شاشات المسار: صفحة تفاصيل الباقة. ثابتٌ واحد لا
      اسمُ شاشةٍ مكتوبٌ في خمسة مواضع — كان المكتوب "listing"، فمن ضغط ✕
      على تسجيل الدخول يُقذف إلى التصميم القديم بلا أن يطلبه. */
@@ -821,10 +835,11 @@ export function CustomerApp(){
      لا نتركه أبيض في Focus: لون السطح يجب أن يمتد بلا نهاية حول الصفحة. */
   const pageBase=screen==="focus" ? "#fffaf2" : (screen==="focusListing"||screen==="focusConfigure" ? "#fffaf4" : (whiteBase ? "#fff" : G.bg));
   useEffect(()=>{
-    document.documentElement.style.backgroundColor=pageBase;
-    document.body.style.backgroundColor=pageBase;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content",pageBase);
-  },[pageBase]);
+    const browserBase=nationalDayHome ? "#004127" : pageBase;
+    document.documentElement.style.backgroundColor=browserBase;
+    document.body.style.backgroundColor=browserBase;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content",browserBase);
+  },[pageBase,nationalDayHome]);
 
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
@@ -844,7 +859,9 @@ export function CustomerApp(){
 
   return (
     <DirProvider value={dir}>
-    <div dir={dir} lang={lang} className="ts-customer-app min-h-screen flex flex-col relative" style={{background:pageBase,fontFamily:"var(--font-app)"}}>
+    <div dir={dir} lang={lang} className={`ts-customer-app min-h-screen flex flex-col relative${nationalDayHome?" ts-national-day":""}`}
+      style={{background:nationalDayHome?"transparent":pageBase,fontFamily:"var(--font-app)"}}>
+      {nationalDayHome&&<div aria-hidden className="ts-national-day-backdrop"/>}
       {/* R1: خلفية خفيفة — تُخفى في الشاشات المعاد بناؤها لأن قاعدتها بيضاء */}
       {!whiteBase&&
         <div aria-hidden style={{position:"fixed",inset:0,backgroundImage:"url(/bg-haram.jpg)",backgroundSize:"cover",backgroundPosition:"center",opacity:0.06,pointerEvents:"none",zIndex:0}}/>}
