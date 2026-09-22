@@ -23,6 +23,7 @@ const AdminApp = lazy(() => import("./AdminApp"));
 const CustomerApp = lazy(() =>
   import("@/features/customer/CustomerApp").then(m => ({ default: m.CustomerApp }))
 );
+const PublicDashboard = lazy(() => import("@/features/public-dashboard/PublicDashboard"));
 
 /* ════════════════════════════════════════════════════════════
    PUBLIC PAYMENT CHECKOUT — صفحة الدفع للعميل (/pay/:id)
@@ -343,6 +344,7 @@ export default function App() {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/admin/*" element={<AdminApp/>}/>
+        <Route path="/dashboard" element={<PublicDashboard/>}/>
         <Route path="/pay/:id" element={<PayRoute/>}/>
         <Route path="/pay" element={<Navigate to="/" replace/>}/>
         <Route path="/inv/:id/verify" element={<VerifyRoute/>}/>

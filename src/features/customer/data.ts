@@ -7,6 +7,7 @@ import { SEED_PACKAGES } from "@/data/packages";
 import { SEED_TRIPS } from "@/data/trips";
 import { SEED_HOTELS } from "@/data/hotels";
 import { SEED_TRANSPORTS } from "@/data/transports";
+import { SEED_BOOKINGS } from "@/data/bookings";
 import { supabase, isSupabaseEnabled, isSeedDataEnabled } from "@/supabase/client";
 import { customerSupabase } from "@/supabase/customerClient";
 import { useStore, writeLocalOnly } from "@/store/useStore";
@@ -33,6 +34,33 @@ export const availSeats = (t: Pick<Trip, "seats" | "bookedSeats">) =>
   SKIP_SEAT_CHECK ? 99 : Math.max(0, t.seats - t.bookedSeats);
 
 export interface Catalog { packages: Pkg[]; trips: Trip[]; hotels: Hotel[]; transports: Transport[]; }
+
+/** حالة المقعد التي تصل للوحة العرض العامة. لا تحتوي اسماً أو جوالاً أو
+    رقم طلب؛ الغرض هو تشغيل الكروكي لا كشف هوية الحاج. */
+export type PublicDashboardSeat = { seat: number; state: "male" | "female" | "reserved" };
+
+export async function fetchPublicDashboardSeats(from: string, to: string): Promise<Record<string, PublicDashboardSeat[]>> {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.rpc("public_dashboard_trip_seats", { p_from: from, p_to: to });
+    if (!error) return Object.fromEntries((data as Array<{ trip_id: string; seats: PublicDashboardSeat[] }> ?? [])
+      .map(row => [row.trip_id, Array.isArray(row.seats) ? row.seats : []]));
+    /* ترحيل اللوحة قد لا يكون نُفّذ بعد؛ تظل اللوحة قابلة للعرض وتوضح أن
+       توزيع المقاعد غير متاح، بدلاً من تعطل الصفحة العامة. */
+    console.warn("[dashboard] تعذّر جلب كروكي المقاعد العام:", error.message);
+    return {};
+  }
+  if (!isSeedDataEnabled) return {};
+  const rows: Record<string, PublicDashboardSeat[]> = {};
+  for (const booking of SEED_BOOKINGS) {
+    const seats = booking.seats ?? [];
+    rows[booking.tripId] ??= [];
+    seats.forEach((seat, index) => {
+      const gender = booking.pilgrims[index]?.gender;
+      rows[booking.tripId].push({ seat, state: gender === "female" ? "female" : gender === "male" ? "male" : "reserved" });
+    });
+  }
+  return rows;
+}
 
 /* مرجع معلّق: الباقة تشير إلى فندق أو وسيلة نقل لا يعود بها الاستعلام.
    سببه غالباً سياسة قراءة ناقصة في RLS لا بيانات ناقصة — والقراءة المحجوبة
