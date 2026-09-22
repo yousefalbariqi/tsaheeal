@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useSearchParams } from "react-router";
 import { X, Check, BookOpen, Plus } from "lucide-react";
 import { B } from "@/lib/theme";
-import type { Pkg, Trip, Pilgrim, BookingStatus, Booking, Transport } from "@/types";
+import type { Pkg, Trip, Pilgrim, BookingStatus, Booking, BookingTravellerCounts, Transport } from "@/types";
 import { newId, todayYMD } from "@/lib/utils";
 import { statusLabel } from "@/lib/status";
 import { isSellable } from "@/lib/trip";
@@ -71,6 +71,8 @@ function StageBadge({booking}:{booking:Booking}) {
 /* ════════ إضافة طلب جديد (حجز داخلي للموظف) ════════ */
 export interface InternalOrderInput {
   clientName:string; clientPhone:string; tripId:string; persons:number; payMethod:string;
+  /** توزيعٌ تشغيلي للمقاعد، لا يُستنتج من اسم صاحب الطلب أو ترتيبه. */
+  travellerCounts:BookingTravellerCounts;
   /** ملخّص السكن المقروء + توزيعه المفصّل (يُحفظ في booking_rooms). */
   roomType:string; rooms?:{tierId?:string;type:string;persons:number;perNight:number}[];
   /** المبلغ المعروض للموظف — تقديرٌ محلي بنفس معادلة القاعدة؛ القاعدة
@@ -110,7 +112,7 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   const [clientPhone,setClientPhone]=useState("");
   const [packageId,setPackageId]=useState("");
   const [tripId,setTripId]=useState("");
-  const [persons,setPersons]=useState(1);
+  const [travellerCounts,setTravellerCounts]=useState<BookingTravellerCounts>({men:1,women:0,children:0});
   const [payMethod,setPayMethod]=useState(PAY_METHODS_INTERNAL[0]);
   const [errors,setErrors]=useState<{[k:string]:string}>({});
   const [busy,setBusy]=useState(false);
@@ -133,6 +135,14 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   const selPkg = packages.find(p=>p.id===packageId);
   const transport = transports.find(t=>t.id===(selTrip?.transportId||selPkg?.transportId));
   const maxSeats = selTrip ? Math.max(1,selTrip.seats-selTrip.bookedSeats) : 1;
+  const persons=travellerCounts.men+travellerCounts.women;
+  const setTravellerCount=(key:"men"|"women", raw:string)=>{
+    const value=Math.max(0,Math.trunc(Number(raw)||0));
+    setTravellerCounts(prev=>{
+      const other=key==="men"?prev.women:prev.men;
+      return {...prev,[key]:Math.min(value,Math.max(0,maxSeats-other))};
+    });
+  };
   const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
 
   /* نوع السكن — نفس توزيعات شاشة المستفيد حرفياً، فالطلب اليدوي يمرّ
@@ -178,6 +188,7 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
     setBusy(true);
     const err=onCreate({
       clientName:clientName.trim(),clientPhone:clientPhone.replace(/\s/g,""),tripId,persons,payMethod,
+      travellerCounts,
       roomType: housing&&split ? splitSummary(split,tAr) : "",
       rooms: housing&&split ? split.rooms.map(r=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight})) : undefined,
       total: estimate,
@@ -267,9 +278,19 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
             {packageId&&availTrips.length===0&&<div className="text-xs mt-1" style={{color:B.muted}}>لا توجد رحلات متاحة لهذه الباقة.</div>}
             <Err k="trip"/>
           </div>
-          <div>
-            <Field label={<>عدد المعتمرين {req}</>}>
-              <NumericInput min={1} max={maxSeats} value={persons} onValueChange={v=>setPersons(Math.max(1,Number(v)||1))} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
+          <div className="col-span-2">
+            <Field label={<>توزيع المعتمرين {req}</>}>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="rounded-xl px-3 py-2" style={{border:`1px solid #CBDBFB`,background:"#F7FAFF"}}>
+                  <span className="block text-xs font-bold mb-1" style={{color:"#1E52C7"}}>المعتمرون</span>
+                  <NumericInput min={0} max={maxSeats-travellerCounts.women} value={travellerCounts.men} onValueChange={v=>setTravellerCount("men",v)} className={inp} style={{...ist,direction:"ltr",textAlign:"right",borderColor:"#CBDBFB"}}/>
+                </label>
+                <label className="rounded-xl px-3 py-2" style={{border:`1px solid #F3CADF`,background:"#FFF8FB"}}>
+                  <span className="block text-xs font-bold mb-1" style={{color:"#B4266E"}}>المعتمرات</span>
+                  <NumericInput min={0} max={maxSeats-travellerCounts.men} value={travellerCounts.women} onValueChange={v=>setTravellerCount("women",v)} className={inp} style={{...ist,direction:"ltr",textAlign:"right",borderColor:"#F3CADF"}}/>
+                </label>
+              </div>
+              <div className="text-xs mt-1" style={{color:B.muted}}>الإجمالي {persons} مقعد — يُحفظ التوزيع ليظهر الكروكي صحيحاً.</div>
             </Field>
             <Err k="persons"/>
           </div>
@@ -421,6 +442,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     const booking:Booking={
       id, tripId:trip.id, packageId:trip.packageId,
       clientName:d.clientName, clientPhone:d.clientPhone, roomType:d.roomType, rooms:d.rooms, persons:d.persons,
+      travellerCounts:d.travellerCounts,
       /* «قيد المراجعة» لا «مؤكد».
 
          كان يُنشأ مؤكداً وحالة دفعه none — وحارس trg_booking_confirm_docs
@@ -445,6 +467,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   /* تصحيح اسم العميل أو جوّاله من شاشة المراجعة — يمرّ بنفس مسار الحفظ
      (upsert_booking يكتب client_name و client_phone)، فلا حاجة لدالّة جديدة. */
   function updateClient(id:string,patch:{clientName:string;clientPhone:string}){setBookings(p=>p.map(b=>b.id===id?{...b,...patch}:b));}
+  function updateTravellerCounts(id:string,travellerCounts:BookingTravellerCounts){setBookings(p=>p.map(b=>b.id===id?{...b,travellerCounts}:b));}
   function updateSeats(id:string,seats:number[]){setBookings(p=>p.map(b=>b.id===id?{...b,seats}:b));}
 
   const curBooking = detailId ? bookings.find(b=>b.id===detailId) : null;
@@ -520,7 +543,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
       {curBooking ? (
         <BookingDetail booking={curBooking} trips={trips} packages={packages} allBookings={bookings}
           onBack={()=>{ setDetailId(null); if(searchParams.get("open")){ const n=new URLSearchParams(searchParams); n.delete("open"); setSearchParams(n,{replace:true}); } }}
-          onStatusChange={changeStatus} onPilgrimsChange={updatePilgrims} onClientChange={updateClient} onSeatsChange={updateSeats} onRefresh={refreshBookings}/>
+          onStatusChange={changeStatus} onPilgrimsChange={updatePilgrims} onClientChange={updateClient} onTravellerCountsChange={updateTravellerCounts} onSeatsChange={updateSeats} onRefresh={refreshBookings}/>
       ) : (
         <>
           {/* Stats */}

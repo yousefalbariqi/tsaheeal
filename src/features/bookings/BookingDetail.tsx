@@ -31,7 +31,7 @@ import {
   Pencil, Phone, Printer, Wallet,
 } from "lucide-react";
 import { B } from "@/lib/theme";
-import type { Booking, BookingStatus, Payment, Pilgrim, Pkg, TicketEntry, Trip } from "@/types";
+import type { Booking, BookingStatus, BookingTravellerCounts, Payment, Pilgrim, Pkg, TicketEntry, Trip } from "@/types";
 import { copyText, invVerifyUrl, openWhatsApp, payLinkFor, todayYMD } from "@/lib/utils";
 import { sar, sarNumber } from "@/lib/money";
 import { isSellable, seatsOf } from "@/lib/trip";
@@ -81,6 +81,34 @@ function isSoloFemale(booking: Booking): boolean {
   const c = booking.travellerCounts;
   if (c) return Number(c.men ?? 0) === 0 && Number(c.women ?? 0) === 1 && Number(c.children ?? 0) === 0;
   return booking.pilgrims[0]?.gender === "female";
+}
+
+/** للحجوزات التي أُنشئت قبل أن يطلب نموذج الموظف التوزيع. لا نخمن
+    الجنس من الاسم أو من المقعد؛ الموظف يثبته مرة واحدة فيختفي الرمادي. */
+function TravellerDistributionFix({ booking, onSave }: { booking: Booking; onSave: (counts: BookingTravellerCounts) => void }) {
+  const people = Math.max(1, booking.persons || 1);
+  const initial = booking.travellerCounts;
+  const [men, setMen] = useState(initial?.men ?? booking.pilgrims.filter(p => p.gender === "male").length);
+  const [women, setWomen] = useState(initial?.women ?? booking.pilgrims.filter(p => p.gender === "female").length);
+  const total = men + women;
+  const save = () => {
+    if (total !== people) {
+      toast.error(`وزّع ${people} معتمرين بالضبط بين المعتمرين والمعتمرات.`);
+      return;
+    }
+    onSave({ men, women, children: 0 });
+    toast.success("حُفظ توزيع المعتمرين في الكروكي.");
+  };
+  const input = { width: 62, padding: "7px 8px", textAlign: "center" as const, direction: "ltr" as const, borderColor: B.border, background: "#fff", color: B.black };
+  return (
+    <div className="mx-5 mt-3 rounded-xl px-3.5 py-3 flex flex-wrap items-end gap-3" style={{ background: "#FFF9EF", border: "1px solid #E9D7B5" }}>
+      <div className="text-xs font-bold" style={{ color: B.text2 }}>حدّد توزيع هذا الحجز لتلوين المقاعد</div>
+      <label className="text-xs font-bold" style={{ color: "#1E52C7" }}>المعتمرون<NumericInput min={0} max={people - women} value={men} onValueChange={v => setMen(Math.min(Math.max(0, Number(v) || 0), people - women))} className="block mt-1 rounded-lg border" style={input}/></label>
+      <label className="text-xs font-bold" style={{ color: "#B4266E" }}>المعتمرات<NumericInput min={0} max={people - men} value={women} onValueChange={v => setWomen(Math.min(Math.max(0, Number(v) || 0), people - men))} className="block mt-1 rounded-lg border" style={input}/></label>
+      <button type="button" onClick={save} className="rounded-lg px-3 py-2 text-xs font-bold cursor-pointer" style={{ background: B.gold, color: B.black, border: "none" }}>حفظ التوزيع</button>
+      <span className="text-xs" style={{ color: total === people ? "#1E7A44" : "#B4530C" }}>{total} / {people}</span>
+    </div>
+  );
 }
 
 /* ════════ قِطَعٌ صغيرة ════════════════════════════════════════════ */
@@ -297,12 +325,13 @@ function QuickEdit({ booking, onSave, onCancel }: {
 
 /* ════════ الصفحة ════════════════════════════════════════════════ */
 
-export function BookingDetail({ booking, trips, packages, allBookings, onBack, onStatusChange, onPilgrimsChange, onClientChange, onSeatsChange, onRefresh }: {
+export function BookingDetail({ booking, trips, packages, allBookings, onBack, onStatusChange, onPilgrimsChange, onClientChange, onTravellerCountsChange, onSeatsChange, onRefresh }: {
   booking: Booking; trips: Trip[]; packages: Pkg[]; allBookings: Booking[];
   onBack: () => void;
   onStatusChange: (id: string, s: BookingStatus, patch?: Partial<Booking>) => void;
   onPilgrimsChange: (id: string, pilgrims: Pilgrim[]) => void;
   onClientChange: (id: string, patch: { clientName: string; clientPhone: string }) => void;
+  onTravellerCountsChange: (id: string, counts: BookingTravellerCounts) => void;
   onSeatsChange: (id: string, seats: number[]) => void;
   onRefresh: () => Promise<void>;
 }) {
@@ -481,7 +510,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
          التوزيع؛ وإلا ظهر تحذير «بلا توزيع» لكل معتمرة منفردة. */
       known += (b.privacySeats ?? []).length;
     });
-    return { capacity, booked, available, m, f, children, known };
+    return { capacity, booked, available, m, f, children, known, unknown: Math.max(0, booked - known) };
   }, [allBookings, shownTrip]);
 
   const startPicking = () => {
@@ -812,13 +841,14 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                 </div>
               ))}
             </div>
-            {/* الحجوزات القديمة قد لا تحمل لقطة التوزيع؛ لا نخمن جنس
-                مقاعدها من ترتيب المقاعد أو من جنس صاحب الطلب. */}
-            {seatStats.known < seatStats.booked && (
+            {/* قد يأتي حجزٌ قديم، أو طلب داخلي قبل حفظ التوزيع. لا نخمن
+                جنس المقعد من ترتيب المقاعد أو من جنس صاحب الطلب. */}
+            {seatStats.unknown > 0 && (
               <div className="px-5 pt-3 text-xs" style={{ color: "#B4530C" }}>
-                {seatStats.booked - seatStats.known} مقاعد من حجوزات قديمة بلا توزيع محفوظ؛ لا نخمّن جنسها.
+                {seatStats.unknown} مقعد محجوز بحاجة إلى تحديد نوع المسافر؛ يظهر رمادياً حتى يُحدَّث التوزيع.
               </div>
             )}
+            {isOwnTrip && seatStats.unknown > 0 && <TravellerDistributionFix booking={booking} onSave={counts => onTravellerCountsChange(booking.id, counts)} />}
 
             <div className="p-5">
               {isOwnTrip && needsPrivacySeat && (
