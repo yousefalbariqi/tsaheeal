@@ -42,10 +42,27 @@ export interface ExploreProps {
   departureRequired?: boolean;
   /** فتح ورقة المدن — لاختيارها أوّلاً ولتغييرها بعد ذلك. */
   onPickDepartureCity?: () => void;
+  /** يصل الكتالوج بعد أن تُعرض شاشة اختيار الوجهة؛ لا نعرض «لا رحلات»
+      خلال هذا الفراغ المؤقت، بل هيكلاً مطابقاً لموضع النتائج. */
+  loadingTrips?: boolean;
 }
 
 /* سعر «يبدأ من» اليدوي من الباقة؛ لا يُشتق من الغرف أو المواصلات. */
 const minTotal = startingPrice;
+
+function TripsLoadingSkeleton({lang}:{lang:Lang}) {
+  return (
+    <section className="ts-focus-loading" aria-busy="true" aria-label={lang==="ar" ? "جارٍ تحميل الرحلات" : "Loading journeys"}>
+      <div className="ts-focus-loading-heading"><span className="sk-bar"/><span className="sk-bar"/></div>
+      <div className="ts-focus-loading-days" aria-hidden="true">
+        {Array.from({length:7},(_,i)=><span className="sk-bar" key={i}/>) }
+      </div>
+      <div className="ts-focus-loading-card" aria-hidden="true">
+        <span className="sk-bar"/><div><span className="sk-bar"/><span className="sk-bar"/><span className="sk-bar"/></div>
+      </div>
+    </section>
+  );
+}
 
 /** وجهة الباقة معنى تجاري، لا نصّ حرّ. توجد بيانات قديمة مثل «مكة
     المكرمة» و«مكة والمدينة المنورة»؛ تحويلها هنا يمنع سقوط رحلة سليمة من
@@ -241,7 +258,7 @@ const departurePointLabel = (trip: Trip, city = ""): string => {
 
 /* المرحلة الثانية للتجربة: خطٌ زمني للمغادرات. الأيام الفارغة تمرّ
    بهدوء، والرحلة فقط هي التي تقطع الخط ببطاقة قابلة للحجز. */
-function FocusTrips({ packages, tripsOf, destination, departureCity = "", departureRequired = false, onPickDepartureCity, onBack, onOpen, onCustom, lang }: {
+function FocusTrips({ packages, tripsOf, destination, departureCity = "", departureRequired = false, onPickDepartureCity, onBack, onOpen, onCustom, lang, loading=false }: {
   packages: Pkg[];
   tripsOf: (p: Pkg) => Trip[];
   destination: string;
@@ -252,6 +269,7 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
   onOpen: (p: Pkg, trip?: Trip) => void;
   onCustom: () => void;
   lang: Lang;
+  loading?: boolean;
 }) {
   const today = todayYMD();
   const [calendar, setCalendar] = useState<CalendarSystem>("gregory");
@@ -289,6 +307,9 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
   const selectedTimeline = availableTimelineDates.find(({ iso }) => iso === activeDate) ?? null;
   const selectedTrips = selectedTimeline?.trips ?? [];
   const destinationLabel = cityLabel(destination, lang);
+  /* ترويسة «مكة والمدينة» تحتاج لقطةً تجمع الحرمين؛ صورة مكة المنفردة
+     تبقى في وجهتها حتى لا يوحي العرض بأن كل رحلة تمر بالمدينة. */
+  const heroImage=destination==="مكة والمدينة" ? "/gallery/makkah-madinah-together.jpg" : "/thisone.jpg";
   /* المدينة مرحلةٌ في المسار لا معلومةٌ على الرحلة: قبل اختيارها لا
      تُعرض قائمةٌ تخلط منطلَق الدمام بمنطلَق الخبر. الورقة تُفتح وحدها،
      وإن أُغلقت بقي الطلب ظاهراً في مكان القائمة — لا تخطٍّ صامت. */
@@ -303,7 +324,7 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
   return (
     <section className="ts-focus-trips" aria-labelledby="focus-title">
       <div className="ts-focus-hero">
-        <img src="/thisone.jpg" alt="" onError={e => { e.currentTarget.src = "/bg-haram.jpg"; }}/>
+        <img src={heroImage} alt="" onError={e => { e.currentTarget.src = "/bg-haram.jpg"; }}/>
         <div className="ts-focus-hero-shade"/>
         <button type="button" className="ts-focus-back" onClick={onBack} aria-label={lang === "ar" ? "تغيير الوجهة" : "Change destination"}>
           <ChevronLeft size={24} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
@@ -321,6 +342,7 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
           <span><strong>{lang === "ar" ? "خصص رحلتك" : "Tailor your trip"}</strong><small>{lang === "ar" ? "اختر المدينة والمدة والفندق، وسنتولى الباقي" : "Choose your city, duration and hotel — we'll handle the rest."}</small></span>
           <ChevronLeft size={20} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
         </button>
+        {loading ? <TripsLoadingSkeleton lang={lang}/> : <>
         {!awaitingCity && <div className="ts-focus-timeline-head">
           <div><span>{lang === "ar" ? (departureCity ? `أقرب رحلات من ${departureCity} إلى ${destinationLabel}` : "مواعيد الانطلاق") : "Departure dates"}</span><small>{lang === "ar" ? "اختر تاريخ الانطلاق المناسب لك" : "Choose the departure date that suits you"}</small></div>
           <div className="ts-focus-calendar-switch" role="group" aria-label={lang === "ar" ? "نظام التاريخ" : "Calendar system"}>
@@ -394,6 +416,7 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
         </AnimatePresence>
         <button type="button" className="ts-focus-all-trips" onClick={onBack}>{lang === "ar" ? "عرض جميع الرحلات" : "View all journeys"}<ChevronLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button>
         </>}
+        </>}
       </div>
     </section>
   );
@@ -402,14 +425,14 @@ function FocusTrips({ packages, tripsOf, destination, departureCity = "", depart
 /* لم يبق من هذه الشاشة إلا مرحلتاها: الوجهة ثم رحلاتها. جسدُ
    الاستكشاف القديم — شبكة الباقات وقائمتها وشرائح المدن وبطاقة الرحلة
    حسب الطلب — حُذف في ٢٠٢٦-٠٩-١٦ مع مساره /classic. */
-export function Explore({ packages, tripsOf, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang, departureCity = "", departureRequired = false, onPickDepartureCity }: ExploreProps) {
+export function Explore({ packages, tripsOf, city, setCity, onOpen, onCustom, signedIn, onAccount, t, lang, setLang, departureCity = "", departureRequired = false, onPickDepartureCity, loadingTrips=false }: ExploreProps) {
   /* الصفحة الأولى للمسار: لا قائمة رحلات قبل اختيار وجهة. */
   if (!city) {
     return <DestinationChoice onChoose={setCity} signedIn={signedIn} onAccount={onAccount} t={t} lang={lang} setLang={setLang} />;
   }
   return <FocusTrips packages={packages} tripsOf={tripsOf} destination={city}
     departureCity={departureCity} departureRequired={departureRequired} onPickDepartureCity={onPickDepartureCity}
-    onBack={() => setCity("")} onOpen={onOpen} onCustom={onCustom} lang={lang} />;
+    onBack={() => setCity("")} onOpen={onOpen} onCustom={onCustom} lang={lang} loading={loadingTrips} />;
 }
 
 

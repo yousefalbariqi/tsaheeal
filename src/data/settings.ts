@@ -84,7 +84,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     vatNumber: "",
     domain: "tasaaheel.sa",
     address: { city: "", line: "", mapUrl: "" },
-    supportPhone: "+966501234567",
+    supportPhone: "+966506210485",
     openHour: 6,
     closeHour: 22,
     /* السبت–الخميس: الجمعة وحدها إجازة. يُعدَّل من الشاشة. */

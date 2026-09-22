@@ -287,6 +287,9 @@ export function CustomerApp(){
   const [myOrders,setMyOrders]=useState<TrackResult[]|null>(null);
   const [ordersLoading,setOrdersLoading]=useState(false);
   const [catErr,setCatErr]=useState(false);
+  /* صفحة اختيار الوجهة ثابتة ولا تحتاج الكتالوج. كشفها مباشرةً يجعل أول
+     انطباعٍ هو المنتج نفسه، لا شعار انتظارٍ يحجب واجهةً جاهزة. */
+  const canRenderLandingWhileLoading=screen==="focus"&&!city;
   // شاشة الحساب
   const [acEmail,setAcEmail]=useState("");
   const [acSaving,setAcSaving]=useState(false);
@@ -306,9 +309,9 @@ export function CustomerApp(){
      وشاشة التتبّع. قبل وصولها تعمل الحسابات على الافتراضات القائمة
      نفسها، فلا رقم خطأ يُعرض في الأثناء. */
   useEffect(()=>{ publicSettings().then(cfg=>configureSla(cfg)).catch(()=>{}); },[]);
-  /* إزالة شاشة البدء بعد رسم الصفحة الجاهزة لا قبله — التسلسل: شعار
-     متحرك ← الموقع، بلا شاشة وسيطة. */
-  useEffect(()=>{ if(!loading) hideBootSplash(); },[loading]);
+  /* إزالة شاشة البدء بعد رسم الصفحة الجاهزة لا قبله. الصفحة الرئيسية ثابتة
+     فتُكشف فوراً، أما المسارات التي تعتمد على بياناتٍ بعينها فتنتظرها. */
+  useEffect(()=>{ if(!loading||canRenderLandingWhileLoading) hideBootSplash(); },[loading,canRenderLandingWhileLoading]);
   /* خلفية الـbody بيج عامة (لوحة الموظف)؛ صفحة المستفيد بيضاء — نوحّدها هنا
      حتى لا يظهر شريط بيج فوق الرأس في iOS Safari (منطقة شريط الحالة والسحب الزائد). */
   useEffect(()=>{ const prev=document.body.style.background; document.body.style.background="#fff";
@@ -843,10 +846,12 @@ export function CustomerApp(){
 
   /* بلا شاشة تحميل ثانية: شاشة البدء في index.html ما زالت فوق الصفحة
      ويُزيلها الأثر أعلاه فور جهوز الكتالوج. */
-  if(loading) return null;
+  /* لا نحجب صفحة اختيار الوجهة بسبب جلب الرحلات: الكتالوج يصل في الخلفية.
+     أما الروابط المباشرة إلى رحلة أو حجز فتظل محجوبة حتى تتوفر بياناتها. */
+  if(loading&&!canRenderLandingWhileLoading) return null;
 
   /* الكتالوج لم يصل: شاشة صريحة بزرّ إعادة بدل صفحة فارغة تبدو «لا باقات». */
-  if(catErr&&!cat.packages.length) return (
+  if(catErr&&!cat.packages.length&&city) return (
     <div dir={dir} lang={lang} className="ts-customer-app" style={{minHeight:"100vh",display:"grid",placeItems:"center",padding:24,background:"#fff",fontFamily:"var(--font-app)"}}>
       <div style={{maxWidth:380,width:"100%",textAlign:"center"}}>
         <div style={{width:52,height:52,borderRadius:"50%",background:C.dangerTint,color:C.danger,display:"grid",placeItems:"center",margin:"0 auto 18px",fontSize:26}}>!</div>
@@ -906,7 +911,7 @@ export function CustomerApp(){
           onCustom={()=>setScreen("custom")}
           signedIn={!!session}
           onAccount={()=>session ? setScreen("profile") : openLogin("track")}
-          t={t} lang={lang} setLang={setLang}
+          t={t} lang={lang} setLang={setLang} loadingTrips={loading}
         />
       </>}
 
@@ -1091,6 +1096,12 @@ export function CustomerApp(){
               <div className="flex items-center justify-between" style={{...T.body}}>
                 <span style={{color:C.ink2}}>{t("transportIncl")} · {transport.vehicleType}</span>
                 <span style={{color:C.ink2}}>{t("incl")}</span>
+              </div>
+            )}
+            {needsPrivacySeat&&(
+              <div className="flex items-start" style={{gap:7,padding:"10px 11px",border:"1px solid #F2CBDD",borderRadius:11,background:"#FFF2F7",color:"#9A3E68",fontSize:12,fontWeight:700,lineHeight:1.6}}>
+                <span aria-hidden="true">🌸</span>
+                <span>لراحتك وخصوصيتك، حجزنا لكِ المقعد المجاور.</span>
               </div>
             )}
             <span style={{...T.small,color:C.ink3}}>{t("priceNote")} {t("inclTax")}.</span>
