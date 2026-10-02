@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, Users, X, Search, ArrowLeft, Clock, Eye, MapPin} from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Pkg, Trip, TravellerType } from "@/types";
-import { packagePrice, type RoomSplit, splitSummary } from "./roomSplit";
+import { packagePrice, packageStartingPrice, type RoomSplit, splitSummary } from "./roomSplit";
 import { Spinner } from "@/components/Spinner";
 import { Toaster, toast } from "sonner";
 import { hideBootSplash } from "@/lib/bootSplash";
@@ -413,13 +413,16 @@ export function CustomerApp(){
   /* الرحلة التي تُبنى عليها صفحتا Focus: المختارة، وإلا أقرب رحلةٍ
      قابلة للحجز. تُحسب هنا مرّةً فيقرؤها الرسمُ وحارسُ المسار من مصدرٍ
      واحد — وإلا حَرَسَ الحارسُ شرطاً غير الذي يرسم به الشرطُ الآخر. */
-  const focusTrip=useMemo(()=>trip??(pkg?pkgTrips(pkg)[0]??null:null),
+  /* رحلة الباقة السابقة لا يجوز أن تستمر بعد تغيير الرابط؛ وإلا اختلطت
+     صورتها وفندقها وموعدها مع الباقة الجديدة في الجلسة نفسها. */
+  const selectedTrip=trip?.packageId===pkg?.id ? trip : null;
+  const focusTrip=useMemo(()=>selectedTrip??(pkg?pkgTrips(pkg)[0]??null:null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trip,pkg,cat.trips]);
+    [selectedTrip,pkg,cat.trips]);
   /* وسيلة النقل: الرحلة المختارة أولاً، وإلا افتراضي الباقة —
      وإلا اختفى قسم النقل كلياً حتى يختار المستفيد تاريخاً، وهو يحتاجه ليقرر. */
-  const transport=cat.transports.find(x=>x.id===(trip?.transportId||pkg?.transportId));
-  const hotel=pkg?cat.hotels.find(h=>h.id===pkg.hotelId):undefined;
+  const transport=cat.transports.find(x=>x.id===(focusTrip?.transportId||pkg?.transportId));
+  const hotel=pkg?cat.hotels.find(h=>h.id===(focusTrip?.hotelId||pkg.hotelId)):undefined;
   /* نوع المسافر ليس معلومةً مطلوبة للحجز العام؛ لا نطلبه إلا إذا كانت
      بيانات السكن المقيدة تحتاجه لإظهار الخيارات الصحيحة. */
   const needsTravellerType=!!pkg&&needsTravellerTypeForAccommodation(pkg);
@@ -429,7 +432,7 @@ export function CustomerApp(){
   const needsPrivacySeat = persons === 1 && travellerCounts.men === 0 && travellerCounts.women === 1;
   const transportUnits = persons + (needsPrivacySeat ? 1 : 0);
   const fullPrice=split ? packagePrice(split,persons,pkg?.seatCostOverride ?? transport?.seatCost ?? 0,pkg?.nights ?? 1,transportUnits) : null;
-  const total=fullPrice?.total ?? (trip?.price??0)*persons + (needsPrivacySeat ? (pkg?.seatCostOverride ?? transport?.seatCost ?? 0) : 0);
+  const total=fullPrice?.total ?? (pkg?.marketPrice??0)*persons + (needsPrivacySeat ? (pkg?.seatCostOverride ?? transport?.seatCost ?? 0) : 0);
 
   /* ── مزامنة الباقة مع المسار ──
      المسار قد يتغيّر بلا نقرة: زر الرجوع، رابط مُلصق، إعادة تحميل.
@@ -438,10 +441,14 @@ export function CustomerApp(){
   useEffect(()=>{
     if(loading) return;
     const pid=route.packageId;
-    if(!pid||pkg?.id===pid) return;
+    if(!pid) return;
     const found=activePkgs.find(p=>p.id===pid);
-    if(found) setPkg(found);
-  },[loading,route.packageId,activePkgs,pkg?.id]);
+    if(!found) return;
+    /* لا نحتفظ بلقطة الباقة القديمة إذا وصل الكتالوج المحدّث أثناء
+       الجلسة؛ الصورة والسعر والنص يجب أن تتحرك مع الصف نفسه. */
+    if(found!==pkg) setPkg(found);
+    setTrip(current=>current?.packageId===found.id ? current : null);
+  },[loading,route.packageId,activePkgs,pkg]);
 
   /* الاختيار يُمسح إن لم تعد الباقة تنطلق منه — لا عند كل تغيّر باقة.
      في المسار الجديد تُختار المدينة قبل الباقة (خطوةٌ بعد الوجهة)،
@@ -895,6 +902,7 @@ export function CustomerApp(){
       {screen==="focus"&&<>
         <Explore
           packages={activePkgs}
+          priceOf={p=>packageStartingPrice(p,cat.transports.find(t=>t.id===p.transportId)?.seatCost ?? 0)}
           city={city} setCity={nextCity=>{
             setCity(nextCity);
             /* الوجهة تغيّرت ⇒ مدينة انطلاقٍ اختيرت لوجهةٍ أخرى لا تُحمل
@@ -1101,7 +1109,7 @@ export function CustomerApp(){
             {needsPrivacySeat&&(
               <div className="flex items-start" style={{gap:7,padding:"10px 11px",border:"1px solid #F2CBDD",borderRadius:11,background:"#FFF2F7",color:"#9A3E68",fontSize:12,fontWeight:700,lineHeight:1.6}}>
                 <span aria-hidden="true">🌸</span>
-                <span>لراحتك وخصوصيتك، حجزنا لكِ المقعد المجاور.</span>
+                <span>لراحتك وخصوصيتك، حجزنا لكِ المقعد المجاور. وإن رافقتكِ امرأة جلست فيه دون تكلفة مقعدٍ إضافية عليكما.</span>
               </div>
             )}
             <span style={{...T.small,color:C.ink3}}>{t("priceNote")} {t("inclTax")}.</span>
@@ -1412,7 +1420,7 @@ export function CustomerApp(){
       {/* R7: Terms modal */}
       <AnimatePresence>
         {termsOpen&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(11,90,65,.6)",zIndex:50}} onClick={()=>setTermsOpen(false)}>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(11,90,65,.6)",zIndex:50}}>
             <motion.div initial={{y:40,opacity:0}} animate={{y:0,opacity:1}} exit={{y:40,opacity:0}} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col" style={{background:"#fff",maxHeight:"85vh"}} onClick={e=>e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-4" style={{background:G.deep,color:"#fff"}}>
                 <span className="font-extrabold" style={{fontFamily:"var(--font-app)"}}>{t("readTerms")}</span>

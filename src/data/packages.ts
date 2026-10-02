@@ -2,7 +2,7 @@ import type { Pkg } from "@/types";
 
 export const SEED_PACKAGES: Pkg[] = [
   { id:"PKG-001", name:"عمرة مكة 3 أيام", order:1, productType:"حافلة", destination:"مكة", audience:"عموم المعتمرين",
-    days:3, nights:2, status:"active", marketPrice:150, recurring:true, recurDay:"الخميس", startDate:"",
+    days:3, nights:2, status:"active", marketPrice:150,
     transportId:"TRN-001", hotelId:"HTL-001",
     features:[{id:"pf1",icon:"guide",text:"مرشد ديني معتمد"},{id:"pf2",icon:"meal",text:"وجبة ضيافة"},{id:"pf3",icon:"supervisor",text:"مشرف ثقافي"},{id:"pf4",icon:"wifi",text:"شاحن لاسلكي"}],
     program:[
@@ -19,7 +19,7 @@ export const SEED_PACKAGES: Pkg[] = [
     ], reviews:[], notes:"",
     policies:["إلغاء مجاني قبل 48 ساعة من موعد الرحلة.","لا يوجد استرداد بعد تأكيد الحجز وإصدار التذكرة.","الدفع يتم عبر رابط يرسله موظف الحجزات.","يجب إحضار الهوية الوطنية أو الجواز عند الاستقبال."] },
   { id:"PKG-002", name:"عمرة مكة 4 أيام", order:2, productType:"حافلة", destination:"مكة", audience:"العائلات",
-    days:4, nights:3, status:"active", marketPrice:175, recurring:true, recurDay:"الأربعاء", startDate:"",
+    days:4, nights:3, status:"active", marketPrice:175,
     transportId:"TRN-002", hotelId:"HTL-001",
     features:[{id:"pf1",icon:"guide",text:"مرشد ديني معتمد"},{id:"pf2",icon:"meal",text:"وجبة ضيافة"},{id:"pf3",icon:"transport",text:"مواصلات داخلية"}],
     program:[
@@ -35,7 +35,7 @@ export const SEED_PACKAGES: Pkg[] = [
     ], reviews:[], notes:"",
     policies:["إلغاء مجاني قبل 48 ساعة من موعد الرحلة.","لا يوجد استرداد بعد إصدار التذكرة.","الدفع عبر رابط يرسله الموظف."] },
   { id:"PKG-003", name:"مكة والمدينة 5 أيام", order:3, productType:"حافلة", destination:"مكة والمدينة", audience:"عموم المعتمرين",
-    days:5, nights:4, status:"active", marketPrice:200, recurring:false, recurDay:"", startDate:"2025-08-15",
+    days:5, nights:4, status:"active", marketPrice:200,
     transportId:"TRN-002", hotelId:"HTL-002",
     features:[{id:"pf1",icon:"guide",text:"مرشد ديني معتمد"},{id:"pf2",icon:"meal",text:"وجبتان يومياً"},{id:"pf3",icon:"supervisor",text:"مشرف ثقافي"},{id:"pf4",icon:"location",text:"زيارة المدينة المنورة"}],
     program:[
@@ -53,7 +53,7 @@ export const SEED_PACKAGES: Pkg[] = [
     ], reviews:[], notes:"",
     policies:["إلغاء مجاني قبل 72 ساعة من الرحلة.","تشمل الرحلة وجبتين يومياً.","يجب استيفاء متطلبات التأشيرة قبل الحجز."] },
   { id:"PKG-004", name:"VIP مكة 4 أيام", order:4, productType:"رحلة VIP", destination:"مكة", audience:"كبار السن وذوي الاحتياجات الخاصة",
-    days:4, nights:3, status:"active", marketPrice:350, recurring:true, recurDay:"الجمعة", startDate:"",
+    days:4, nights:3, status:"active", marketPrice:350,
     transportId:"TRN-003", hotelId:"HTL-003",
     features:[{id:"pf1",icon:"guide",text:"مرشد ديني معتمد"},{id:"pf2",icon:"meal",text:"ضيافة فاخرة"},{id:"pf3",icon:"supervisor",text:"مشرف خاص"},{id:"pf4",icon:"vip",text:"نقل VIP بين المشاعر"},{id:"pf5",icon:"view",text:"إطلالة على الكعبة"}],
     program:[

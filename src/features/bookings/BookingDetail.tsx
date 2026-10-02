@@ -38,7 +38,8 @@ import { isSellable, seatsOf } from "@/lib/trip";
 import { AppSelect } from "@/components/AppSelect";
 import { NationalitySelect } from "@/components/NationalitySelect";
 import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
-import { BusSeatGrid, privacySeatPartner } from "@/components/BusSeatGrid";
+import { BusSeatGrid } from "@/components/BusSeatGrid";
+import { busCountOf, privacyPairLabel, seatLabel, seatsLabel, tripPrivacyPartner } from "@/lib/buses";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { Spinner } from "@/components/Spinner";
@@ -404,6 +405,12 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
     beneficiaryLinked: beneficiaries.some(x => x.bookingIds.includes(booking.id)),
   };
   const closed = closedAs(booking.status);
+  /* المقعد كما يُقرأ: «باص ٢ · ٣» حين تتعدّد باصات الرحلة، والرقم وحده
+     في الباص الواحد. والمخزَّن رقم الرحلة كما هو. */
+  const multiBus = !!trip && busCountOf(trip) > 1;
+  const seatText = (list: number[]) => trip ? seatsLabel(trip, list) : list.join("، ");
+  const oneSeat = (n?: number) => n == null ? "—" : trip ? seatLabel(trip, n) : String(n);
+  const pairText = (seat?: number, privacy?: number) => trip ? privacyPairLabel(trip, seat, privacy) : `${seat ?? "—"} · خصوصية ${privacy ?? "—"}`;
   const need = Math.max(1, booking.persons || 1);
   const needsPrivacySeat = isSoloFemale(booking);
   const seatsNeeded = need + (needsPrivacySeat ? 1 : 0);
@@ -526,7 +533,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
        شرطُ الزرّ: لا اختيار قبل التحقق، ولا على رحلةٍ غير رحلة الطلب. */
     if (!picking) {
       if (seatStep !== "ready" || !isOwnTrip) return;
-      if (needsPrivacySeat && !privacySeatPartner(shownTrip?.seats ?? 0, n)) {
+      if (needsPrivacySeat && (!shownTrip || !tripPrivacyPartner(shownTrip, n))) {
         toast.error("اختر مقعداً ضمن زوج متجاور؛ الصف الخلفي لا يصلح لمقعد الخصوصية.");
         return;
       }
@@ -538,7 +545,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
         if (prev.includes(n)) return prev.filter(x => x !== n);
         if (prev.length === 0) return [n];
         if (prev.length >= 2) return prev;
-        if (privacySeatPartner(shownTrip?.seats ?? 0, prev[0]) !== n) {
+        if (!shownTrip || tripPrivacyPartner(shownTrip, prev[0]) !== n) {
           toast.error("المقعد الثاني يجب أن يكون المجاور لمقعد المعتمرة.");
           return prev;
         }
@@ -574,8 +581,8 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
         if (r.error) { toast.error(r.error); return; }
         setPicking(false); await onRefresh(); bump();
         toast.success(needsPrivacySeat
-          ? `نُقل مقعد المعتمرة إلى ${sel[0]} وفُرّغ ${sel[1]} للخصوصية.`
-          : `حُفظت المقاعد ${sel.join("، ")}`);
+          ? `نُقل مقعد المعتمرة إلى ${oneSeat(sel[0])} وفُرّغ ${oneSeat(sel[1])} للخصوصية.`
+          : `حُفظت المقاعد ${seatText(sel)}`);
         return;
       }
       onSeatsChange(booking.id, sel);
@@ -588,17 +595,17 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
       if (r.error) { toast.error(r.error); return; }
       setPicking(false); await onRefresh(); bump();
       toast.success(needsPrivacySeat
-        ? `قُفل المقعد ${sel[0]} وفُرّغ المقعد المجاور ${sel[1]} للخصوصية.`
-        : `قُفلت المقاعد ${sel.join("، ")}`);
+        ? `قُفل المقعد ${oneSeat(sel[0])} وفُرّغ المقعد المجاور ${oneSeat(sel[1])} للخصوصية.`
+        : `قُفلت المقاعد ${seatText(sel)}`);
       return;
     }
     /* قاعدةٌ بلا ترحيل 20260910 — الكتابة المباشرة كما كانت. */
     clearSyncError();
     onSeatsChange(booking.id, sel);
     onStatusChange(booking.id, "accepted");
-    void logDocEvent("booking", booking.id, "accept", { note: `المقاعد: ${sel.join("، ")}` }).then(bump);
+    void logDocEvent("booking", booking.id, "accept", { note: `المقاعد: ${seatText(sel)}` }).then(bump);
     setBusy(null); setPicking(false);
-    toast.success(`قُفلت المقاعد ${sel.join("، ")}`);
+    toast.success(`قُفلت المقاعد ${seatText(sel)}`);
   };
 
   const recordPayment = async () => {
@@ -689,8 +696,8 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
     { l: "العودة", v: trip?.returnDate ?? "—", mono: true },
     { l: "المبلغ", v: `${sarNumber(booking.total)} ر.س`, mono: true, tone: B.gold },
     ...(seatsLocked ? [{ l: "المقاعد", v: needsPrivacySeat
-      ? `${booking.seats[0] ?? "—"} · خصوصية ${savedPrivacySeats[0] ?? "—"}`
-      : booking.seats.join("، "), mono: true }] : []),
+      ? pairText(booking.seats[0], savedPrivacySeats[0])
+      : seatText(booking.seats), mono: !multiBus, wrap: multiBus }] : []),
     ...(booking.discountPercent ? [{ l: "خصم معتمد", v: `${booking.discountPercent}%`, tone: "#8A6A08" }] : []),
   ];
 
@@ -779,8 +786,8 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
             <WorkButton state={seatStep} icon={Armchair} busy={busy === "seats"}
               label={needsPrivacySeat ? "اختيار مقعدي الخصوصية" : "اختيار المقاعد"}
               doneLabel={needsPrivacySeat
-                ? `مقعدها ${booking.seats[0] ?? "—"} · خصوصية ${savedPrivacySeats[0] ?? "—"}`
-                : `المقاعد ${booking.seats.join("، ")}`}
+                ? `مقعدها ${pairText(booking.seats[0], savedPrivacySeats[0])}`
+                : `المقاعد ${seatText(booking.seats)}`}
               onClick={startPicking} />
             {payStep === "ready" && (
               <div style={{ width: 150 }}>
@@ -862,8 +869,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                   <span style={{ color: B.muted }}>الأزرق ذكر · الوردي أنثى</span>
                 </div>
               )}
-              <BusSeatGrid
+              <BusSeatGrid key={shownTrip?.id}
                 capacity={seatStats.capacity}
+                buses={shownTrip ? busCountOf(shownTrip) : 1}
                 occupied={occupancy.seats}
                 /* الطلب الملغى حُرِّرت مقاعده فعلاً: إبرازها ذهبيةً يقول
                    إنها محجوزةٌ له وهي معروضةٌ للبيع. */
@@ -886,7 +894,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
             {picking && (
               <div className="flex items-center gap-3 flex-wrap px-5 py-3.5" style={{ borderTop: `1px solid ${B.border}`, background: B.cream }}>
                 <span className="text-sm font-bold" style={{ color: B.black }}>
-                  {sel.length ? `المقاعد ${sel.join("، ")}` : "اضغط على مقعدٍ متاح"}
+                  {sel.length ? `المقاعد ${seatText(sel)}` : "اضغط على مقعدٍ متاح"}
                 </span>
                 <span className="px-2.5 py-1 rounded-full text-xs font-bold"
                   style={{ background: sel.length === seatsNeeded ? "#E3F3E8" : "#fff", color: sel.length === seatsNeeded ? "#1E7A44" : B.muted, border: `1px solid ${sel.length === seatsNeeded ? "#C4E4CE" : B.border}` }}>

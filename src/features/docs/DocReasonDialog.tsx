@@ -14,6 +14,7 @@ import { Spinner } from "@/components/Spinner";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { sar } from "@/lib/money";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 const MIN_REASON = 5;
 
@@ -37,6 +38,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
   const [ref, setRef] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const requestClose = useConfirmDiscard({ reason, amount, ref }, p.onCancel);
 
   const danger = p.tone !== "info";
   const accent = danger ? "#BE2626" : "#0E7CA8";
@@ -58,8 +60,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: "rgba(21,76,72,.6)" }}
-      onClick={e => { e.stopPropagation(); p.onCancel(); }}>
+      style={{ background: "rgba(21,76,72,.6)" }}>
       <motion.div initial={{ scale: .96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="w-full max-w-md rounded-2xl overflow-hidden"
         style={{ background: "#fff" }} onClick={e => e.stopPropagation()}>
@@ -67,7 +68,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
         <div className="relative px-6 py-5" style={{ background:B.primaryDeep }}>
           <div className="absolute top-0 inset-x-0 h-1" style={{ background: accent }} />
           <h3 className="font-extrabold text-base" style={{ color: "#fff", margin: 0 }}>{p.title}</h3>
-          <button onClick={p.onCancel} aria-label="إغلاق"
+          <button onClick={requestClose} aria-label="إغلاق"
             className="absolute top-4 left-4 p-1 cursor-pointer"
             style={{ background: "none", border: "none", color: "#9DBAB6" }}><X size={16} /></button>
         </div>
@@ -115,7 +116,7 @@ export function DocReasonDialog(p: DocReasonDialogProps) {
               {busy && <Spinner size={14} color="#fff" />}
               {busy ? "جارٍ التنفيذ…" : p.confirmLabel}
             </button>
-            <button onClick={p.onCancel} disabled={busy}
+            <button onClick={requestClose} disabled={busy}
               className="px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
               style={{ background: B.fill, color: B.text2, border: "none" }}>رجوع</button>
           </div>

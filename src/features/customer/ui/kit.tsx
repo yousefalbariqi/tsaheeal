@@ -1200,7 +1200,6 @@ export function Sheet({ open, onClose, title, children, footer, tall = false, wi
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={closeIfAllowed}
           className={`ts-sheet-overlay${center ? " ts-sheet-overlay--center" : ""}`}
           style={{ background: "rgba(0,0,0,.45)" }}>
           <motion.div

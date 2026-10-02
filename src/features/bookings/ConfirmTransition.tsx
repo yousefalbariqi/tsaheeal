@@ -14,6 +14,7 @@ import { AlertTriangle, ArrowLeftRight, Check, Phone } from "lucide-react";
 import { B } from "@/lib/theme";
 import { Spinner } from "@/components/Spinner";
 import type { Transition } from "./flow";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 export interface TransitionSubmit {
   /** سببٌ داخلي — لا يراه العميل. */
@@ -43,6 +44,7 @@ export function ConfirmTransition({ t, booking, busy, onConfirm, onCancel }: {
       : "",
   );
   const [notify, setNotify] = useState(true);
+  const requestClose = useConfirmDiscard({ internalReason, customerMessage, notify }, onCancel);
 
   const risky = t.tone === "risk" || t.to === "cancelled" || t.to === "rejected";
   const ready = !busy && (!wantsReason || !!internalReason.trim());
@@ -56,7 +58,7 @@ export function ConfirmTransition({ t, booking, busy, onConfirm, onCancel }: {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{ background: "rgba(14,12,11,0.8)", backdropFilter: "blur(4px)" }} onClick={() => !busy && onCancel()}>
+      style={{ background: "rgba(14,12,11,0.8)", backdropFilter: "blur(4px)" }}>
       <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
         role="dialog" aria-modal="true" aria-label={t.label}
         className="w-full rounded-2xl overflow-hidden my-6" style={{ maxWidth: 460, background: "#fff" }}
@@ -127,7 +129,7 @@ export function ConfirmTransition({ t, booking, busy, onConfirm, onCancel }: {
             {busy && <Spinner size={13} color={risky ? "#fff" : B.black} track={risky ? "rgba(255,255,255,0.3)" : "rgba(27,23,18,0.25)"} />}
             {busy ? "جارٍ التنفيذ…" : t.label}
           </button>
-          <button onClick={() => !busy && onCancel()}
+          <button onClick={() => !busy && requestClose()}
             className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{ background: B.fill, color: B.text2, border: "none" }}>تراجع</button>
         </div>

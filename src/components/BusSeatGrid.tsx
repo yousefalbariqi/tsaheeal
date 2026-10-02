@@ -1,26 +1,17 @@
+import { useEffect, useState } from "react";
 import { B } from "@/lib/theme";
 import { genderGlyph } from "@/lib/utils";
+import { buildBusRows } from "@/lib/buses";
 
 /* مخطط مقاعد الباص المشترك (كروكي) — يُستخدم في اختيار المقاعد بالإدارة وصفحة العميل.
-   نفس منطق الصفوف: 2 + ممر + 2، وصف خلفي حتى 5 مقاعد. */
+   نفس منطق الصفوف: 2 + ممر + 2، وصف خلفي حتى 5 مقاعد. والهندسة في
+   lib/buses لأن الكشف وحارس مقعد الخصوصية يقرآنها كذلك.
 
-export function buildBusRows(capacity: number): number[][] {
-  const rows: number[][] = []; let n = 1;
-  while (n <= capacity) {
-    const rem = capacity - n + 1;
-    if (rem <= 5) { rows.push(Array.from({ length: rem }, (_, i) => n + i)); n += rem; }
-    else { rows.push([n, n + 1, n + 2, n + 3]); n += 4; }
-  }
-  return rows;
-}
-
-/** المقعد الملاصق ضمن الزوج نفسه في صف ٢ + ممر + ٢. */
-export function privacySeatPartner(capacity: number, seat: number): number | null {
-  const row = buildBusRows(capacity).find(r => r.includes(seat));
-  if (!row || row.length !== 4) return null;
-  const i = row.indexOf(seat);
-  return row[i % 2 === 0 ? i + 1 : i - 1] ?? null;
-}
+   ── أكثر من باص ──
+   الرحلة بثلاثة باصات تُرسم باصاً باصاً بتبويبٍ لكلٍّ منها، لا حافلةً
+   واحدة بـ١٤٧ مقعداً. والتبويب المفتوح أوّلاً هو باص أول مقعدٍ مختار، أو
+   أول باصٍ فيه مكان — فالحجز يملأ الأول ثم ينتقل إلى الثاني. والأرقام
+   المرسومة أرقام الباص (١…٤٩)، والمختار يُعاد بأرقام الرحلة كما هي. */
 
 /** ملاحظة موضع المقعد (شباك/ممر/أمامي). */
 export function seatNote(num: number, capacity: number): string {
@@ -36,9 +27,12 @@ export function seatNote(num: number, capacity: number): string {
 }
 
 export function BusSeatGrid({
-  capacity, occupied, selected, need, onToggle, occGender, selGender, privacySeats, selectedPrivacySeats, showLegend = true,
+  capacity, buses = 1, occupied, selected, need, onToggle, occGender, selGender, privacySeats, selectedPrivacySeats, showLegend = true,
 }: {
+  /** سعة الرحلة كلها — مجموع مقاعد باصاتها. */
   capacity: number;
+  /** عدد باصات الرحلة؛ المقاعد مقسومةٌ عليها بالتساوي. */
+  buses?: number;
   occupied: Set<number>;
   selected: number[];
   need: number;
@@ -49,7 +43,18 @@ export function BusSeatGrid({
   selectedPrivacySeats?: Set<number>;
   showLegend?: boolean;
 }) {
-  const rows = buildBusRows(capacity);
+  const busCount = Math.max(1, Math.floor(buses) || 1);
+  const perBus = Math.floor(capacity / busCount);
+  const busOf = (n: number) => Math.min(busCount, Math.max(1, Math.ceil(n / Math.max(perBus, 1))));
+  const freeIn = (bus: number) => Array.from({ length: perBus }, (_, i) => (bus - 1) * perBus + i + 1).filter(n => !occupied.has(n)).length;
+  const autoBus = selected.length ? busOf(selected[0])
+    : (Array.from({ length: busCount }, (_, i) => i + 1).find(bus => freeIn(bus) > 0) ?? 1);
+  const [picked, setPicked] = useState<number | null>(null);
+  /* رحلةٌ أخرى بالسعة نفسها أو بغيرها: يُعاد الاختيار التلقائي. */
+  useEffect(() => { setPicked(null); }, [capacity, busCount]);
+  const bus = picked != null && picked <= busCount ? picked : autoBus;
+  const offset = (bus - 1) * perBus;
+  const rows = buildBusRows(perBus).map(row => row.map(n => n + offset));
   const seatBtn = (num: number) => {
     const occ = occupied.has(num);
     const isSel = selected.includes(num);
@@ -71,10 +76,10 @@ export function BusSeatGrid({
       bd = isSelectedPrivacy ? "#A876D1" : B.gold; ring = `0 0 0 2px ${isSelectedPrivacy ? "#A876D1" : B.gold}`;
     }
     return (
-      <button key={num} onClick={() => !occ && onToggle(num)} disabled={occ} title={isPrivacy ? `مقعد ${num} مفرّغ للخصوصية` : `مقعد ${num}`}
+      <button key={num} onClick={() => !occ && onToggle(num)} disabled={occ} title={`${busCount > 1 ? `باص ${bus} · ` : ""}${isPrivacy ? `مقعد ${num - offset} مفرّغ للخصوصية` : `مقعد ${num - offset}`}`}
         className="relative flex flex-col items-center justify-center rounded-[10px]"
         style={{ width: 42, height: 42, border: `1px solid ${bd}`, background: bg, color: fg, boxShadow: ring, cursor, padding: 0, lineHeight: 1.02 }}>
-        <span style={{ fontSize: 13, fontWeight: 800 }}>{num}</span>
+        <span style={{ fontSize: 13, fontWeight: 800 }}>{num - offset}</span>
         {isPrivacy || isSelectedPrivacy
           ? <span style={{ fontSize: 9, fontWeight: 800, lineHeight: 1 }}>خصوصية</span>
           : gender && <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{genderGlyph(gender)}</span>}
@@ -84,8 +89,26 @@ export function BusSeatGrid({
   };
   return (
     <div className="flex flex-col gap-3">
+      {busCount > 1 && (
+        <div role="tablist" aria-label="باصات الرحلة" className="flex flex-wrap gap-1.5 justify-center">
+          {Array.from({ length: busCount }, (_, i) => i + 1).map(b => {
+            const on = b === bus;
+            const free = freeIn(b);
+            const mine = selected.filter(n => busOf(n) === b).length;
+            return (
+              <button key={b} role="tab" aria-selected={on} onClick={() => setPicked(b)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
+                style={{ background: on ? B.gold : "#fff", color: on ? B.black : B.text2, border: `1px solid ${on ? B.gold : B.border}` }}>
+                باص {b}
+                <span style={{ fontWeight: 600, color: on ? B.black : free ? B.muted : "#BE2626" }}>{free ? `${free} متاح` : "ممتلئ"}</span>
+                {mine > 0 && <span className="px-1.5 rounded-md" style={{ background: on ? "#fff" : B.goldTint, color: on ? B.black : "#8a6a08" }}>{mine} مختار</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-center justify-center">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ background: B.gold, color: B.black }}>⬆ مقدمة الحافلة · السائق</span>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ background: B.gold, color: B.black }}>⬆ مقدمة {busCount > 1 ? `الباص ${bus}` : "الحافلة"} · السائق</span>
       </div>
       <div className="flex flex-col gap-2 items-center">
         {rows.map((row, ri) => (

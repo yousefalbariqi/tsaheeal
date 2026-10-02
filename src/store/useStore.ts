@@ -162,6 +162,9 @@ interface StoreState {
   /* false أثناء جلب صف profiles — بدونها تلمع شاشة «لست موظفاً»
      بين لحظة ظهور الجلسة ولحظة وصول الدور. */
   profileReady: boolean;
+  /* تعذّر قراءة ملف الموظف لا يعني أنه ليس موظفاً. نفصل الخطأ الشبكي عن
+     غياب الصف كي لا نطرده من اللوحة عند عطل عابر. */
+  profileError: string | null;
   authReady: boolean;
   /* جلسةٌ فُتحت من رابط دعوةٍ أو استعادة: تُعرض صفحة «اختر كلمة مرورك»
      قبل اللوحة، ولا تُغلق حتى تُحفظ كلمة. */
@@ -311,18 +314,31 @@ export const useStore = create<StoreState>((set, get) => ({
   currentUser: null,
   isStaff: false,
   profileReady: false,
+  profileError: null,
   authReady: false,
   initAuth: async () => {
     if (!supabase) { set({ authReady: true, profileReady: true }); return; }
     const { data } = await supabase.auth.getSession();
     set({ session: data.session ?? null });
     if (data.session) await get()._loadProfile();
-    set({ authReady: true, profileReady: true });
+    else set({ profileReady: true });
+    set({ authReady: true });
     supabase.auth.onAuthStateChange((event, sess) => {
+      /* Supabase يعيد SIGNED_IN عند عودة التبويب وTOKEN_REFRESHED عند
+         تدوير الرمز. ما دامت هوية الجلسة نفسها، لا نفكك لوحة الموظف ولا
+         نعيد جلب ملفه، حتى تبقى النماذج المفتوحة كما هي. */
+      const previousUserId = get().session?.user.id ?? null;
       set({ session: sess });
       if (event === "PASSWORD_RECOVERY") set({ passwordRecovery: true });
-      if (sess) { set({ profileReady: false }); get()._loadProfile(); }
-      else set({ currentUser: null, isStaff: false, profileReady: true, passwordRecovery: false });
+      if (!sess) {
+        set({ currentUser: null, isStaff: false, profileReady: true, profileError: null, passwordRecovery: false });
+        return;
+      }
+      if (event === "TOKEN_REFRESHED" || sess.user.id === previousUserId) return;
+
+      /* هذه جلسة مستخدم مختلف: هنا فقط نخفي اللوحة إلى أن يصل ملفه. */
+      set({ currentUser: null, isStaff: false, profileReady: false, profileError: null });
+      void get()._loadProfile();
     });
   },
   passwordRecovery: false,
@@ -338,12 +354,33 @@ export const useStore = create<StoreState>((set, get) => ({
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message };
   },
-  signOut: async () => { await supabase?.auth.signOut(); set({ session: null, currentUser: null, isStaff: false }); },
+  signOut: async () => { await supabase?.auth.signOut(); set({ session: null, currentUser: null, isStaff: false, profileError: null }); },
   _loadProfile: async () => {
     const sess = get().session;
     if (!sess || !supabase) return;
     const uid = sess.user.id;
-    const { data } = await supabase.from("profiles").select("id,name,role,branch_id,status").eq("id", uid).single();
+    let data: { id: string; name: string; role: string; branch_id: string | null; status: string } | null = null;
+    try {
+      const result = await supabase.from("profiles").select("id,name,role,branch_id,status").eq("id", uid).single();
+      /* PGRST116 يعني صفاً غير موجود، وهو مسار «ليس موظفاً» الطبيعي.
+         أما أي خطأ آخر فهو اتصال/صلاحية لا يجوز ترجمته إلى نفي الموظف. */
+      if (result.error && result.error.code !== "PGRST116") {
+        console.error("[auth] profile load:", result.error);
+        if (get().session?.user.id === uid) {
+          set({ profileReady: true, profileError: "تعذّر الاتصال بملف الموظف. أعد المحاولة." });
+        }
+        return;
+      }
+      data = result.data;
+    } catch (error) {
+      console.error("[auth] profile load:", error);
+      if (get().session?.user.id === uid) {
+        set({ profileReady: true, profileError: "تعذّر الاتصال بملف الموظف. أعد المحاولة." });
+      }
+      return;
+    }
+    /* لا تدع استجابة طلب مستخدم قديم تكتب فوق جلسة تغيّرت أثناء الطلب. */
+    if (get().session?.user.id !== uid) return;
     /* غياب صف profiles = ليس موظفاً. كان يُصنَّع له دور "موظف" هنا،
        فيمرّ بوابة لوحة الإدارة بلا أي صلاحية مقصودة.
 
@@ -355,12 +392,12 @@ export const useStore = create<StoreState>((set, get) => ({
     if (suspended) {
       notifyAccountSuspended();
       await supabase.auth.signOut();
-      set({ session: null, currentUser: null, isStaff: false, profileReady: true });
+      set({ session: null, currentUser: null, isStaff: false, profileReady: true, profileError: null });
       return;
     }
     set(data
-      ? { currentUser: { id: data.id, name: data.name, role: data.role, branch: data.branch_id ?? undefined }, isStaff: true, profileReady: true }
-      : { currentUser: null, isStaff: false, profileReady: true });
+      ? { currentUser: { id: data.id, name: data.name, role: data.role, branch: data.branch_id ?? undefined }, isStaff: true, profileReady: true, profileError: null }
+      : { currentUser: null, isStaff: false, profileReady: true, profileError: null });
     /* آخر دخول حقيقي — كان العمود شرطةً لأن لا شيء يملؤه. الفشل لا يُبلَّغ:
        قاعدةٌ بلا ترحيل 20260915 تجهل الدالّة، والدخول لا يتوقّف على ختمٍ. */
     if (data) void supabase.rpc("touch_last_login").then(({ error }) => { if (error && !/Could not find/i.test(error.message)) console.warn("[auth] touch_last_login:", error.message); });

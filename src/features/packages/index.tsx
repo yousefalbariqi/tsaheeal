@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Building2, MapPin, Star, Plus, Trash2, X, Check, Package, Search, ChevronRight, ImagePlus, ChevronUp, ChevronDown, Copy, ArrowRight, Repeat, CalendarDays, ListChecks, Archive, ArchiveRestore, ChevronLeft, Eye, AlertTriangle, Loader2, Info, BookOpen, BedDouble, Bus as BusIcon, Wallet } from "lucide-react";
+import { Building2, MapPin, Star, Plus, Trash2, X, Check, Package, Search, ChevronRight, ImagePlus, ChevronUp, ChevronDown, Copy, ArrowRight, CalendarDays, ListChecks, Archive, ArchiveRestore, ChevronLeft, Eye, AlertTriangle, Loader2, Info, BookOpen, BedDouble, Bus as BusIcon, Wallet } from "lucide-react";
 import { B } from "@/lib/theme";
 import { SAR, sar, sarNumber } from "@/lib/money";
 import { cleanHotelName, hotelDisplayName } from "@/lib/hotelName";
@@ -21,6 +21,7 @@ import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { onPickMedia } from "@/lib/mediaUpload";
 import { useEditor } from "@/lib/useEditor";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 import { useInternalSettings } from "@/data/useSettings";
 import { readiness, isSellableTier, type PkgTab, type Readiness } from "./readiness";
 /* ألوان الجمهور هي ألوان بطاقات «من المسافر؟» في واجهة العميل:
@@ -58,7 +59,6 @@ import {
 const PRODUCT_TYPE_OPTS = ["حافلة","رحلة VIP","طيران","فندق فقط"];
 const DEST_OPTS: PkgDest[] = ["مكة","مكة والمدينة"];
 const AUDIENCE_OPTS = ["عموم المعتمرين","العائلات","كبار السن وذوي الاحتياجات الخاصة"];
-const RECUR_DAYS = ["السبت","الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة"];
 const PKG_GALLERY_MAX = 6;
 const DEFAULT_PKG_SETTINGS:TripSettings = {allowOnlineBooking:true,manualConfirm:true,waitlistEnabled:false,requirePaymentFirst:true,showTicketAfterConfirm:true,paymentDeadlineHours:24,maxPilgrims:10};
 /* عرض منطقة المحتوى — رقمٌ واحد يحكم الرأس والتبويبات وكل لوح.
@@ -148,7 +148,7 @@ function CopyFromPackageModal({ section, sources, onImport, onClose }: {
   const label = COPY_SECTION_LABEL[section];
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(14,12,11,.62)", backdropFilter: "blur(3px)" }} onClick={onClose}>
+      className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(14,12,11,.62)", backdropFilter: "blur(3px)" }}>
       <motion.div initial={{ opacity: 0, y: 16, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }}
         className="w-full rounded-2xl p-5" style={{ maxWidth: 480, background: "#fff", border: `1px solid ${B.border}` }} onClick={e => e.stopPropagation()}>
         <div className="flex items-start gap-3 mb-4">
@@ -189,9 +189,9 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
   const [form,setForm]=useState<Omit<Pkg,"id"|"order"|"program"|"roomPrices"|"reviews"|"notes"|"status">>({
     name:"",productType:"حافلة",destination:"مكة",audience:"عموم المعتمرين",
     days:3,nights:2,marketPrice:0,
-    recurring:true,recurDay:"الخميس",startDate:"",
     transportId:"",hotelId:"",features:[],policies:[],
   });
+  const requestClose=useConfirmDiscard(form,onClose);
   const set=<K extends keyof typeof form>(k:K,v:(typeof form)[K])=>setForm(f=>({...f,[k]:v}));
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
@@ -221,7 +221,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} exit={{opacity:0,y:30}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full rounded-2xl overflow-hidden flex flex-col"
@@ -235,7 +235,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
               </div>
               <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>إضافة باقة جديدة</h2>
             </div>
-            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
+            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={requestClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
               style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={14}/></button>
           </div>
         </div>
@@ -269,12 +269,6 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
                 : <>صفر ليالٍ = <b>مواصلات فقط</b> بلا سكن — لن يُطلب فندق ولا غرف.</>}
             </p>
           </div>
-          <div className="rounded-xl p-4" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-            <Field label="أيام التشغيل المقترحة">
-              <AppSelect value={form.recurDay} onChange={v=>set("recurDay",v)} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
-            </Field>
-            <p className="text-xs mt-2 flex items-center gap-1.5" style={{color:B.muted}}><CalendarDays size={12} style={{color:B.gold}}/>اقتراح فقط — تُحدَّد تواريخ الانطلاق الفعلية عند إطلاق الرحلات.</p>
-          </div>
         </div>
         <div className="flex gap-3 px-6 py-4 flex-shrink-0 items-center" style={{borderTop:`1px solid ${B.border}`}}>
           <button onClick={()=>void handleSave()} disabled={!nameOk||saving}
@@ -282,7 +276,7 @@ function AddPkgModal({onSave,onClose}:{onSave:(p:Pkg)=>Promise<boolean>;onClose:
             style={{background:B.gold,color:B.black,border:"none",opacity:!nameOk||saving?0.5:1,cursor:!nameOk||saving?"not-allowed":"pointer"}}>
             {saving?<Loader2 size={14} className="animate-spin"/>:<Check size={14}/>}{saving?"جارٍ الحفظ…":"حفظ الآن"}
           </button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
+          <button onClick={requestClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           {!nameOk&&<span className="text-xs" style={{color:B.muted}}>اسم الباقة مطلوب</span>}
         </div>
@@ -459,7 +453,7 @@ function LeaveGuard({onSaveAndLeave,onDiscard,onCancel,saving}:{onSaveAndLeave:(
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-[55] flex items-center justify-center p-4"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onCancel}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{scale:0.94,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.94,opacity:0}}
         className="rounded-2xl p-7 w-full" style={{maxWidth:400,background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{background:"#FBF3D6"}}>
@@ -869,9 +863,6 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                 <span className="text-xs px-2.5 py-1 rounded-full" style={{background:"rgba(255,255,255,0.08)",color:"rgba(240,230,204,0.7)"}}>
                   {form.days} أيام / {form.nights} ليالٍ
                 </span>
-                {form.recurDay && <span className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full" style={{background:"rgba(255,255,255,0.08)",color:"rgba(240,230,204,0.7)"}}>
-                    <Repeat size={10}/> {form.recurDay}
-                  </span>}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -1020,14 +1011,6 @@ function PackageDetail({pkg,transports,hotels,onSave,onBack}:{pkg:Pkg;transports
                     </p>
                   )}
                 </div>
-              </div>
-              {/* Suggested operating days */}
-              <div className="rounded-2xl p-5 flex flex-col gap-3" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                <div><div className="text-sm font-bold" style={{color:B.black}}>أيام التشغيل المقترحة</div>
-                  <div className="text-xs mt-0.5" style={{color:B.muted}}>اليوم الأسبوعي المقترح لتشغيل الباقة · التواريخ الفعلية تُحدد في الرحلات</div></div>
-                <div><Field label="اليوم المقترح">
-                       <AppSelect value={form.recurDay} onChange={v=>{saveImmediately();set("recurDay",v);}} options={RECUR_DAYS.map(d=>({value:d,label:d}))}/>
-                     </Field></div>
               </div>
             </div>
             {/* RIGHT */}
@@ -1811,7 +1794,6 @@ export function PackagesPage({transports,hotels,onMenuOpen}:{transports:Transpor
                       <div className="font-extrabold text-sm" style={{color:B.black}}>{p.name}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs font-mono" style={{color:B.muted}}>{p.id}</span>
-                        {p.recurDay&&<span className="flex items-center gap-0.5 text-xs" style={{color:B.muted}}><Repeat size={9}/> {p.recurDay}</span>}
                       </div>
                     </div>
                   </div>

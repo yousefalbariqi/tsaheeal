@@ -3,7 +3,7 @@
    والتواصل عبر واتساب مباشرة برسالة تحمل تفاصيل طلبه. */
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Sparkles, Phone, ArrowRight, CalendarDays, Users, Building2, MapPin } from "lucide-react";
+import { Sparkles, Phone, ArrowRight, CalendarDays, Users, Building2, MapPin, BusFront, Plane } from "lucide-react";
 import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate } from "@/components/States";
@@ -97,11 +97,16 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
         </div>
 
         {row(<CalendarDays size={14} />, "تاريخ الذهاب", req.departDate)}
-        {row(<CalendarDays size={14} />, "تاريخ العودة", req.returnDate)}
+        {req.journeyKind === "round_trip" && row(<CalendarDays size={14} />, "تاريخ العودة", req.returnDate)}
+        {req.journeyKind && row(<BusFront size={14} />, "شكل الرحلة", req.journeyKind === "round_trip" ? "ذهاب وعودة" : "اتجاه واحد")}
+        {req.travelMode && row(req.travelMode === "bus" ? <BusFront size={14} /> : <Plane size={14} />, "وسيلة السفر", req.travelMode === "bus" ? "باص" : "طيران — طلب تسعير")}
+        {req.outboundTripId && row(<BusFront size={14} />, "رحلة الذهاب المطلوبة", req.outboundTripId)}
+        {req.returnTripId && row(<BusFront size={14} />, "رحلة العودة المطلوبة", req.returnTripId)}
         {row(<Users size={14} />, "عدد المعتمرين", String(req.persons))}
         {row(<MapPin size={14} />, "الوجهة", req.destination)}
         {row(<Building2 size={14} />, "نوع السكن", req.roomType)}
         {row(<Building2 size={14} />, "مستوى الفندق", req.hotelLevel)}
+        {req.hotelRequested && row(<Building2 size={14} />, "طلب السكن", `${req.hotelNights ?? 1} ليالٍ${req.hotelNearHaram ? " · القرب من الحرم مهم" : ""}`)}
         {row(<MapPin size={14} />, "مدينة العميل", req.city)}
         {req.tripNotes && row(<Sparkles size={14} />, "ملاحظات الرحلة", req.tripNotes)}
         {req.notes && row(<Sparkles size={14} />, "ملاحظات إضافية", req.notes)}

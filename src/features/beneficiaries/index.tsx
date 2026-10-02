@@ -26,6 +26,7 @@ import { Field } from "@/components/Field";
 import { Pager, usePaged } from "@/components/Pager";
 import { EntityGate } from "@/components/States";
 import { OrgLine } from "@/components/OrgLine";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 const EMPTY_BEN: Omit<Beneficiary,"id"|"bookingIds"> = { name:"", phone:"", idNumber:"", nationality:"", gender:"male", birthDate:"", rating:0, notes:"", suspended:false, contactPhone:"" };
 
@@ -88,6 +89,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
     /* الملفّات القديمة بلا نوع: يُخمَّن من شكل الرقم ويُعرض للتأكيد. */
     docType: ben.docType ?? (guessDocType(ben.idNumber ?? "") || undefined)});
   const [tried,setTried]=useState(false);
+  const requestClose=useConfirmDiscard(form,onClose);
   const f=<K extends keyof typeof form>(k:K)=>(v:(typeof form)[K])=>setForm(p=>({...p,[k]:v}));
   const errors=validateBen(form);
   const invalid=Object.keys(errors).length>0;
@@ -105,14 +107,14 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.55)"}} onClick={onClose}>
+      style={{background:"rgba(21,76,72,.55)"}}>
       <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0}}>{ben.id?"تعديل بيانات المستفيد":"إضافة مستفيد جديد"}</h3>
           <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>الحقول المعلَّمة بـ<span style={{color:"#F3A3A3"}}> * </span>إلزامية — لا يُحفظ ملفٌ ناقص</div>
-          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={requestClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4">
           <div className="col-span-2">
@@ -194,7 +196,7 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
           <div className="flex gap-3">
             <button onClick={submit} className="px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
               style={{background:B.gold,color:B.black,border:"none",opacity:tried&&invalid?0.6:1}}>حفظ المستفيد</button>
-            <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+            <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
               style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           </div>
         </div>
@@ -212,7 +214,7 @@ function LinkPreviewModal({plan,bens,bookings,onConfirm,onClose}:{plan:LinkPlan;
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
         role="dialog" aria-modal="true" aria-label="معاينة الربط"
         className="w-full rounded-2xl overflow-hidden my-6" style={{maxWidth:620,background:"#fff"}} onClick={e=>e.stopPropagation()}>
@@ -294,7 +296,7 @@ function DuplicatesModal({pairs,countOf,onMerge,onClose}:{pairs:DupPair[];countO
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
         role="dialog" aria-modal="true" aria-label="تكرار محتمل"
         className="w-full rounded-2xl overflow-hidden my-6" style={{maxWidth:680,background:"#fff"}} onClick={e=>e.stopPropagation()}>
@@ -383,7 +385,7 @@ function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void})
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.65)"}} onClick={onClose}>
+      style={{background:"rgba(21,76,72,.65)"}}>
       <div className="w-full max-w-md my-6 rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(21,76,72,.45)"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>

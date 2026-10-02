@@ -6,22 +6,24 @@ import { Calendar, DateObject } from "react-multi-date-picker";
 import gregorian from "react-date-object/calendars/gregorian";
 import gregorian_ar from "react-date-object/locales/gregorian_ar";
 import gregorian_en from "react-date-object/locales/gregorian_en";
-import { Plus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, History, Settings2, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check, ClipboardList } from "lucide-react";
+import { Plus, Minus, X, Plane, MapPin, Link2, Clock, AlertTriangle, CalendarDays, ChevronUp, ChevronDown, ChevronRight, ChevronLeft, ArrowRight, History, Settings2, Pencil, Bus, MessageCircle, Copy, Users, Ticket, Wallet, Check, ClipboardList, Repeat, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { useRole } from "@/lib/useRole";
 import { EntityGate } from "@/components/States";
-import type { Hotel, Transport, Pkg, Trip, Branch, Booking, TripDriver, TripDepartureStop } from "@/types";
-import { uid, parseYMD, ymd, newId, openWhatsApp, copyText, money } from "@/lib/utils";
+import type { Hotel, Transport, Pkg, Trip, Branch, Booking, TripDepartureStop } from "@/types";
+import { uid, parseYMD, ymd, newId, openWhatsApp, copyText, money, todayYMD } from "@/lib/utils";
 import {
   tripState, tripBoardState, occupancy, nextTrip, calendarAnchor, dayColor,
   seatsOf, shortDate, untilLabel, dayName, tableDate, tripDeparture,
   splitByHorizon, groupByWeek, AR_MONTHS,
   type TripBoardState, type TripGroup, type Horizon,
-  defaultReturnDate, returnBeforeDeparture, findVehicleConflict,
+  defaultReturnDate, returnBeforeDeparture, findVehicleConflict, busesInUse,
   cancelImpact, tripCancelWhatsApp, type CancelImpact,
 } from "@/lib/trip";
+import { busCountOf, busesLabel, highestUsedBus, seatsPerBus } from "@/lib/buses";
+import { supportsTripBusCount } from "@/data/repository";
 import { DEFAULT_TRIP_SETTINGS } from "@/data/trips";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Spinner } from "@/components/Spinner";
@@ -30,16 +32,31 @@ import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { SearchSelect, type SearchOption } from "@/components/SearchSelect";
 import { ArabicDatePicker } from "@/components/ArabicDatePicker";
-import { useStore } from "@/store/useStore";
+import { useStore, flushSync, clearSyncError } from "@/store/useStore";
+import { ScheduleCalendar, type WeeklyMark } from "./ScheduleCalendar";
 import { Field } from "@/components/Field";
 import { isOperational } from "@/features/transport/readiness";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 /* التقويم في لوحة التشغيل يتسع لأسماء الأيام كاملة؛ الاختصار حرف أو
    حرفان يحمّل الموظف تخمين «ثن/ثل» بلا مكسب في هذه النافذة الواسعة. */
 const FULL_AR_WEEKDAYS = { ...gregorian_ar, weekDays: gregorian_ar.weekDays.map(([full]) => [full, full]) };
 const tripLabel = (t:Trip, pkgName:string) => pkgName && pkgName!=="—" ? pkgName : (t.departurePoint || t.id);
-const parseYMDDate=(s:string):Date|undefined=>{ const p=parseYMD(s); return p?new Date(p.y,p.m,p.d):undefined; };
+const addDays=(s:string,n:number)=>{ const p=parseYMD(s); if(!p) return ""; const d=new Date(p.y,p.m,p.d+n); return ymd(d.getFullYear(),d.getMonth(),d.getDate()); };
+const daysBetween=(a:string,b:string)=>{ const x=parseYMD(a),y=parseYMD(b); return x&&y?Math.round((new Date(y.y,y.m,y.d).getTime()-new Date(x.y,x.m,x.d).getTime())/86_400_000):0; };
+/** «رحلة» · «رحلتان» · «٣ رحلات» — العدد كما يُقال لا كما يُحسب. */
+const tripsCount=(n:number)=>n===1?"رحلة واحدة":n===2?"رحلتان":n<=10?`${n} رحلات`:`${n} رحلة`;
+
+/* ── الإطلاق المتعدد ──
+   تكرارٌ لعملية الإنشاء لا مفهومٌ جديد للرحلة: يختار الموظف أول تاريخ،
+   فتُقترح الأسابيع التالية في اليوم نفسه، ويستبعد منها ما لا يريد. وعند
+   الإطلاق تُنشأ كل واحدةٍ رحلةً مستقلة تماماً — رقمها ومقاعدها وحجوزاتها
+   وحالتها — ولا يبقى بينها رابط. فلا «سلسلة» تُعدَّل أو تُلغى جملة، ولا
+   منطق في النظام يحتاج أن يعرف أنها أُطلقت معاً.
+   والمدى محدود عمداً بأربعة أسابيع (شهرٌ تقريباً): تكرارٌ مفتوح يُطلق
+   رحلاتٍ لم يُقرَّر لها باصٌ ولا طلبٌ بعد. */
+const WEEKLY_COUNT=4;
 
 /* ════════ نموذج الرحلة — إطلاقٌ أو تعديلٌ محدود ════════
 
@@ -47,26 +64,37 @@ const parseYMDDate=(s:string):Date|undefined=>{ const p=parseYMD(s); return p?ne
    والفرق نطاقُ التعديل لا شكلُ الحقول.
 
    ── ما يُشتقّ ولا يُكتب ──
-   السعر والفندق والإعدادات من الباقة؛ واللوحة والرقم التعريفي والسعة من
-   المركبة المختارة. كانت اللوحة والرقم يُكتبان يدوياً في كل رحلة، فتُطلق
-   رحلةٌ على حافلةٍ «أ ب ج ١٢٣٤» لا وجود لها في سجل النقل، ولا يعرف أحدٌ
-   إن كانت في رحلةٍ أخرى ذاك اليوم. الاختيار من السجل يربط الرحلة بمركبةٍ
-   حقيقية فيصير التعارض قابلاً للفحص — هنا وفي القاعدة.
+   السعر والفندق والإعدادات من الباقة؛ وسعة الباص من نوعه المختار. كانت
+   اللوحة والرقم يُكتبان يدوياً في كل رحلة، فتُطلق رحلةٌ على حافلةٍ «أ ب ج
+   ١٢٣٤» لا وجود لها في سجل النقل. الاختيار من السجل يربط الرحلة بنوعٍ
+   حقيقي فيصير التعارض قابلاً للفحص — هنا وفي القاعدة.
+
+   ── نوع الباص وعدده ──
+   الموظف لا يختار مركبةً بعينها من ست مركبات: يختار النوع («باص تساهيل
+   2027 · 49 مقعداً») وعدد باصاته لهذه الرحلة، فتُنشأ «باص ١، باص ٢،
+   باص ٣» تلقائياً وسعة الرحلة مجموعها. والعدد رقمٌ داخل الرحلة لا حالةٌ
+   على المركبة (lib/buses): لا شيء يُصفَّر حين تنتهي. وربط «باص ١» بلوحةٍ
+   بعينها مرحلةٌ ثانية إن احتيجت.
 
    ── وضع التعديل ──
-   يُتاح: المركبة (بفحص التعارض)، وقت الانطلاق، تاريخ ووقت العودة، نقطة
-   الانطلاق، السائقون. ولا تُتاح: الباقة والسعر والسعة وتاريخ الذهاب
-   والمحجوز — هذه وعودٌ بيعت على أساسها مقاعد، وتغييرها إلغاءٌ وإطلاقٌ من
-   جديد لا تعديل. */
-type TripForm = Pick<Trip,"packageId"|"branchId"|"transportId"|"busPlate"|"busCode"|"departureDate"|"returnDate"|"departureTime"|"departurePoint"|"departureMapUrl"|"drivers">
-  & { departureCity:string }
+   يُتاح: نوع الباص وعدد الباصات (بفحص التعارض)، وقت الانطلاق، تاريخ ووقت
+   العودة، نقطة الانطلاق. ولا تُتاح: الباقة والسعر وسعة الباص الواحد وتاريخ
+   الذهاب — هذه وعودٌ بيعت على أساسها مقاعد. وعدد الباصات وحده يتغيّر:
+   باصٌ رابع حين يمتلئ الثالث لا يمسّ مقعداً بيع، وإنقاصه لا ينزل تحت
+   آخر باصٍ فيه مقعدٌ مخصَّص.
+
+   ── والسائقون ليسوا هنا ──
+   السائق بالتعاقد ويُعرف قبل الانطلاق لا عند فتح الحجز، فبابه تبويب
+   «السائقون» في الكشف لا هذا النموذج. والتعديل يحفظ ما سُجّل هناك كما
+   هو: `common` لا يحمل السائقين، فيبقى ما في الرحلة. */
+type TripForm = Pick<Trip,"packageId"|"branchId"|"transportId"|"busPlate"|"busCode"|"departureDate"|"returnDate"|"departureTime"|"departurePoint"|"departureMapUrl">
+  & { departureCity:string; busCount:number }
   & { returnTime:string; departureAddress:string; departureStops:TripDepartureStop[] };
 
 const emptyForm = ():TripForm => ({
-  packageId:"",branchId:"",transportId:"",busPlate:"",busCode:"",
+  packageId:"",branchId:"",transportId:"",busPlate:"",busCode:"",busCount:1,
   departureDate:"",returnDate:"",departureTime:"22:00",returnTime:"",
   departureCity:"",departurePoint:"",departureMapUrl:"",departureAddress:"",departureStops:[{id:uid(),branchId:"",city:"",point:"",time:""}],
-  drivers:[{id:uid(),name:"",phone:""}],
 });
 
 /** اللوحة والرقم التعريفي من سجل المركبة. الطيران بلا لوحة فرقمُ رحلته،
@@ -93,7 +121,7 @@ const legacyStop = (trip: Pick<Trip,"id"|"branchId"|"departureCity"|"departurePo
    يبقى في موضعه البصري مهما كان عرض الجدول أو اتجاه الصفحة. */
 function TripDateFilterModal({ value, onChoose, onClear, onClose }: { value: string; onChoose: (v: string) => void; onClear: () => void; onClose: () => void }) {
   const selected = value ? new DateObject({ date: value, format: "YYYY-MM-DD", calendar: gregorian, locale: gregorian_ar }) : undefined;
-  return <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{background:"rgba(14,12,11,.62)",backdropFilter:"blur(3px)"}} onClick={onClose}>
+  return <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{background:"rgba(14,12,11,.62)",backdropFilter:"blur(3px)"}}>
     <motion.div initial={{opacity:0,y:16,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:16,scale:.98}} className="w-full rounded-2xl overflow-hidden" style={{maxWidth:360,background:"#fff",border:`1px solid ${B.border}`}} onClick={e=>e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-4" style={{background:B.primaryDeep}}>
         <div><div className="font-extrabold text-sm text-white">تصفية حسب التاريخ</div><div className="text-xs mt-1" style={{color:"#CDE7E4"}}>اختر يوم انطلاق واحداً</div></div>
@@ -120,12 +148,23 @@ function TripFormModal({
   prefillDate?:string;
   /** رحلةٌ قائمة تُتّخذ قاعدةً لرحلةٍ إضافية في اليوم نفسه. */
   baseTrip?:Trip;
-  onSave:(t:Trip)=>void;onClose:()=>void;
+  /** رحلةٌ واحدة عند التعديل، ورحلةٌ أو أكثر عند الإطلاق. `false` يُبقي
+      النموذج مفتوحاً بما كُتب فيه — لم تُحفظ أي رحلة. */
+  onSave:(trips:Trip[])=>Promise<boolean>|void;onClose:()=>void;
 }) {
   /* المركبات والرحلات من المخزن مباشرةً: فحص التعارض يقرأ كل الرحلات
      القائمة لا ما مرّرته الصفحة لبطاقةٍ واحدة. */
   const transports=useStore(s=>s.transports);
-  const trips=useStore(s=>s.trips);
+  const liveTrips=useStore(s=>s.trips);
+  const bookings=useStore(s=>s.bookings);
+  /* قاعدةٌ بلا عمود الباصات تحفظ الرحلة باصاً واحداً بسعة الجميع — فلا
+     يُتاح أكثر من باص قبل الترحيل (repository › supportsTripBusCount). */
+  const [busSupport,setBusSupport]=useState(true);
+  useEffect(()=>{ let on=true; void supportsTripBusCount().then(v=>{ if(on) setBusSupport(v); }); return ()=>{ on=false; }; },[]);
+  /* أثناء الإطلاق تُكتب رحلات الدفعة في المخزن واحدةً واحدة، فلو قرأ
+     الفحصُ المخزنَ الحيّ لعلّم كلَّ تاريخٍ «مشغولاً» برحلته هو. */
+  const [frozenTrips,setFrozenTrips]=useState<Trip[]|null>(null);
+  const trips=frozenTrips??liveTrips;
   const isEdit=mode==="edit"&&!!initial;
   const activeBranches=branches.filter(b=>b.isActive);
 
@@ -146,19 +185,17 @@ function TripFormModal({
   const [form,setForm]=useState<TripForm>(()=>{
     if(isEdit&&initial) return {
       packageId:initial.packageId,branchId:initial.branchId,transportId:initial.transportId,
-      busPlate:initial.busPlate,busCode:initial.busCode,
+      busPlate:initial.busPlate,busCode:initial.busCode,busCount:busCountOf(initial),
       departureDate:initial.departureDate,returnDate:initial.returnDate??"",departureTime:initial.departureTime,
       returnTime:initial.returnTime??"",departureCity:initial.departureCity??branches.find(b=>b.id===initial.branchId)?.city??"",departurePoint:initial.departurePoint,departureMapUrl:initial.departureMapUrl,
       departureAddress:initial.departureAddress??"",
       departureStops:initial.departureStops?.length ? initial.departureStops.map(s=>({...s})) : [legacyStop(initial)],
-      drivers:initial.drivers.length?initial.drivers.map(d=>({...d})):[{id:uid(),name:"",phone:""}],
     };
     const f=emptyForm();
     /* رحلةٌ إضافية: كل ما يجمعها بالأولى منسوخٌ — الباقة واليوم والمدينة
-       ونقطة الانطلاق والوقت. والمركبة وحدها تُترك فارغة عمداً: الحافلة
-       الواحدة لا تكون في رحلتَين في اليوم نفسه، فنسخُها يُنتج تعارضاً
-       يمنع الحفظ ويُقرأ خطأً في النظام. اختيارُ غيرها هو القرار الوحيد
-       الباقي. */
+       ونقطة الانطلاق والوقت. ونوع الباص وحده يُترك فارغاً عمداً: باصات
+       النوع قد تكون كلها في الرحلة الأولى، فنسخُه يُنتج تعارضاً يمنع
+       الحفظ. اختيار النوع وعدده هو القرار الوحيد الباقي. */
     if(baseTrip){
       Object.assign(f,{
         packageId:baseTrip.packageId, branchId:baseTrip.branchId,
@@ -168,7 +205,6 @@ function TripFormModal({
         departureStops:baseTrip.departureStops?.length ? baseTrip.departureStops.map(s=>({...s,id:uid()})) : [legacyStop(baseTrip)],
         departureDate:baseTrip.departureDate, returnDate:baseTrip.returnDate??"",
         departureTime:baseTrip.departureTime, returnTime:baseTrip.returnTime??"",
-        drivers:baseTrip.drivers.length?baseTrip.drivers.map(d=>({...d,id:uid()})):[{id:uid(),name:"",phone:""}],
       });
       return f;
     }
@@ -185,9 +221,13 @@ function TripFormModal({
   /* تاريخ العودة يُقترح من أيام الباقة ما لم يمسّه الموظف؛ وما مسّه لا
      يُدهَس بتغيير الباقة أو الذهاب بعده. */
   const [returnTouched,setReturnTouched]=useState(isEdit||!!baseTrip);
+  const requestClose=useConfirmDiscard(form,onClose);
   const [busy,setBusy]=useState(false);
   const [launchTab,setLaunchTab]=useState<"basics"|"stops"|"schedule">("basics");
   const [scheduleTarget,setScheduleTarget]=useState<"departure"|"return">("departure");
+  const [launchMode,setLaunchMode]=useState<"single"|"weekly">("single");
+  /* التواريخ المستبعدة من الدفعة — تبقى ظاهرةً بزرّ إرجاع لا تختفي. */
+  const [skipped,setSkipped]=useState<string[]>([]);
   const set=<K extends keyof TripForm>(k:K,v:TripForm[K])=>setForm(f=>({...f,[k]:v}));
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
@@ -201,15 +241,52 @@ function TripFormModal({
   const manual=vehicles.length===0;
   const selVehicle=transports.find(t=>t.id===form.transportId);
   const effectiveTransportId=manual?(isEdit?initial!.transportId:(selPkg?.transportId??"")):form.transportId;
-  /* السعة: عند الإطلاق من المركبة المختارة (أو من مواصلة الباقة يدوياً)؛
-     وعند التعديل تبقى كما أُطلقت — تغييرها يمسّ مقاعداً بيعت. */
-  const seats=isEdit?initial!.seats:(manual?(pkgTransport?.seats??0):(selVehicle?.seats??0));
-
+  /* سعة الباص الواحد: عند الإطلاق من النوع المختار (أو من مواصلة الباقة
+     يدوياً)؛ وعند التعديل تبقى كما أُطلقت — تغييرها يمسّ مقاعداً بيعت.
+     وسعة الرحلة = سعة الباص × عدد الباصات. */
+  const perBus=isEdit?seatsPerBus(initial!):(manual?(pkgTransport?.seats??0):(selVehicle?.seats??0));
   const fleetCount=Math.max(1,selVehicle?.fleetCount??1);
-  const conflict=findVehicleConflict(trips,{transportId:effectiveTransportId,departureDate:form.departureDate,returnDate:form.returnDate},initial?.id,fleetCount);
+  /* العدد للحافلات وحدها: الطيران رحلةٌ واحدة، والإدخال اليدوي بلا نوعٍ
+     يُعرف عدد باصاته. */
+  const flightMode=(selVehicle?.mode??pkgTransport?.mode)==="flight";
+  const multiAllowed=!manual&&!!selVehicle&&selVehicle.mode!=="flight";
+  const busCount=multiAllowed?Math.max(1,form.busCount):1;
+  const seats=perBus*busCount;
+  /* لا تنزل باصات الرحلة القائمة تحت آخر باصٍ فيه مقعدٌ مخصَّص، ولا
+     تنزل سعتها تحت المحجوز. */
+  const minBuses=isEdit&&perBus>0?Math.max(1,
+    highestUsedBus(initial!,bookings.filter(b=>b.tripId===initial!.id&&b.status!=="cancelled"&&b.status!=="rejected").flatMap(b=>[...b.seats,...(b.privacySeats??[])])),
+    Math.ceil((initial!.bookedSeats||0)/perBus)):1;
+  const maxBuses=busSupport?fleetCount:Math.max(1,isEdit?busCountOf(initial!):1);
+  /* الباصات المشغولة من هذا النوع في تواريخ الرحلة — لتقول اللوحة كم
+     بقي قبل أن يرفض الحفظ. */
+  const inUse=busesInUse(trips,{transportId:effectiveTransportId,departureDate:form.departureDate,returnDate:form.returnDate},initial?.id);
+  const weekly=!isEdit&&launchMode==="weekly";
+  /* كل رحلةٍ في الدفعة تعود بعد المدة نفسها التي ضُبطت للأولى. */
+  const returnOffset=Math.max(0,daysBetween(form.departureDate,form.returnDate));
+  const occurrences=weekly&&form.departureDate?Array.from({length:WEEKLY_COUNT},(_,k)=>addDays(form.departureDate,7*k)):[];
+  /* التعارض لكل تاريخٍ في الدفعة على حدة، والمختار قبله يُحسب عليه:
+     باقةٌ مدتها أسبوعٌ أو أكثر تجعل رحلات الدفعة نفسها تتداخل على
+     الحافلة ذاتها، والقاعدة سترفض الثانية ولو لم تتعارض مع القائم. */
+  const occConflicts=new Map<string,Trip>();
+  if(weekly){
+    let pool=trips;
+    for(const d of occurrences){
+      if(skipped.includes(d)) continue;
+      const probe={transportId:effectiveTransportId,departureDate:d,returnDate:addDays(d,returnOffset),busCount};
+      const c=findVehicleConflict(pool,probe,undefined,fleetCount);
+      if(c) occConflicts.set(d,c);
+      else pool=[...pool,{...probe,id:`batch:${d}`,status:"open"} as Trip];
+    }
+  }
+  const plan=weekly?occurrences.filter(d=>!skipped.includes(d)):[form.departureDate];
+  const conflict=weekly?undefined:findVehicleConflict(trips,{transportId:effectiveTransportId,departureDate:form.departureDate,returnDate:form.returnDate,busCount},initial?.id,fleetCount);
   const conflictName=conflict?(packages.find(p=>p.id===conflict.packageId)?.name??conflict.id):"";
+  const conflictLabel=(c:Trip)=>c.id.startsWith("batch:")?`رحلة ${shortDate(c.departureDate)} من هذه الدفعة`:(packages.find(p=>p.id===c.packageId)?.name??c.id);
+  const toggleSkip=(d:string)=>setSkipped(s=>s.includes(d)?s.filter(x=>x!==d):[...s,d]);
   const returnInvalid=returnBeforeDeparture(form);
-  const tooSmall=isEdit&&!!selVehicle&&selVehicle.seats<(initial!.bookedSeats||0);
+  const tooSmall=isEdit&&!!selVehicle&&selVehicle.seats*busCount<(initial!.bookedSeats||0);
+  const busCountOk=busCount>=minBuses&&busCount<=Math.max(maxBuses,1);
 
   function pickPackage(id:string){
     const pkg=packages.find(p=>p.id===id);
@@ -217,14 +294,19 @@ function TripFormModal({
     setForm(f=>{
       const n={...f,packageId:id};
       /* المركبة المختارة قد لا تناسب وسيلة الباقة الجديدة (حافلة ← طيران). */
-      if(n.transportId&&!list.some(v=>v.id===n.transportId)){ n.transportId="";n.busPlate="";n.busCode=""; }
+      if(n.transportId&&!list.some(v=>v.id===n.transportId)){ n.transportId="";n.busPlate="";n.busCode="";n.busCount=1; }
       if(!n.transportId&&pkg){ const v=list.find(x=>x.id===pkg.transportId); if(v) Object.assign(n,{transportId:v.id,...vehicleIds(v)}); }
       if(!returnTouched&&pkg&&n.departureDate) n.returnDate=defaultReturnDate(n.departureDate,pkg.days);
       return n;
     });
   }
-  function pickVehicle(id:string){ const v=transports.find(t=>t.id===id); if(!v) return; setForm(f=>({...f,transportId:v.id,...vehicleIds(v)})); }
+  function pickVehicle(id:string){
+    const v=transports.find(t=>t.id===id); if(!v) return;
+    /* نوعٌ آخر قد يملك باصاتٍ أقل: يُقصّ العدد إلى ما يملكه. */
+    setForm(f=>({...f,transportId:v.id,...vehicleIds(v),busCount:v.mode==="flight"?1:Math.min(Math.max(1,f.busCount),Math.max(1,v.fleetCount??1))}));
+  }
   function setDeparture(v:string){
+    setSkipped([]);
     setForm(f=>({...f,departureDate:v,returnDate:(!returnTouched&&selPkg&&v)?defaultReturnDate(v,selPkg.days):f.returnDate}));
   }
   function setReturn(v:string){ setReturnTouched(true); set("returnDate",v); }
@@ -241,37 +323,40 @@ function TripFormModal({
   const removeStop=(id:string)=>set("departureStops",form.departureStops.filter(s=>s.id!==id));
   const setStopTime=(id:string,time:string)=>set("departureStops",form.departureStops.map(s=>s.id===id?{...s,time}:s));
 
-  const addDriver=()=>set("drivers",[...form.drivers,{id:uid(),name:"",phone:""}]);
-  const delDriver=(id:string)=>set("drivers",form.drivers.filter(d=>d.id!==id));
-  const updDriver=(id:string,field:"name"|"phone",val:string)=>set("drivers",form.drivers.map(d=>d.id===id?{...d,[field]:val}:d));
-
   const depOk = form.departureStops.length>0 && form.departureStops.every(s=>!!s.branchId&&!!s.city&&!!s.point&&!!s.time);
-  /* السائق ليس شرطاً: تشغيل الحافلات بالتعاقد، والسائق يُسمَّى قبل
-     الانطلاق لا قبل فتح الحجز. */
-  const baseOk = (manual||!!form.transportId) && !!form.busPlate.trim() && !!form.busCode.trim()
-    && depOk && !!form.departureDate && !!form.departureTime;
+  /* اللوحة والرقم التعريفي للإدخال اليدوي وحده: الرحلة على نوعٍ من السجل
+     لا تُربط بلوحة باصٍ بعينه (مرحلةٌ لاحقة). */
+  const baseOk = (manual ? (!!form.busPlate.trim() && !!form.busCode.trim()) : !!form.transportId)
+    && depOk && !!form.departureDate && !!form.returnDate && !!form.returnTime;
   /* سعة صفر تُطلق رحلة لا تقبل حجزاً — تُمنع عند المصدر لا عند أول معتمر. */
-  const canSave = (isEdit ? baseOk : (baseOk && !!form.packageId && seats>0)) && !conflict && !returnInvalid && !tooSmall;
+  const canSave = (isEdit ? baseOk : (baseOk && !!form.packageId && seats>0)) && !conflict && !returnInvalid && !tooSmall
+    && busCountOk && plan.length>0 && occConflicts.size===0;
 
-  function handleSave(){
+  async function handleSave(){
     if(!canSave||busy) return;
     setBusy(true);
-    const drivers:TripDriver[]=form.drivers.filter(d=>d.name.trim()||d.phone.trim());
     const stops=form.departureStops;
     const first=stops[0];
     const common={
       transportId:effectiveTransportId,busPlate:form.busPlate.trim(),busCode:form.busCode.trim(),
-      departureTime:first.time,returnDate:form.returnDate,returnTime:form.returnTime||undefined,
+      departureTime:first.time,returnDate:form.returnDate,returnTime:form.returnTime,
       departureCity:first.city, branchId:first.branchId,
       departurePoint:first.point,departureMapUrl:first.mapUrl||"",
       departureAddress:first.address||undefined, departureStops:stops,
-      drivers,
     };
-    if(isEdit&&initial){ onSave({...initial,...common}); return; }
-    onSave({...common,id:newId("TRP"),packageId:form.packageId,hotelId:selPkg?.hotelId??"",
-      departureDate:form.departureDate,seats,price:selPkg?.marketPrice??0,status:"open",
+    if(isEdit&&initial){ onSave([{...initial,...common,...(multiAllowed?{busCount,seats}:{})}]); return; }
+    /* كل تاريخٍ رحلةٌ كاملة بنسختها من المحطات والإعدادات — لا مرجعٌ
+       مشترك يُعدَّل في واحدةٍ فيتغيّر في أخواتها. */
+    const list:Trip[]=plan.map(d=>({...common,
+      returnDate:weekly?addDays(d,returnOffset):form.returnDate,
+      departureStops:stops.map(s=>({...s})),
+      drivers:[],id:newId("TRP"),packageId:form.packageId,hotelId:selPkg?.hotelId??"",
+      departureDate:d,seats,busCount,price:selPkg?.marketPrice??0,status:"open",
       settings:selPkg?.settings?{...selPkg.settings}:{...DEFAULT_TRIP_SETTINGS},
-      bookedSeats:0,waitingSeats:0});
+      bookedSeats:0,waitingSeats:0}));
+    setFrozenTrips(liveTrips);
+    const ok=await onSave(list);
+    if(ok===false){ setFrozenTrips(null); setBusy(false); }
   }
 
   const title=isEdit?`تعديل الرحلة — ${initial!.id}`:baseTrip?"إطلاق رحلة إضافية":"إطلاق رحلة جديدة";
@@ -281,7 +366,7 @@ function TripFormModal({
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-6 overflow-auto"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} exit={{opacity:0,y:30}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:540,background:"#fff"}} onClick={e=>e.stopPropagation()}>
@@ -292,12 +377,12 @@ function TripFormModal({
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>{isEdit?<Pencil size={15} style={{color:B.gold}}/>:"🚌"}</div>
               <h2 className="font-extrabold text-white" style={{fontSize:16,fontFamily:"var(--font-app)"}}>{title}</h2>
             </div>
-            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#CDE7E4"}}><X size={14}/></button>
+            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={requestClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#CDE7E4"}}><X size={14}/></button>
           </div>
-          {isEdit&&<div className="text-xs mt-2" style={{color:"#CDE7E4"}}>يُعدَّل هنا: المركبة، وقت الانطلاق، العودة، نقطة الانطلاق، السائقون. الباقة والسعر والسعة وتاريخ الذهاب ثابتة.</div>}
+          {isEdit&&<div className="text-xs mt-2" style={{color:"#CDE7E4"}}>يُعدَّل هنا: نوع الباص وعدد الباصات، وقت الانطلاق، العودة، نقطة الانطلاق. الباقة والسعر وسعة الباص وتاريخ الذهاب ثابتة، والسائقون من الكشف.</div>}
           {!isEdit&&baseTrip&&<div className="text-xs mt-2" style={{color:"#CDE7E4"}}>
             بُنيت على الرحلة <b style={{color:"#fff",fontFamily:"var(--font-app)"}}>{baseTrip.id}</b> — الباقة والتاريخ والوقت ونقطة الانطلاق منسوخة.
-            <span className="block mt-0.5" style={{color:"#A9CFCB"}}>اختر مركبةً أخرى: الحافلة الواحدة لا تكون في رحلتَين في اليوم نفسه.</span>
+            <span className="block mt-0.5" style={{color:"#A9CFCB"}}>اختر نوع الباص وعدده: المتاح يُحسب بعد باصات الرحلات المتداخلة.</span>
           </div>}
         </div>
         <div className="flex gap-1 p-2" style={{background:B.fill,borderBottom:`1px solid ${B.border}`}}>
@@ -316,16 +401,16 @@ function TripFormModal({
             {form.packageId&&!isEdit&&(
               <div className="text-xs mt-1.5" style={{color:B.muted}}>السعر ({sar(selPkg?.marketPrice??0)}) والفندق والإعدادات من الباقة · {selPkg?.days??"—"} أيام.</div>)}
           </div>
-          {/* 2) المركبة */}
+          {/* 2) نوع الباص وعدده */}
           <div>
-            <Field label={<>المركبة {req}</>}>
+            <Field label={<>{flightMode?"المركبة":"نوع الباص"} {req}</>}>
               {manual
                 ? <div className="rounded-xl px-4 py-3 text-xs font-bold" style={warn}>
                     ⚠ لا مركبات نشطة{pkgTransport?` من نوع «${pkgTransport.mode==="flight"?"طيران":"حافلة"}»`:""} في سجل النقل — إدخالٌ يدوي مؤقّت.
                     <span className="block font-semibold mt-1" style={{color:"#6b5a2a"}}>فعِّل مركبةً من صفحة النقل ليُربط بها ويُفحص تعارضها.</span>
                   </div>
-                : <SearchSelect value={form.transportId} onChange={pickVehicle} placeholder="اختر مركبة نشطة"
-                    searchPlaceholder="ابحث بالاسم أو اللوحة أو الرقم التسلسلي…" emptyText="لا مركبة مطابقة"
+                : <SearchSelect value={form.transportId} onChange={pickVehicle} placeholder={flightMode?"اختر مركبة نشطة":"اختر نوع باص نشط"}
+                    searchPlaceholder="ابحث بالاسم أو الموديل…" emptyText="لا نوع مطابق"
                     options={vehicles.map(vehicleOption)}/>}
             </Field>
             {manual&&(
@@ -337,47 +422,60 @@ function TripFormModal({
                        <input className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} value={form.busCode} placeholder="1" onChange={e=>set("busCode",e.target.value)}/>
                      </Field></div>
               </div>)}
-            {!manual&&selVehicle&&(
-              <div className="flex items-center gap-2 text-xs mt-1.5 flex-wrap" style={{color:B.muted}}>
-                <Bus size={12} style={{color:B.gold}}/>
-                <span>اللوحة <b style={{color:B.black}}>{form.busPlate||"—"}</b></span>·
-                <span>الرقم التعريفي <b style={{color:B.black}}>{form.busCode||"—"}</b></span>·
-                <span>السعة <b style={{color:B.black}}>{isEdit?initial!.seats:selVehicle.seats}</b> مقعد لكل باص</span>·
-                <span><b style={{color:B.black}}>{fleetCount}</b> {fleetCount===1?"باص متاح":"باصات متاحة"}</span>
+            {multiAllowed&&(
+              <div className="mt-3 rounded-2xl p-4" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="text-sm font-extrabold" style={{color:B.black}}>عدد الباصات لهذه الرحلة {req}</div>
+                    <div className="text-xs mt-1" style={{color:B.muted}}>
+                      {busesLabel(fleetCount)} من هذا النوع
+                      {form.departureDate&&<> · المتاح في تواريخ الرحلة <b style={{color:B.black}}>{Math.max(0,fleetCount-inUse.used)}</b></>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5" role="group" aria-label="عدد الباصات">
+                    <button aria-label="باص أقل" title="باص أقل" disabled={busCount<=minBuses} onClick={()=>set("busCount",busCount-1)}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,opacity:busCount<=minBuses?.4:1,cursor:busCount<=minBuses?"not-allowed":"pointer"}}><Minus size={14}/></button>
+                    <span className="w-10 text-center font-extrabold tabular-nums" style={{fontSize:18,color:B.black,fontFamily:"var(--font-app)"}}>{busCount}</span>
+                    <button aria-label="باص إضافي" title="باص إضافي" disabled={busCount>=maxBuses} onClick={()=>set("busCount",busCount+1)}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2,opacity:busCount>=maxBuses?.4:1,cursor:busCount>=maxBuses?"not-allowed":"pointer"}}><Plus size={14}/></button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {Array.from({length:busCount},(_,i)=><span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>
+                    <Bus size={11} style={{color:B.gold}}/>باص {i+1}<span style={{color:B.muted,fontWeight:600}}>· {perBus} مقعد</span></span>)}
+                </div>
+                <p className="text-xs mt-2.5 leading-relaxed" style={{color:B.text2}}>
+                  سعة الرحلة <b style={{color:B.black}}>{seats}</b> مقعداً{busCount>1?<> ({perBus} لكل باص)</>:null}. تُنشأ الباصات تلقائياً مع الرحلة، والحجز يبدأ في باص 1 وإذا امتلأ ينتقل إلى الذي بعده.
+                </p>
+                {isEdit&&minBuses>1&&<p className="text-xs mt-1.5" style={{color:B.muted}}>لا ينزل العدد تحت {minBuses}: فيها مقاعد مخصَّصة أو محجوزة.</p>}
+                {!busSupport&&<p className="text-xs mt-1.5 font-bold" style={{color:"#8A6A08"}}>أكثر من باص غير متاح حتى تُحدَّث قاعدة البيانات — الرحلة الآن باصٌ واحد.</p>}
               </div>)}
-            {isEdit&&selVehicle&&selVehicle.seats!==initial!.seats&&!tooSmall&&(
+            {!manual&&selVehicle&&flightMode&&(
+              <div className="flex items-center gap-2 text-xs mt-1.5 flex-wrap" style={{color:B.muted}}>
+                <Plane size={12} style={{color:B.gold}}/>
+                <span>رقم الرحلة <b style={{color:B.black}}>{form.busPlate||"—"}</b></span>·
+                <span>السعة <b style={{color:B.black}}>{seats}</b> مقعد</span>
+              </div>)}
+            {isEdit&&selVehicle&&selVehicle.seats!==perBus&&!tooSmall&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl" style={warn}>
-                سعة المركبة الجديدة {selVehicle.seats} وسعة الرحلة تبقى {initial!.seats} — السعة لا تُعدَّل من هنا.
+                سعة الباص في النوع الجديد {selVehicle.seats} وسعة الباص في الرحلة تبقى {perBus} — السعة لا تُعدَّل من هنا.
               </div>)}
             {tooSmall&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl" style={danger}>
-                ⚠ المركبة أصغر من المحجوز: {selVehicle!.seats} مقعد لـ{initial!.bookedSeats} محجوز. اختر مركبةً تتّسع لهم.
+                ⚠ النوع أصغر من المحجوز: {selVehicle!.seats*busCount} مقعداً لـ{initial!.bookedSeats} محجوز. اختر نوعاً يتّسع لهم أو زد الباصات.
               </div>)}
             {!isEdit&&(manual?!!form.packageId:!!form.transportId)&&seats===0&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl" style={danger}>
-                ⚠ السعة صفر — {manual?(selPkg?.transportId?"مواصلة الباقة غير موجودة أو سعتها صفر":"الباقة غير مرتبطة بمواصلة"):"هذه المركبة بلا مقاعد مسجَّلة"}. رحلةٌ بلا مقاعد لا تقبل حجزاً.
+                ⚠ السعة صفر — {manual?(selPkg?.transportId?"مواصلة الباقة غير موجودة أو سعتها صفر":"الباقة غير مرتبطة بمواصلة"):"هذا النوع بلا مقاعد مسجَّلة"}. رحلةٌ بلا مقاعد لا تقبل حجزاً.
+              </div>)}
+            {occConflicts.size>0&&(
+              <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl leading-relaxed" style={danger}>
+                ⚠ لا يتّسع هذا النوع لـ{busesLabel(busCount)} في {occConflicts.size===1?"تاريخٍ":`${occConflicts.size} تواريخ`} من الدفعة — راجعها في «موعد الرحلة».
               </div>)}
             {conflict&&(
               <div className="text-xs font-bold mt-1.5 px-3 py-2 rounded-xl leading-relaxed" style={danger}>
-                ⚠ كل الباصات المتاحة من هذا النوع ({fleetCount}) مرتبطة برحلات متداخلة، منها <b>{conflictName}</b> <span className="font-mono">({conflict.id})</span> — زد عدد الباصات في سجل النوع أو غيّر التاريخ.
+                ⚠ هذا النوع فيه {busesLabel(fleetCount)}، و{inUse.used} منها في رحلاتٍ متداخلة، منها <b>{conflictName}</b> <span className="font-mono">({conflict.id})</span>. المتاح {Math.max(0,fleetCount-inUse.used)} وطلبت {busCount} — قلّل العدد أو زد الباصات في سجل النوع أو غيّر التاريخ.
               </div>)}
-          </div>
-          {/* 3) السائقون */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold" style={{color:B.text3}}>السائقون <span style={{color:B.muted,fontWeight:600}}>(اختياري — بالتعاقد)</span></label>
-              <button onClick={addDriver} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={10}/>سائق آخر</button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {form.drivers.map((d,i)=>(
-                <div key={d.id} className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0" style={{background:B.gold,color:B.black}}>{i+1}</div>
-                  <input className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none" style={ist} value={d.name} placeholder="اسم السائق" onChange={e=>updDriver(d.id,"name",e.target.value)}/>
-                  <input className="border rounded-xl px-3 py-2 text-sm focus:outline-none" style={{...ist,direction:"ltr",width:140}} value={d.phone} placeholder="+966 5x xxx xxxx" onChange={e=>updDriver(d.id,"phone",e.target.value)}/>
-                  {form.drivers.length>1&&<button aria-label="حذف السائق" title="حذف السائق" onClick={()=>delDriver(d.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>}
-                </div>
-              ))}
-            </div>
           </div>
           </>}
           {launchTab==="stops"&&<>
@@ -401,25 +499,73 @@ function TripFormModal({
           {launchTab==="schedule"&&<>
           {/* الموعد تبويب كامل وتقويم ثابت؛ لا نافذةٌ تقفز فوق النموذج. */}
           <div className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="flex items-center gap-2 mb-3"><CalendarDays size={16} style={{color:B.gold}}/><div className="text-sm font-extrabold" style={{color:B.black}}>موعد الرحلة</div></div>
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <div className="flex items-center gap-2"><CalendarDays size={16} style={{color:B.gold}}/><div className="text-sm font-extrabold" style={{color:B.black}}>موعد الرحلة</div></div>
+              {!isEdit&&<div role="radiogroup" aria-label="نوع الإطلاق" className="flex p-1 rounded-xl" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                {([["single","رحلة واحدة",CalendarDays],["weekly","إطلاق متعدد",Repeat]] as const).map(([id,label,Icon])=>{
+                  const on=launchMode===id;
+                  return <button key={id} role="radio" aria-checked={on} onClick={()=>{setLaunchMode(id);setSkipped([]);setScheduleTarget("departure");}}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
+                    style={{background:on?"#fff":"transparent",color:on?B.black:B.muted,border:on?`1px solid ${B.border}`:"1px solid transparent",boxShadow:on?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
+                    <Icon size={12} style={{color:on?B.gold:undefined}}/>{label}</button>;
+                })}
+              </div>}
+            </div>
+            {weekly&&<p className="text-xs leading-relaxed mb-3 px-3 py-2 rounded-xl" style={{background:B.cream,border:`1px solid ${B.border}`,color:B.text2}}>
+              اختر تاريخ <b style={{color:B.black}}>أول رحلة</b>، وتُقترح الأسابيع الثلاثة التالية في اليوم نفسه. كل تاريخ يُطلق <b style={{color:B.black}}>رحلةً مستقلة</b> بمقاعدها وحجوزاتها وحالتها.
+            </p>}
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button disabled={isEdit} onClick={()=>setScheduleTarget("departure")} className="rounded-xl p-3 text-right cursor-pointer" style={{background:scheduleTarget==="departure"?"#FFF4DE":B.fill,border:`1px solid ${scheduleTarget==="departure"?"#E6C77F":B.border}`,opacity:isEdit ? .65 : 1}}>
-                <span className="block text-xs font-bold" style={{color:B.muted}}>تاريخ الذهاب {req}</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.departureDate?`${dayName(form.departureDate)} · ${shortDate(form.departureDate)}`:"اختر التاريخ"}</span>
+                <span className="block text-xs font-bold" style={{color:B.muted}}>{weekly?"تاريخ أول رحلة":"تاريخ الذهاب"} {req}</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.departureDate?`${dayName(form.departureDate)} · ${shortDate(form.departureDate)}`:"اختر التاريخ"}</span><small className="block mt-1" style={{color:B.text2}}>وقت الانطلاق: {form.departureStops[0]?.time||"—"}</small>
               </button>
               <button onClick={()=>setScheduleTarget("return")} className="rounded-xl p-3 text-right cursor-pointer" style={{background:scheduleTarget==="return"?"#FFF4DE":B.fill,border:`1px solid ${scheduleTarget==="return"?"#E6C77F":B.border}`}}>
-                <span className="block text-xs font-bold" style={{color:B.muted}}>تاريخ العودة</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.returnDate?`${dayName(form.returnDate)} · ${shortDate(form.returnDate)}`:"اختياري"}</span>
+                <span className="block text-xs font-bold" style={{color:B.muted}}>{weekly?"عودة أول رحلة":"تاريخ العودة"} {req}</span><span className="block text-sm font-extrabold mt-1" style={{color:B.black}}>{form.returnDate?`${dayName(form.returnDate)} · ${shortDate(form.returnDate)}`:"اختر التاريخ"}</span><small className="block mt-1" style={{color:B.text2}}>{weekly&&form.returnDate?`وكل رحلة تعود ${returnOffset===0?"في يومها":returnOffset===1?"بعد يوم":returnOffset===2?"بعد يومين":`بعد ${returnOffset} أيام`}`:`وقت العودة: ${form.returnTime||"اختر الوقت"}`}</small>
               </button>
             </div>
-            <div className="trip-schedule-calendar flex justify-center py-2" dir="rtl">
-              <Calendar value={(scheduleTarget==="departure"?form.departureDate:form.returnDate) ? new DateObject({date:scheduleTarget==="departure"?form.departureDate:form.returnDate,format:"YYYY-MM-DD",calendar:gregorian,locale:gregorian_ar}) : undefined} calendar={gregorian} locale={FULL_AR_WEEKDAYS} weekStartDayIndex={6} className="teal rmdp-mobile" minDate={scheduleTarget==="return"&&form.departureDate?parseYMDDate(form.departureDate):todayStart()} onChange={(d:DateObject)=>{const value=d.convert(gregorian,gregorian_en).format("YYYY-MM-DD"); if(scheduleTarget==="departure") setDeparture(value); else setReturn(value);}} />
+            <ScheduleCalendar
+              focus={scheduleTarget==="departure"?form.departureDate:form.returnDate}
+              departure={form.departureDate} returnDate={form.returnDate}
+              min={scheduleTarget==="return"&&form.departureDate?form.departureDate:todayYMD()}
+              weekly={occurrences.slice(1).map((d,i):WeeklyMark=>({date:d,index:i+2,skipped:skipped.includes(d),conflict:occConflicts.has(d)}))}
+              onPick={v=>{ if(scheduleTarget==="departure") setDeparture(v); else setReturn(v); }}/>
+            {weekly&&occurrences.length>0&&<div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-extrabold" style={{color:B.black}}>رحلات الدفعة</div>
+                <div className="text-xs font-bold" style={{color:plan.length?"#8A6A08":"#BE2626"}}>{plan.length?`ستُطلق ${tripsCount(plan.length)}`:"استُبعدت كل التواريخ"}</div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {occurrences.map((d,i)=>{
+                  const off=skipped.includes(d); const c=occConflicts.get(d); const back=addDays(d,returnOffset);
+                  return <div key={d} className="flex items-center gap-2.5 px-3 py-2 rounded-xl"
+                    style={{background:off?"#fff":c?"#FBE6E6":B.cream,border:`1px ${off?"dashed":"solid"} ${off?B.border:c?"#F3C9C9":"#EADFC4"}`}}>
+                    <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-extrabold flex-shrink-0"
+                      style={{background:off?B.fill:i===0?B.gold:"#fff",color:off?B.muted:B.black,border:`1px solid ${off?B.border:i===0?B.gold:"#E6C77F"}`}}>{i+1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-extrabold" style={{color:off?B.muted:B.black,textDecoration:off?"line-through":"none"}}>{dayName(d)} {shortDate(d)}</div>
+                      <div className="text-[11px] mt-0.5" style={{color:c&&!off?"#BE2626":B.muted}}>
+                        {off?"مستبعدة — لن تُطلق":c?<>المركبة مشغولة: {conflictLabel(c)}</>:<>العودة {dayName(back)} {shortDate(back)}</>}
+                      </div>
+                    </div>
+                    {off
+                      ? <button onClick={()=>toggleSkip(d)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.primary}}><RotateCcw size={11}/>إرجاع</button>
+                      : <button onClick={()=>toggleSkip(d)} aria-label={`استبعاد ${shortDate(d)}`} title="استبعاد هذا التاريخ" className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:"#BE2626"}}><X size={12}/></button>}
+                  </div>;
+                })}
+              </div>
+              {occConflicts.size>0&&<div className="text-xs font-bold mt-2 px-3 py-2 rounded-xl leading-relaxed" style={danger}>
+                ⚠ {occConflicts.size===1?"تاريخٌ في الدفعة بلا باصٍ متاح":`${occConflicts.size} تواريخ في الدفعة بلا باصٍ متاح`} ({fleetCount} {fleetCount===1?"باص":"باصات"} من هذا النوع). استبعدها أو غيّر المركبة.
+              </div>}
+            </div>}
+            <div className="mt-4 max-w-[220px]">
+              <Field label={<>وقت العودة المتوقع {req}</>}><input type="time" value={form.returnTime} onChange={e=>set("returnTime",e.target.value)} className={inp} style={{...ist,direction:"ltr",textAlign:"right"}} /></Field>
             </div>
           </div>
           </>}
           {returnInvalid&&<div className="text-xs font-bold -mt-2" style={{color:"#BE2626"}}>
             {form.returnDate===form.departureDate?"وقت العودة يسبق وقت الانطلاق في اليوم نفسه":"تاريخ العودة لا يسبق الذهاب"}
           </div>}
-          {!canSave&&!conflict&&!returnInvalid&&!tooSmall&&<div className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold" style={warn}>
-            ⚠ أكمل: {isEdit?"":"الباقة، "}المركبة{manual?" (اللوحة ورقمها التعريفي)":" (بسعة أكبر من صفر)"}، مدينة ونقطة الانطلاق، {isEdit?"وقت الانطلاق":"تاريخ ووقت الذهاب"}.
+          {!canSave&&!conflict&&!returnInvalid&&!tooSmall&&busCountOk&&occConflicts.size===0&&!(weekly&&form.departureDate&&plan.length===0)&&<div className="flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold" style={warn}>
+            ⚠ أكمل: {isEdit?"":"الباقة، "}{flightMode?"المركبة":"نوع الباص"}{manual?" (اللوحة ورقمها التعريفي)":" (بسعة أكبر من صفر)"}، مدينة ونقطة الانطلاق، تاريخ ووقت الذهاب، وتاريخ ووقت العودة.
           </div>}
         </div>
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
@@ -427,9 +573,9 @@ function TripFormModal({
             style={{background:canSave?B.gold:"#d6cfc6",color:canSave?B.black:"#a09688",border:"none",cursor:canSave&&!busy?"pointer":"not-allowed"}}>
             {busy&&<Spinner size={14} color={B.black}/>}
             {isEdit?<Pencil size={14}/>:<Plane size={14}/>}
-            {busy?(isEdit?"جارٍ الحفظ…":"جارٍ الإطلاق…"):(isEdit?"حفظ التعديلات":"إطلاق الرحلة")}
+            {busy?(isEdit?"جارٍ الحفظ…":"جارٍ الإطلاق…"):(isEdit?"حفظ التعديلات":weekly&&plan.length===2?"إطلاق الرحلتين":weekly&&plan.length>2?`إطلاق ${tripsCount(plan.length)}`:"إطلاق الرحلة")}
           </button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={requestClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>
     </motion.div>
@@ -456,7 +602,7 @@ function CancelTripConfirm({trip,pkgName,impact,onConfirm,onCancel}:{trip:Trip;p
   ];
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:"rgba(14,12,11,0.8)"}} onClick={onCancel}>
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:"rgba(14,12,11,0.8)"}}>
       <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
         className="w-full max-w-md rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
@@ -513,7 +659,7 @@ function CancelFollowUp({trip,pkgName,reason,impact,onClose}:{trip:Trip;pkgName:
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:24}} animate={{opacity:1,y:0}} exit={{opacity:0,y:24}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:600,background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
@@ -598,7 +744,11 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
     ["تاريخ الذهاب",trip.departureDate||"—"],["وقت الانطلاق",trip.departureTime||"—"],
     ["تاريخ العودة",trip.returnDate||"—"],["وقت العودة",trip.returnTime||"—"],
     ["المركبة",transportName||"—"],
-    ["رقم لوحة الباص",trip.busPlate||"—"],["الرقم التعريفي للباص",trip.busCode||"—"],
+    /* الرحلة متعدّدة الباصات لا لوحة لها: «باص ٢» رقمٌ داخلها لا مركبةٌ
+       بعينها، ولوحة سجل النوع ليست لوحة أيٍّ منها. */
+    ...(busCountOf(trip)>1
+      ? [["عدد الباصات",`${busesLabel(busCountOf(trip))} · ${seatsPerBus(trip)} مقعداً لكل باص`] as [string,React.ReactNode]]
+      : [["رقم لوحة الباص",trip.busPlate||"—"],["الرقم التعريفي للباص",trip.busCode||"—"]] as [string,React.ReactNode][]),
     ["نقطة الانطلاق",departure],
     /* العنوان من لقطة الرحلة وحدها — لا يُستكمل من الفرع الحيّ. */
     ...(trip.departureAddress?[["عنوان الانطلاق",trip.departureAddress] as [string,React.ReactNode]]:[]),
@@ -607,7 +757,7 @@ function TripDetailsModal({trip,pkgName,hotelName,transportName,branch,impact,ca
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:24}} animate={{opacity:1,y:0}} exit={{opacity:0,y:24}}
         className="w-full rounded-2xl overflow-hidden flex flex-col my-4" style={{maxWidth:560,background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 pt-5 pb-4 flex-shrink-0" style={{background:B.primaryDeep}}>
@@ -796,7 +946,10 @@ function TripRow({trip,pkgName,city,onOpen,onExtra}:{
       <td style={{...TD,color:B.text2,fontWeight:600}}>
         <span className="inline-flex items-center gap-1.5"><MapPin size={11} style={{color:B.gold}}/>{city||"—"}</span>
       </td>
-      <td style={{...TD,color:B.text2,fontWeight:700}} className="tabular-nums">{capacity}</td>
+      <td style={{...TD,color:B.text2,fontWeight:700}} className="tabular-nums">
+        {capacity}
+        {busCountOf(trip)>1&&<span className="block" style={{color:B.muted,fontSize:10.5,fontWeight:600}}>{busesLabel(busCountOf(trip))}</span>}
+      </td>
       <td style={{...TD,color:dead?B.muted:B.black,fontWeight:800}} className="tabular-nums">{booked}</td>
       <td style={{...TD,color:remainFg,fontWeight:800}} className="tabular-nums">{dead?"—":available}</td>
       <td style={TD}><OccupancyBar pct={pct} fg={dead?B.muted:tone.fg}/></td>
@@ -1135,8 +1288,27 @@ export function TripsPage({packages,transports,hotels,onMenuOpen}:{packages:Pkg[
     setTrips(p=>p.map(t=>t.id===trip.id?{...t,status:"cancelled",cancelReason:reason,cancelledAt:at}:t));
     setFollowUp({trip:{...trip,status:"cancelled",cancelReason:reason,cancelledAt:at},reason,impact});
   }
-  function handleSaveNew(t:Trip){ closeLaunch(); setTrips(p=>[t,...p]); toast.success("أُطلقت الرحلة",{description:`${pkgName(t.packageId)} · ${shortDate(t.departureDate)}`}); }
-  function handleSaveEdit(t:Trip){ setTrips(p=>p.map(x=>x.id===t.id?t:x)); setEditId(null); toast.success("حُفظت تعديلات الرحلة"); }
+  /* الدفعة تُكتب رحلةً رحلة وتُنتظر كلٌّ منها: الفشل يُرجع الجدول إلى ما
+     قبل الكتابة، فلو كُتبت معاً لمحا فشلُ واحدةٍ أخواتِها من الشاشة وهي
+     محفوظة في القاعدة، ثم يُعيد الموظف الإطلاق فيكرّرها. واحدةً واحدة
+     يُرجع الفشلُ الفاشلةَ وحدها، ويُقال للموظف أيّ تاريخ لم يُطلق. */
+  async function handleSaveNew(ts:Trip[]):Promise<boolean>{
+    const failed:Trip[]=[]; let reason="";
+    for(const t of ts){
+      clearSyncError();
+      setTrips(p=>[t,...p]);
+      const err=await flushSync();
+      if(err){ failed.push(t); reason=err; }
+    }
+    const done=ts.filter(t=>!failed.includes(t));
+    if(!done.length){ toast.error(ts.length===1?"تعذّر إطلاق الرحلة":"تعذّر إطلاق الرحلات",{description:reason}); return false; }
+    closeLaunch();
+    const dates=done.map(t=>shortDate(t.departureDate)).join(" · ");
+    toast.success(done.length===1?"أُطلقت الرحلة":`أُطلقت ${tripsCount(done.length)}`,{description:`${pkgName(done[0].packageId)} · ${dates}`});
+    if(failed.length) toast.error(`لم تُطلق: ${failed.map(t=>shortDate(t.departureDate)).join(" · ")}`,{description:reason,duration:12000});
+    return true;
+  }
+  function handleSaveEdit([t]:Trip[]){ setTrips(p=>p.map(x=>x.id===t.id?t:x)); setEditId(null); toast.success("حُفظت تعديلات الرحلة"); }
 
   function closeLaunch(){ setShowLaunch(false); setLaunchPkgId(undefined); setLaunchDate(undefined); setBaseTrip(undefined); }
   /* مرشّح الباقة يسبق النموذج: مَن رشّح «عمرة ٣ أيام» ثم ضغط «إطلاق

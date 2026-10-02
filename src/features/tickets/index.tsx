@@ -52,7 +52,7 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,.75)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,.75)"}}>
       <div className="w-full max-w-2xl flex flex-col gap-3 my-4" onClick={e=>e.stopPropagation()}>
         {/* نطاق الطباعة — كان ناقصاً هنا وحده: زرّ «طباعة» في التذكرة
             يطبع الصفحة كلها (القائمة الجانبية والجدول خلف النافذة) لا

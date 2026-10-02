@@ -29,6 +29,13 @@ import { payStatusChips, payStatusLabel, payStatusTone } from "@/lib/status";
    الشريحة «لم يُدفع» والبطاقة «لم تُدفع» عن الفاتورة نفسها. */
 const payChip = (k:string) => ({ label: payStatusLabel(k), ...payStatusTone(k) });
 
+/** اسم مصدر ثابت من لقطة الإصدار، لا من المستخدم الحالي ولا من صاحب الطلب. */
+const invoiceIssuer = (pay: Payment): string => {
+  if (!pay.issuedByName) return "سجل سابق — غير موثّق";
+  const role = pay.issuedByRole === "موظف" ? "موظف الاستقبال" : (pay.issuedByRole || "الحساب");
+  return `${role} – ${pay.issuedByName}`;
+};
+
 /* ─── Payment/invoice shared data + helpers ─── */
 export const PAY_ACCOUNT = { org:"مؤسسة تساهيل للعمرة", bank:"مصرف الراجحي", iban:"SA44 8000 0000 6080 1000 0000" };
 /* حُذفت TASAHEEL_BRANCHES: كانت ثلاثة فروع مكتوبة في الشفرة (الرياض
@@ -45,6 +52,12 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
   const tone  = INVOICE_PHASE_TONE[phase];
   const vat   = vatOf(pay.total);
   const settings = usePublicSettings();
+  /* بيانات الفاتورة لقطة من الحجز؛ نأخذ صاحب الحجز/أول معتمر منها لا من
+     ملف حسابٍ حيّ قد تتبدل هويته بعد إصدار المستند. */
+  const clientPilgrim = pay.pilgrims?.[0];
+  const identityLabel = clientPilgrim?.docType === "iqama" ? "رقم الإقامة"
+    : clientPilgrim?.docType === "passport" ? "رقم الجواز"
+    : "رقم الهوية";
   /* «فاتورة ضريبية» لا تُكتب إلا إذا كانت المنشأة مسجّلة فعلاً. بلا رقم
      ضريبي هي فاتورة أوّلية — وقولُ غير ذلك مخالفة. */
   const isTaxInvoice = !!settings.vatNumber;
@@ -58,7 +71,7 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.65)"}} onClick={onClose}>
+      style={{background:"rgba(21,76,72,.65)"}}>
       <div className="w-full max-w-2xl flex flex-col gap-3 my-4" onClick={e=>e.stopPropagation()}>
         <style>{`@media print{ body *{visibility:hidden !important;} #invoice-sheet, #invoice-sheet *{visibility:visible !important;} #invoice-sheet{position:absolute !important;inset:0 !important;margin:0 !important;max-width:none !important;box-shadow:none !important;border-radius:0 !important;} }`}</style>
         {/* شريط الإجراءات — مشترك مع التذكرة (features/docs/DocActions) */}
@@ -140,6 +153,7 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
               <div className="text-xs font-extrabold mb-3" style={{color:B.primary}}>بيانات العميل</div>
               <div className="font-extrabold text-base mb-0.5" style={{color:"#000"}}>{pay.clientName}</div>
               <div className="text-sm font-mono" style={{color:B.muted,direction:"ltr"}}>{pay.clientPhone}</div>
+              {clientPilgrim?.idNumber&&<div className="text-xs mt-1.5" style={{color:B.muted}}>{identityLabel}: <span style={{fontFamily:"var(--font-app)",direction:"ltr",unicodeBidi:"embed"}}>{clientPilgrim.idNumber}</span></div>}
             </div>
             <div className="px-8 py-5">
               <div className="text-xs font-extrabold mb-3" style={{color:B.primary}}>تفاصيل الحجز</div>
@@ -147,6 +161,7 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
               <div className="text-xs" style={{color:B.muted}}>رقم الطلب: <span style={{fontFamily:"var(--font-app)"}}>{pay.bookingId}</span></div>
               <div className="text-xs mt-0.5" style={{color:B.muted}}>تاريخ الرحلة: {pay.tripDate}</div>
               {pay.roomType&&<div className="text-xs mt-0.5" style={{color:B.muted}}>نوع السكن: {pay.roomType}</div>}
+              <div className="text-xs mt-1.5 font-semibold" style={{color:B.text2}}>مصدر الفاتورة: {invoiceIssuer(pay)}</div>
             </div>
           </div>
           {/* Items table */}
@@ -244,36 +259,44 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
           )}
           {/* Payment info */}
           {pay.payStatus!=="none"&&(
-            <div className="mx-8 mb-5 rounded-xl px-5 py-4 grid grid-cols-3 gap-4" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
+            <div className="mx-8 mb-4 rounded-xl px-4 py-3 grid grid-cols-3 gap-4" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
               <div><div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>طريقة الدفع</div><div className="font-bold text-sm" style={{color:B.black}}>{pay.payMethod||"—"}</div></div>
               <div><div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>رقم العملية</div><div className="font-bold text-sm font-mono" style={{color:B.black}}>{pay.txnNo||"—"}</div></div>
               <div><div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>تاريخ السداد</div><div className="font-bold text-sm" style={{color:B.black}}>{pay.payDate||"—"}</div></div>
             </div>
           )}
           {/* QR: ضريبي (TLV) حين تكون المنشأة مسجّلة، وإلا رابط التحقق. */}
-          <div className="mx-8 mb-5 flex items-center gap-4 rounded-xl px-5 py-4" style={{background:"#FBFAF6",border:`1px dashed ${B.border}`}}>
-            <QRBlock seed={pay.id} size={92} value={qrValue}/>
+          <div className="mx-8 mb-4 flex items-center gap-3 rounded-xl px-4 py-3" style={{background:"#FBFAF6",border:`1px dashed ${B.border}`}}>
+            <QRBlock seed={pay.id} size={68} value={qrValue}/>
             <div>
               {isTaxInvoice ? (
                 <>
-                  <div className="text-xs font-bold mb-1" style={{color:B.black}}>رمز الفاتورة الضريبية</div>
-                  <div className="text-xs leading-relaxed" style={{color:B.muted,maxWidth:260}}>
-                    بصيغة الهيئة (TLV): اسم البائع، الرقم الضريبي، وقت الإصدار، الإجمالي، والضريبة. يُقرأ بتطبيق الهيئة.
-                  </div>
-                  <div className="text-xs font-bold mt-1.5" style={{color:B.gold,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
+                  <div className="text-xs font-bold" style={{color:B.black}}>بيانات التحقق الضريبي</div>
+                  <div className="text-[11px] leading-relaxed" style={{color:B.muted,maxWidth:360}}>رمز TLV قابل للقراءة بتطبيق الهيئة للتحقق من بيانات الفاتورة.</div>
+                  <div className="text-[11px] font-bold mt-1" style={{color:B.gold,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
                 </>
               ) : (
                 <>
-                  <div className="text-xs font-bold mb-1" style={{color:B.black}}>امسح باركود التحقق</div>
-                  <div className="text-xs leading-relaxed" style={{color:B.muted,maxWidth:250}}>ينقلك إلى صفحة التحقق الرسمية لعرض معلومات الفاتورة والطلب.</div>
-                  <div className="text-xs font-bold mt-1.5" style={{color:B.gold,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
+                  <div className="text-xs font-bold" style={{color:B.black}}>باركود التحقق</div>
+                  <div className="text-[11px] leading-relaxed" style={{color:B.muted,maxWidth:360}}>امسحه لعرض معلومات الفاتورة والطلب والتحقق منها.</div>
+                  <div className="text-[11px] font-bold mt-1" style={{color:B.gold,fontFamily:"var(--font-app)",direction:"ltr",textAlign:"right"}}>{invVerifyUrl(pay.id)}</div>
                 </>
               )}
             </div>
           </div>
+          <section className="mx-8 mb-4 rounded-xl px-4 py-3" style={{background:"#FBFAF6",border:`1px solid ${B.border}`}}>
+            <h3 className="text-xs font-extrabold mb-2" style={{color:B.primary}}>تنبيهات وسياسات الرحلة</h3>
+            <ol className="grid gap-1 pr-4 text-[11px] leading-relaxed" style={{color:B.text2}}>
+              <li>لاسترداد قيمة التذكرة أو الاعتذار أو التعديل، يجب تقديم الطلب قبل الرحلة بـ 48 ساعة، ويُخصم 20٪.</li>
+              <li>يجب الحضور قبل موعد الرحلة بنصف ساعة في الذهاب والإياب.</li>
+              <li>المؤسسة غير مسؤولة عن أغراض المعتمرين المفقودة في الحافلة.</li>
+              <li>يُمنع التدخين داخل الحافلة.</li>
+              <li>يُمنع النقاش مع السائق، ويلزم التواصل مع المؤسسة عند الحاجة.</li>
+            </ol>
+          </section>
           {/* Footer */}
           <div className="px-8 py-4 text-center text-xs" style={{color:B.muted,borderTop:`1px solid ${B.border}`}}>
-            شكراً لاختياركم تساهيل العمرة — نسأل الله أن يتقبّل منكم ويُيسّر أداء مناسككم
+            شكراً لاختياركم تساهيل العمرة — نتمنى لكم رحلة ميسّرة ومباركة
           </div>
           </div>
         </div>
@@ -382,13 +405,13 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
       </div>
       {/* Desktop table */}
       <main className="flex-1 px-4 md:px-8 py-6">
-        <EntityGate entity="payments" label="الفواتير" cols={8}>
+        <EntityGate entity="payments" label="الفواتير" cols={9}>
         <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
           <div className="tbl-scroll tbl-wide">
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
               <thead>
                 <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                  {["الفاتورة","العميل","الطلب","الباقة","المبلغ","طريقة الدفع","حالة الدفع","إجراء"].map(h=>(
+                  {["الفاتورة","العميل","الطلب","الباقة","المبلغ","طريقة الدفع","حالة الدفع","أصدرها","إجراء"].map(h=>(
                     <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
                   ))}
                 </tr>
@@ -413,6 +436,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                           {ps.label}
                         </span>
                       </td>
+                      <td style={{padding:"14px 16px",color:B.text2,fontSize:12}}>{invoiceIssuer(p)}</td>
                       <td className="col-action" style={{padding:"14px 16px"}}>
                         <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
                           style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>
@@ -420,8 +444,8 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                     </tr>
                   );
                 })}
-                {serverSearching&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>جارِ البحث في السجل…</td></tr>}
-                {!serverSearching&&activePg.total===0&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد فواتير مطابقة</td></tr>}
+                {serverSearching&&<tr><td colSpan={9} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>جارِ البحث في السجل…</td></tr>}
+                {!serverSearching&&activePg.total===0&&<tr><td colSpan={9} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد فواتير مطابقة</td></tr>}
               </tbody>
             </table>
           </div>
@@ -444,6 +468,7 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 </div>
                 <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{p.clientName}</div>
                 <div className="text-xs mb-3" style={{color:B.muted}}>{p.packageName} · {p.payMethod||"—"}</div>
+                <div className="text-xs mb-3" style={{color:B.text2}}>أصدرها: {invoiceIssuer(p)}</div>
                 <div className="flex items-center justify-between">
                   <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(p.total)}</div>
                   <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>

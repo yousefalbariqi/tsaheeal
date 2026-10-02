@@ -23,6 +23,7 @@ import { EntityActions } from "@/components/EntityActions";
 import { permanentlyDelete } from "@/data/repository";
 import { hotelReadiness, hotelCover } from "./readiness";
 import { HOTEL_FEATURE_CATALOG, hotelFeatureIcon } from "./featureIcons";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 /** استيراد الآراء يقبل ملف CSV فقط، بعناوين واضحة حتى لا تُخمن الأعمدة. */
 function csvCells(line: string, delimiter: string): string[] {
@@ -163,6 +164,7 @@ function HotelModal({initial,onSave,onClose}:{initial:Hotel|null;onSave:(h:Hotel
      notes و tasaheelNote و phone): النموذج لا يعرضها ولا يمسّها، والحفظ
      يعيدها كما هي — فلا يدهس التبسيطُ بياناتٍ قائمة. */
   const [form,setForm]=useState<Hotel>(initial?{...initial,media:initial.media??[]}:{id:newId("HTL"),name:"",city:"مكة",stars:4,distanceM:0,district:"",phone:"",mapUrl:"",status:"active",notes:"",features:[],roomTypes:[],tasaheelNote:"",reviews:[],media:[]});
+  const requestClose=useConfirmDiscard(form,onClose);
   const set=<K extends keyof Hotel>(k:K,v:Hotel[K])=>setForm(f=>({...f,[k]:v}));
   const addFeat=(icon=HOTEL_FEATURE_CATALOG[0].id)=>set("features",[...form.features,{id:uid(),icon,text:""}]);
   const delFeat=(id:string)=>set("features",form.features.filter(f=>f.id!==id));
@@ -227,7 +229,7 @@ function HotelModal({initial,onSave,onClose}:{initial:Hotel|null;onSave:(h:Hotel
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:40}} animate={{opacity:1,y:0}} exit={{opacity:0,y:40}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full sm:rounded-2xl overflow-hidden flex flex-col"
@@ -244,7 +246,7 @@ function HotelModal({initial,onSave,onClose}:{initial:Hotel|null;onSave:(h:Hotel
                 <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"}</div>
               </div>
             </div>
-            <button onClick={onClose} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
+            <button onClick={requestClose} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
               style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={15}/></button>
           </div>
         </div>
@@ -435,7 +437,7 @@ function HotelModal({initial,onSave,onClose}:{initial:Hotel|null;onSave:(h:Hotel
         <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
           <button onClick={submit} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.gold,color:B.black,border:"none"}}><Check size={14}/>حفظ الفندق</button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
+          <button onClick={requestClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
             style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
       </motion.div>

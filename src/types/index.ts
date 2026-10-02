@@ -112,7 +112,6 @@ export interface Pkg {
       المبدئية لا تزال تُؤخذ من المركبة المرتبطة. */
   seatCostOverride?:number;
   coverImage?:string; gallery?:string[];
-  recurring:boolean; recurDay:string; startDate:string;
   transportId:string; hotelId:string;
   features:PkgFeature[]; program:ProgramStage[];
   roomPrices:RoomPrice[]; reviews:PkgReview[]; notes:string;
@@ -147,6 +146,11 @@ export interface Trip {
       لتظل التذاكر والرحلات القديمة متوافقة. */
   departureStops?:TripDepartureStop[];
   seats:number; bookedSeats:number; waitingSeats:number;
+  /** عدد باصات الرحلة من نوع المركبة نفسه — رقمٌ داخل الرحلة لا ربطٌ
+      بمركبةٍ بعينها. `seats` هو مجموعها، ومقاعد الباص = seats ÷ busCount.
+      اختياري: الرحلات السابقة له باصٌ واحد (lib/buses). عموده bus_count
+      ينزل في ترحيل 20261018. */
+  busCount?:number;
   status:TripStatus; price:number;
   /** سبب الإلغاء وتاريخه — يُطلبان عند الإلغاء ويُعرضان مكان «المتبقي ٠».
       اختياريان: الرحلات الملغاة قبل هذا التغيير بلا سبب مسجَّل، ولا
@@ -212,6 +216,8 @@ export interface Payment {
   total:number; payMethod:string;
   payStatus:"verified"|"sent"|"failed"|"none";
   txnNo:string; payDate:string; createdAt:string;
+  /** لقطة الحساب الذي أصدر الفاتورة؛ لا تُعدّل مع تغيّر بيانات الموظف. */
+  issuedAt?:string; issuedBy?:string; issuedByName?:string; issuedByRole?:string;
   pilgrims?:Pilgrim[];
   roomType?:string;
   state:PaymentState;
@@ -330,6 +336,14 @@ export interface CustomRequest {
   assignedTo?:string; assignedAt?:string; dueAt?:string;
   /** سبب الإغلاق من القائمة الأربعة — إلزامي عند «مغلق». */
   closeReason?:CustomCloseReason;
+  /** تفاصيل طلب التنسيق؛ لا تحجز مقعداً قبل مراجعة الموظف. */
+  journeyKind?:"one_way"|"round_trip";
+  travelMode?:"bus"|"flight";
+  outboundTripId?:string;
+  returnTripId?:string;
+  hotelRequested?:boolean;
+  hotelNights?:number;
+  hotelNearHaram?:boolean;
 }
 export const CUSTOM_CLOSE_REASONS = ["لم يردّ","السعر غير مناسب","غير قابل للتنفيذ","أُلغي من العميل"] as const;
 export type CustomCloseReason = typeof CUSTOM_CLOSE_REASONS[number];

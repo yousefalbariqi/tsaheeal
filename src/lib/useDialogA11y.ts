@@ -83,7 +83,10 @@ export function useDialogA11y(
     stack.push(me);
     const onKey = (e: KeyboardEvent) => {
       if (stack[stack.length - 1] !== me) return;   // ليس الحوار الأعلى
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); return; }
+      /* لا نغلق الحوار بـ Escape: النوافذ التي تعرض تفاصيل أو مسوّدة يجب
+         أن تبقى مفتوحة حتى يختار المستخدم زر × أو «رجوع/إلغاء» صراحةً.
+         هذا يطابق سلوك النقر خارج النافذة، ويمنع فقدان الإدخال بلا قصد. */
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return; }
       if (e.key !== "Tab") return;
       const panel = node.current;
       if (!panel) return;

@@ -19,6 +19,7 @@ import { EntityActions } from "@/components/EntityActions";
 import { useStore, writeLocalOnly } from "@/store/useStore";
 import { transportReadiness, gapsByTab, isOperational, type TrTab } from "./readiness";
 import { isLive } from "@/lib/trip";
+import { busCountOf } from "@/lib/buses";
 import { permanentlyDelete } from "@/data/repository";
 import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
@@ -330,7 +331,7 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}} onClick={onCancel}>
+      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
       <motion.div initial={{opacity:0,y:40}} animate={{opacity:1,y:0}} exit={{opacity:0,y:40}}
         transition={{type:"spring",damping:30,stiffness:400}}
         className="w-full sm:rounded-2xl overflow-hidden flex flex-col"
@@ -405,7 +406,7 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
                 <div><Field label="عدد المركبات من هذا النوع">
                        <NumericInput min={1} className={inp} style={ist} value={form.fleetCount ?? 1} onValueChange={v=>set("fleetCount",Math.max(1,Number(v)||1))}/>
                      </Field>
-                     <div className="text-xs mt-1" style={{color:B.muted}}>تُسجّل مواصفات هذا النوع مرة واحدة، ويُسمح بتشغيل هذا العدد من الرحلات المتداخلة.</div></div>
+                     <div className="text-xs mt-1" style={{color:B.muted}}>تُسجّل مواصفات هذا النوع مرة واحدة، ويُوزَّع هذا العدد على الرحلات المتداخلة: رحلةٌ بثلاثة باصات تأخذ ثلاثة منه.</div></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Field label={<>تكلفة المقعد ({SAR}) {req}</>}>
@@ -664,12 +665,13 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
      سعتها والباقة تفقد نقلها، ويقرأ العميل «غير متوفّر» بلا سبب.
      والإيقاف يبقى متاحاً دائماً — هو الطريق الصحيح لمركبةٍ خرجت من
      الخدمة ولها تاريخ. */
-  /* أرضية المقاعد: أكبر حجزٍ قائم على رحلةٍ تحمل هذه المركبة. الرحلات
-     المنتهية مستثناة — مقاعدها لم تعد تُحجَز، وإبقاؤها يقفل السعة على
-     رقمٍ من الماضي. */
+  /* أرضية المقاعد: أكبر حجزٍ قائم على باصٍ واحد من رحلةٍ تحمل هذا النوع.
+     الرحلة بثلاثة باصات و٦٠ محجوزاً تحتاج باصاً من ٢٠ مقعداً لا من ٦٠.
+     الرحلات المنتهية مستثناة — مقاعدها لم تعد تُحجَز، وإبقاؤها يقفل السعة
+     على رقمٍ من الماضي. */
   function seatFloorFor(id:string):number {
     const rows=trips.filter(t=>t.transportId===id&&isLive(t));
-    return rows.length?Math.max(...rows.map(t=>t.bookedSeats||0)):0;
+    return rows.length?Math.max(...rows.map(t=>Math.ceil((t.bookedSeats||0)/busCountOf(t)))):0;
   }
 
   function blockersFor(id:string):string[] {

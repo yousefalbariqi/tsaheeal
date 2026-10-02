@@ -85,7 +85,7 @@ export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSig
         {mobileOpen&&(
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
             className="md:hidden fixed inset-0 z-50 flex"
-            style={{background:"rgba(14,12,11,0.7)"}} onClick={onMobileClose}>
+            style={{background:"rgba(14,12,11,0.7)"}}>
             <motion.div initial={{x:200}} animate={{x:0}} exit={{x:200}} transition={{type:"spring",stiffness:320,damping:32}}
               className="h-full" onClick={e=>e.stopPropagation()}>
               {inner}

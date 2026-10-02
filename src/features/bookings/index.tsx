@@ -28,6 +28,7 @@ import { closeStaleBookings, searchCustomers, type CustomerHit } from "./ops";
 import { packagePrice, roomSplits, splitSummary, type RoomSplit } from "@/features/customer/roomSplit";
 import { normPhone } from "@/features/beneficiaries/link";
 import { toast } from "sonner";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 const PAY_METHODS_INTERNAL = ["كاش","تحويل بنكي","آجل للموظف"];
 
@@ -122,6 +123,7 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   const [hits,setHits]=useState<CustomerHit[]>([]);
   const [searching,setSearching]=useState(false);
   const [picked,setPicked]=useState<CustomerHit|null>(null);
+  const requestClose=useConfirmDiscard({clientName,clientPhone,packageId,tripId,travellerCounts,payMethod,split},onClose);
   const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
   const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
   const req=<span style={{color:B.gold}}>*</span>;
@@ -203,13 +205,13 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.6)"}} onClick={onClose}>
+      style={{background:"rgba(21,76,72,.6)"}}>
       <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
         className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>إضافة طلب جديد</h3>
-          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={done?onClose:requestClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
         </div>
 
         {done ? (
@@ -347,7 +349,7 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
             {busy&&<Spinner size={14} color={B.black}/>}
             {busy?"جارٍ الحفظ…":"إنشاء طلب"}
           </button>
-          <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
+          <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
         </div>
         </>
         )}
@@ -704,7 +706,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
         {bulkOpen&&(
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
             className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-            style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}} onClick={()=>!bulkBusy&&setBulkOpen(false)}>
+            style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
             <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
               role="dialog" aria-modal="true" aria-label="إغلاق الطلبات المتأخّرة"
               className="w-full rounded-2xl overflow-hidden my-6 p-6 flex flex-col gap-4" style={{maxWidth:460,background:"#fff"}} onClick={e=>e.stopPropagation()}>

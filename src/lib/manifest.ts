@@ -14,7 +14,7 @@
    هذا الملف يحمل الاشتقاق وحده — بلا React وبلا ألوان — ليُقرأ ويُختبر
    بمعزلٍ عن الشاشة التي تعرضه. */
 import type { Booking, Pilgrim, Trip, TravellerType } from "@/types";
-import { buildBusRows } from "@/components/BusSeatGrid";
+import { buildBusRows, busCountOf, busOfSeat, busOffset, localSeat, seatsPerBus } from "@/lib/buses";
 import { isActiveBooking, tripDeparture, groupByWeek, type Horizon, type TripGroup } from "@/lib/trip";
 import { kindOf, isTransportOnly, PRIVATE_TYPE, SHARED_TYPE, type HousingKind } from "@/data/housing";
 import { arCount } from "@/features/customer/plural";
@@ -27,7 +27,12 @@ import { arCount } from "@/features/customer/plural";
     والهوية والجنس من المعتمر، ورقمُ الطلب وصاحبه وحالته من الحجز. عند
     باب الحافلة يُسأل عن الاثنين معاً. */
 export interface ManifestRider {
+  /** رقم المقعد على الرحلة كلها — ما في القاعدة. */
   seat: number | null;
+  /** الباص ورقم المقعد داخله — ما يُقرأ عند الباب. في الرحلة ذات الباص
+      الواحد الباص ١ والرقم هو `seat` نفسه. */
+  bus: number | null;
+  busSeat: number | null;
   name: string;
   gender: "male" | "female";
   ageGroup: "adult" | "child";
@@ -64,6 +69,7 @@ const riderOf = (b: Booking, idx: number, partySize: number): ManifestRider => {
   const pg = b.pilgrims[idx] ?? b.pilgrims[0];
   return {
   seat: b.seats[idx] ?? pg?.seat ?? null,
+  bus: null, busSeat: null,
   name: (pg?.name || b.clientName || "").trim(),
   gender: genderAt(b, idx),
   ageGroup: pg?.ageGroup === "child" ? "child" : "adult",
@@ -103,10 +109,12 @@ export interface ManifestParty {
   contiguous: boolean;
 }
 
-const contiguous = (seats: number[]): boolean => {
+/** متتابعةٌ وفي باصٍ واحد: المقعدان ٤٩ و٥٠ متتاليان رقماً، وبينهما
+    باصان حين يكون الباص ٤٩ مقعداً. */
+const contiguous = (trip: Trip, seats: number[]): boolean => {
   if (seats.length <= 1) return true;
   const s = [...seats].sort((a, b) => a - b);
-  return s[s.length - 1] - s[0] === s.length - 1;
+  return s[s.length - 1] - s[0] === s.length - 1 && busOfSeat(trip, s[0]) === busOfSeat(trip, s[s.length - 1]);
 };
 
 /* ═══ الكشف ════════════════════════════════════════════════════════ */
@@ -132,6 +140,10 @@ export interface ManifestSummary {
 
 export interface Manifest {
   trip: Trip;
+  /** الباص الذي يصفه الكشف حين تتعدّد الباصات — وغيابه الرحلة كلها.
+      السعة والمقاعد والركّاب عندئذٍ لذلك الباص وحده، ومَن ينتظر تخصيصاً
+      للرحلة كلها: لم يُعيَّن له باصٌ بعد. */
+  bus?: number;
   /** الركّاب مرتّبين بالمقعد — ترتيب الحافلة لا ترتيب وقت الحجز. */
   riders: ManifestRider[];
   /** ما لم يُخصَّص له مقعد بعد، بترتيب الحجز. */
@@ -149,33 +161,42 @@ export interface Manifest {
     ما يدخل الكشف: كل حجزٍ قائم على الرحلة — والقائم ما لم يُلغَ ولم
     يُرفض (`isActiveBooking`). ويدخل معه ما لم تُخصَّص مقاعده بعد: إخفاؤه
     يجعل الكشف يبدو مكتملاً وفي الطلبات ستةٌ تنتظر تعييناً. */
-export function buildManifest(trip: Trip, bookings: Booking[]): Manifest {
+export function buildManifest(trip: Trip, bookings: Booking[], bus?: number): Manifest {
   const mine = bookings.filter(b => b.tripId === trip.id && isActiveBooking(b));
+  /* باصٌ بعينه في رحلةٍ متعدّدة الباصات؛ وإلا فالرحلة كلها كما كانت. */
+  const one = bus != null && busCountOf(trip) > 1 ? Math.min(Math.max(1, bus), busCountOf(trip)) : undefined;
+  const inBus = (seat: number) => one == null || busOfSeat(trip, seat) === one;
 
-  const parties: ManifestParty[] = mine.map(b => {
+  const allParties: ManifestParty[] = mine.map(b => {
     const partySize = Math.max(1, b.persons || 1, b.seats.length, b.pilgrims.length);
-    const riders = Array.from({ length: partySize }, (_, i) => riderOf(b, i, partySize));
+    const riders = Array.from({ length: partySize }, (_, i) => {
+      const r = riderOf(b, i, partySize);
+      return r.seat == null ? r : { ...r, bus: busOfSeat(trip, r.seat), busSeat: localSeat(trip, r.seat) };
+    });
     const seats = riders.map(r => r.seat).filter((n): n is number => n != null).sort((a, b2) => a - b2);
     return {
       bookingId: b.id, clientName: (b.clientName || "").trim(), status: b.status,
       travellerType: b.travellerType, roomType: b.roomType || "",
-      seats, riders, unseated: seats.length === 0, contiguous: contiguous(seats),
+      seats, riders, unseated: seats.length === 0, contiguous: contiguous(trip, seats),
     };
   });
+  /* كشف الباص يحمل مَن له مقعدٌ فيه، ومَن لا مقعد له بعد (عملٌ على
+     الرحلة كلها يُرى من أي باص). */
+  const parties = one == null ? allParties : allParties.filter(p => p.unseated || p.seats.some(inBus));
 
   const all = parties.flatMap(p => p.riders);
   /* الترتيب بالمقعد لا بوقت الحجز: الكشف يُقرأ وقوفاً عند باب الحافلة،
      والسؤال «مَن في المقعد ١٨؟» لا «مَن حجز الثلاثاء؟». */
-  const riders = all.filter(r => r.seat != null).sort((a, b) => (a.seat! - b.seat!));
+  const riders = all.filter(r => r.seat != null && inBus(r.seat)).sort((a, b) => (a.seat! - b.seat!));
   const waiting = all.filter(r => r.seat == null);
 
   const bySeat = new Map<number, ManifestRider>();
   /* أوّل مَن نزل على المقعد يبقى فيه: قيد القاعدة يمنع الازدواج
      (20260813)، وهذا حارسٌ للعرض إن قُرئ صفٌّ قديم قبل تنظيفه. */
   for (const r of riders) if (!bySeat.has(r.seat!)) bySeat.set(r.seat!, r);
-  const privacySeats = new Set(mine.flatMap(b => b.privacySeats ?? []).filter(n => !bySeat.has(n)));
+  const privacySeats = new Set(mine.flatMap(b => b.privacySeats ?? []).filter(n => !bySeat.has(n) && inBus(n)));
 
-  const capacity = Math.max(0, trip.seats || 0);
+  const capacity = one == null ? Math.max(0, trip.seats || 0) : seatsPerBus(trip);
   const summary: ManifestSummary = {
     capacity,
     seated: riders.length,
@@ -188,15 +209,29 @@ export function buildManifest(trip: Trip, bookings: Booking[]): Manifest {
     scattered: parties.filter(p => !p.unseated && !p.contiguous).length,
   };
 
-  return { trip, riders, waiting, parties, bySeat, privacySeats, summary };
+  return { trip, bus: one, riders, waiting, parties, bySeat, privacySeats, summary };
+}
+
+/** كشف كل باصٍ على حدة — «رحلة مكة · باص ١» و«باص ٢» — ولرحلة الباص
+    الواحد كشفها كما هو. */
+export function busManifests(trip: Trip, bookings: Booking[]): Manifest[] {
+  const n = busCountOf(trip);
+  return n > 1 ? Array.from({ length: n }, (_, i) => buildManifest(trip, bookings, i + 1)) : [buildManifest(trip, bookings)];
 }
 
 /** صفوف الكروكي وما في كل مقعد — الهندسة من `buildBusRows` نفسها التي
-    تُرسم بها شاشة اختيار المقاعد، فلا يكون للحافلة شكلان. */
-export interface CroquisSeat { num: number; rider: ManifestRider | null; privacy: boolean; }
+    تُرسم بها شاشة اختيار المقاعد، فلا يكون للحافلة شكلان.
+
+    `num` رقم المقعد على الرحلة (مفتاح `bySeat`)، و`label` رقمه في باصه —
+    وهو ما يُرسم. في الباص الواحد هما الرقم نفسه. */
+export interface CroquisSeat { num: number; label: number; rider: ManifestRider | null; privacy: boolean; }
 export function croquisRows(m: Manifest): CroquisSeat[][] {
+  const offset = m.bus != null ? busOffset(m.trip, m.bus) : 0;
   return buildBusRows(m.summary.capacity).map(row =>
-    row.map(num => ({ num, rider: m.bySeat.get(num) ?? null, privacy: m.privacySeats.has(num) })));
+    row.map(label => {
+      const num = label + offset;
+      return { num, label, rider: m.bySeat.get(num) ?? null, privacy: m.privacySeats.has(num) };
+    }));
 }
 
 /* ═══ لوحة الإطلاقات ═══════════════════════════════════════════════ */

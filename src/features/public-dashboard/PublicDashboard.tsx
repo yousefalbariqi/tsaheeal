@@ -3,6 +3,7 @@ import { AlertTriangle, Armchair, BusFront, CalendarDays, ChevronLeft, ChevronRi
 import { fetchCatalog, fetchPublicDashboardSeats, type Catalog, type PublicDashboardSeat } from "@/features/customer/data";
 import { hideBootSplash } from "@/lib/bootSplash";
 import type { Trip } from "@/types";
+import { busCountOf, seatsPerBus } from "@/lib/buses";
 
 type SeatState = "male" | "female" | "reserved" | "available";
 const WEEK_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -27,22 +28,32 @@ function SeatLegend() {
   </div>;
 }
 
+/* الرحلة بأكثر من باص تُرسم باصاً باصاً، وأرقام كل باصٍ من ١ — المقعد
+   ٥٢ في رحلة باصاتٍ سعتها ٤٩ هو المقعد ٣ في الباص الثاني. */
 function BusMap({ trip, seats }: { trip: Trip; seats: PublicDashboardSeat[] }) {
   const seatMap = new Map(seats.map(row => [row.seat, row.state]));
-  const rows = Array.from({ length: Math.ceil(Math.max(trip.seats, 1) / 4) }, (_, index) => [index * 4 + 1, index * 4 + 2, index * 4 + 3, index * 4 + 4].filter(no => no <= trip.seats));
+  const buses = busCountOf(trip);
+  const perBus = buses > 1 ? seatsPerBus(trip) : trip.seats;
   const assigned = seats.length;
   const awaitingAllocation = Math.max(0, trip.bookedSeats - assigned);
-  return <section className="public-dashboard-bus" aria-label={`كروكي مقاعد ${tripName(trip, [])}`}>
-    <div className="public-dashboard-bus-head"><span><BusFront size={19}/> {trip.busCode ? `حافلة رقم ${trip.busCode}` : "الحافلة"}</span><small>مقدمة الحافلة</small></div>
-    <div className="public-dashboard-seat-rows">
-      {rows.map((row, index) => <div className="public-dashboard-seat-row" key={index}>
-        <div>{row.slice(0, 2).map(no => <Seat key={no} no={no} state={seatMap.get(no) ?? "available"}/>)}</div>
-        <span className="public-dashboard-aisle" aria-hidden="true">{index + 1}</span>
-        <div>{row.slice(2).map(no => <Seat key={no} no={no} state={seatMap.get(no) ?? "available"}/>)}</div>
-      </div>)}
-    </div>
-    {awaitingAllocation > 0 && <p className="public-dashboard-allocation"><CircleDot size={15}/> {awaitingAllocation} مقعدًا محجوزًا بانتظار التوزيع</p>}
-  </section>;
+  return <>
+    {Array.from({ length: buses }, (_, b) => {
+      const offset = b * perBus;
+      const rows = Array.from({ length: Math.ceil(Math.max(perBus, 1) / 4) }, (_, index) => [index * 4 + 1, index * 4 + 2, index * 4 + 3, index * 4 + 4].filter(no => no <= perBus));
+      const title = buses > 1 ? `الباص ${b + 1}` : trip.busCode ? `حافلة رقم ${trip.busCode}` : "الحافلة";
+      return <section key={b} className="public-dashboard-bus" aria-label={`كروكي مقاعد ${title}`}>
+        <div className="public-dashboard-bus-head"><span><BusFront size={19}/> {title}</span><small>مقدمة الحافلة</small></div>
+        <div className="public-dashboard-seat-rows">
+          {rows.map((row, index) => <div className="public-dashboard-seat-row" key={index}>
+            <div>{row.slice(0, 2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"}/>)}</div>
+            <span className="public-dashboard-aisle" aria-hidden="true">{index + 1}</span>
+            <div>{row.slice(2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"}/>)}</div>
+          </div>)}
+        </div>
+        {b === buses - 1 && awaitingAllocation > 0 && <p className="public-dashboard-allocation"><CircleDot size={15}/> {awaitingAllocation} مقعدًا محجوزًا بانتظار التوزيع</p>}
+      </section>;
+    })}
+  </>;
 }
 
 function Seat({ no, state }: { no: number; state: SeatState }) {

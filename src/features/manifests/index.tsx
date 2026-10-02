@@ -32,6 +32,7 @@ import {
 } from "@/lib/trip";
 import { AR, groupLaunches, nearestLaunch, unseatedByTrip, type HotelRef } from "@/lib/manifest";
 import { arCount } from "@/features/customer/plural";
+import { busCountOf, busesLabel } from "@/lib/buses";
 import { SeatManifest } from "./SeatManifest";
 
 /* ════════ بطاقة الإطلاقة ════════
@@ -135,13 +136,15 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
   const cityOf = (t: Trip) => t.departureCity || branchOf(t.branchId)?.city || "";
   const busOf = (t: Trip) => {
     const v = vehicleOf(t.transportId);
-    return v ? `${v.name}${v.plate ? ` — ${v.plate}` : ""}` : (t.busPlate || "");
+    const n = busCountOf(t);
+    const name = v ? `${v.name}${v.plate && n === 1 ? ` — ${v.plate}` : ""}` : (t.busPlate || "");
+    return n > 1 ? `${name} · ${busesLabel(n)}` : name;
   };
 
-  function open(t: Trip) { const n = new URLSearchParams(params); n.set("trip", t.id); n.delete("sheet"); setParams(n); }
+  function open(t: Trip) { const n = new URLSearchParams(params); n.set("trip", t.id); n.delete("sheet"); n.delete("bus"); setParams(n); }
   /* الخروج من الكشف يمسح ورقته كذلك: بقاء `sheet` في المسار كان يفتح
      الكشف التالي على ورقةٍ اختيرت لكشفٍ آخر. */
-  function close() { const n = new URLSearchParams(params); n.delete("trip"); n.delete("sheet"); setParams(n, { replace: true }); }
+  function close() { const n = new URLSearchParams(params); n.delete("trip"); n.delete("sheet"); n.delete("bus"); setParams(n, { replace: true }); }
 
   const openTrip = openId ? trips.find(t => t.id === openId) : undefined;
   /* فندق الحجز: من باقته إن حملها، وإلا فندق الرحلة. الترتيب مقصود —
@@ -158,7 +161,9 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
       <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{ background: B.bg }}>
         <PageHeader title="الكشوفات" crumb={`كشف ${pkgName(openTrip.packageId)}`} search={search} onSearch={setSearch}
           searchPlaceholder="ابحث بالباقة أو المدينة أو التاريخ أو الباص" onMenuOpen={onMenuOpen} />
-        <SeatManifest trip={openTrip} pkg={pkgOf(openTrip.packageId)} vehicle={vehicleOf(openTrip.transportId)}
+        {/* المفتاح الإطلاقة: مسوّدة السائقين تُبنى منها، فالانتقال إلى
+            كشفٍ آخر يبدأ بسائقيه لا بما كُتب للسابق. */}
+        <SeatManifest key={openTrip.id} trip={openTrip} pkg={pkgOf(openTrip.packageId)} vehicle={vehicleOf(openTrip.transportId)}
           branch={branchOf(openTrip.branchId)} hotelName={hotels.find(h => h.id === openTrip.hotelId)?.name ?? ""}
           hotelFor={hotelRef} bookings={bookings} onBack={close} />
       </div>

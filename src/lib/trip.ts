@@ -24,6 +24,7 @@
    الحالة المخزّنة تبقى كما هي إذن — نيّة الموظف — ويعلوها الوقت هنا. */
 import type { Trip, Booking, TicketEntry } from "@/types";
 import { parseYMD, ymd } from "@/lib/utils";
+import { busCountOf } from "@/lib/buses";
 
 /* ═══ الزمن ═══════════════════════════════════════════════════════ */
 
@@ -272,27 +273,37 @@ export function tripWindow(t: Pick<Trip, "departureDate" | "returnDate">): DateW
     معجمياً فتساوي المقارنة الزمنية. */
 export const windowsOverlap = (a: DateWindow, b: DateWindow): boolean => a.from <= b.to && b.from <= a.to;
 
-/** أول رحلةٍ قائمة تشغل المركبة نفسها في نافذةٍ متداخلة — أو لا شيء.
+type VehicleProbe = Pick<Trip, "transportId" | "departureDate" | "returnDate"> & Pick<Partial<Trip>, "busCount">;
+
+/** الرحلات القائمة التي تشغل باصاتٍ من النوع نفسه في نافذةٍ متداخلة،
+    ومجموع باصاتها.
 
     الملغاة والمؤرشفة لا تشغل مركبة، والرحلة نفسها (عند التعديل) لا
     تتعارض مع نفسها. المنتهية تُحتسب: حافلةٌ في رحلةٍ انتهت أمس لا تكون
     قد كانت في أخرى أمسِ نفسِه. */
-export function findVehicleConflict(
-  trips: Trip[],
-  probe: Pick<Trip, "transportId" | "departureDate" | "returnDate">,
-  excludeId?: string,
-  fleetCount = 1,
-): Trip | undefined {
-  if (!probe.transportId) return undefined;
-  const w = tripWindow(probe);
-  if (!w) return undefined;
-  /* سجل النقل يمثل نوعاً (مثلاً مرسيدس 2027) وقد يملك ست حافلات
-     متطابقة. لا يتعارض النوع إلا بعد أن تُشغّل كل وحداته. */
-  const all = trips.filter(t => t.id !== excludeId && t.transportId === probe.transportId
+export function busesInUse(trips: Trip[], probe: VehicleProbe, excludeId?: string): { used: number; trips: Trip[] } {
+  const w = probe.transportId ? tripWindow(probe) : null;
+  if (!w) return { used: 0, trips: [] };
+  const list = trips.filter(t => t.id !== excludeId && t.transportId === probe.transportId
     && t.status !== "cancelled" && t.status !== "archived")
     .filter(t => { const tw = tripWindow(t); return !!tw && windowsOverlap(w, tw); })
     .sort((a, b) => a.departureDate.localeCompare(b.departureDate));
-  return all.length >= Math.max(1, fleetCount) ? all[0] : undefined;
+  return { used: list.reduce((a, t) => a + busCountOf(t), 0), trips: list };
+}
+
+/** أول رحلةٍ متداخلة حين لا يتّسع النوع لباصات الرحلة المطلوبة — أو لا شيء.
+
+    سجل النقل يمثل نوعاً (مثلاً مرسيدس 2027) وقد يملك ست حافلات
+    متطابقة، والرحلة تأخذ منها باصاً أو أكثر. لا يتعارض النوع إلا حين
+    يتجاوز مجموعُ باصات الرحلات المتداخلة وباصاتُ هذه الرحلة عددَه. */
+export function findVehicleConflict(
+  trips: Trip[],
+  probe: VehicleProbe,
+  excludeId?: string,
+  fleetCount = 1,
+): Trip | undefined {
+  const { used, trips: overlapping } = busesInUse(trips, probe, excludeId);
+  return overlapping.length && used + busCountOf(probe) > Math.max(1, fleetCount) ? overlapping[0] : undefined;
 }
 
 /* ═══ أثر الإلغاء ══════════════════════════════════════════════════ */

@@ -12,24 +12,27 @@
    ورسالة `beforeunload` لا تُخصَّص: المتصفّحات الحديثة تعرض نصّها
    الموحَّد وتتجاهل ما يُعاد. المطلوب منها استدعاء `preventDefault` فقط —
    ووجود `returnValue` لأجل متصفّحات أقدم. */
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
-/* راية على مستوى الوحدة لا في سياق React: من يسأل عنها هو `nav()` في
+/* رايات على مستوى الوحدة لا في سياق React: من يسأل عنها هو `nav()` في
    AdminApp — وهو خارج شجرة الشاشة التي تحمل المسوّدة، فلا يصله سياقها.
-   وهي راية واحدة لأن شاشةً واحدة تُعرض في كل لحظة. */
-let dirtyFlag = false;
+   هي مجموعة لا راية واحدة: محررٌ مفتوح قد يبقى مركّباً في الخلفية عند
+   زيارة شاشة أخرى، فلا يجوز أن تمسح شاشةٌ نظيفة تحذيرَه. */
+const dirtySources = new Set<symbol>();
 
 /** هل في الشاشة المعروضة تغييرات لم تُحفظ؟ */
-export const hasUnsaved = (): boolean => dirtyFlag;
+export const hasUnsaved = (): boolean => dirtySources.size > 0;
 
 /** يمنع مغادرة الصفحة (تحديث/إغلاق/رابط خارجي) ما دام `dirty`،
     ويرفع الراية ليعترض عليها تنقّل التطبيق الداخلي. */
 export function useUnsavedGuard(dirty: boolean): void {
+  const source = useRef(Symbol("unsaved"));
   useEffect(() => {
-    dirtyFlag = dirty;
+    if (dirty) dirtySources.add(source.current);
+    else dirtySources.delete(source.current);
     /* الإنزال عند التفكيك شرط: شاشةٌ غادرت ورايتها مرفوعة تجعل كل تنقّل
        لاحق يسأل عن مسوّدة لم تعد موجودة. */
-    return () => { dirtyFlag = false; };
+    return () => { dirtySources.delete(source.current); };
   }, [dirty]);
 
   useEffect(() => {
@@ -52,4 +55,13 @@ export const LEAVE_PROMPT = "لديك تغييرات لم تُحفظ. المغا
     دالّة لا خطّاف: تُنادى داخل معالج الضغط لا أثناء الرسم. */
 export function confirmLeave(dirty: boolean): boolean {
   return !dirty || window.confirm(LEAVE_PROMPT);
+}
+
+/** يحرس إغلاق نموذج منبثق: لا يسأل إن لم تتغير المسودة، ويحذر قبل فقدها. */
+export function useConfirmDiscard<T>(draft: T, onClose: () => void): () => void {
+  const initial = useRef(JSON.stringify(draft));
+  useUnsavedGuard(initial.current !== JSON.stringify(draft));
+  return useCallback(() => {
+    if (initial.current === JSON.stringify(draft) || window.confirm(LEAVE_PROMPT)) onClose();
+  }, [draft, onClose]);
 }

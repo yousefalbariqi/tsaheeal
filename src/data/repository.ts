@@ -51,6 +51,23 @@ export async function permanentlyDelete(entityType: string, id: string, reason: 
   if (error) throw error;
 }
 
+/* هل تعرف القاعدة عمود باصات الرحلة (ترحيل 20261018)؟
+
+   upsert_trip يتجاهل ما لا يعرفه بلا خطأ: رحلةٌ بثلاثة باصات تُحفظ قبل
+   الترحيل سعتُها ١٤٧ وباصاتها غائبة، فتُقرأ باصاً واحداً بـ١٤٧ مقعداً —
+   كروكيٌّ لا وجود له وكشفٌ واحد لثلاث حافلات. فيُسأل العمود مرّةً قبل أن
+   يُتاح للموظف أكثر من باص. وبلا قاعدة (وضع التطوير) لا شيء يُتجاهل. */
+let busCountSupport: Promise<boolean> | null = null;
+export function supportsTripBusCount(): Promise<boolean> {
+  if (!isSupabaseEnabled || !supabase) return Promise.resolve(true);
+  busCountSupport ??= Promise.resolve(supabase.from("trips").select("bus_count").limit(1))
+    /* 42703 = العمود غير موجود. ما عداه (انقطاعٌ مثلاً) لا يُحكم به على
+       القاعدة: الحفظ نفسه سيفشل ويُبلَّغ إن كان الخلل في الاتصال. */
+    .then(({ error }) => String(error?.code ?? "") !== "42703")
+    .catch(() => true);
+  return busCountSupport;
+}
+
 /* ─── seed في الذاكرة (وضع بلا مفاتيح) ─── */
 function seedRepo<T>(seed: T[], idKey: string = "id"): Repo<T> {
   let rows: T[] = [...seed];
@@ -174,7 +191,6 @@ const packageFrom = (r: any): Pkg => ({
   id: r.id, name: r.name, order: r.order_no, productType: r.product_type, destination: r.destination, audience: r.audience,
   days: r.days, nights: r.nights, status: r.status, marketPrice: r.market_price,
   seatCostOverride: r.seat_cost_override ?? undefined, coverImage: r.cover_image ?? undefined,
-  recurring: !!r.recurring, recurDay: r.recur_day, startDate: r.start_date,
   transportId: r.transport_id ?? "", hotelId: r.hotel_id ?? "", notes: r.notes,
   features: sortBy(r.package_features).map(mIconFeat),
   program: sortBy(r.package_program_stages).map((p: any) => ({ id: p.item_id, order: p.stage_order, icon: p.icon, day: p.day, time: p.time, title: p.title, desc: p.descr, archived: p.archived ?? undefined })),
@@ -197,6 +213,7 @@ const tripFrom = (r: any): Trip => ({
   /* أعمدة الموجتَين ١ و٢ اختيارية في الصفّ: قبل ترحيلها لا يعيدها select
      فتُقرأ undefined لا null — والنوع يقول اختياري لا فارغ. */
   returnTime: r.return_time ?? undefined, departureAddress: r.departure_address ?? undefined,
+  busCount: r.bus_count ?? undefined,
   cancelReason: r.cancel_reason ?? undefined, cancelledAt: r.cancelled_at ?? undefined,
   seats: r.seats, bookedSeats: r.booked_seats, waitingSeats: r.waiting_seats, status: r.status, price: r.price,
   drivers: sortBy(r.trip_drivers).map((d: any) => ({ id: d.item_id, name: d.name, phone: d.phone })),
@@ -245,6 +262,8 @@ const branchFrom = (r: any): Branch => ({
 const paymentFrom = (r: any): Payment => ({
   id: r.id, bookingId: r.booking_id ?? "", clientName: r.client_name, clientPhone: r.client_phone, packageName: r.package_name, tripDate: r.trip_date,
   total: r.total, payMethod: r.pay_method, payStatus: r.pay_status, txnNo: r.txn_no, payDate: r.pay_date, createdAt: r.created_at,
+  issuedAt: r.issued_at ?? undefined, issuedBy: r.issued_by ?? undefined,
+  issuedByName: r.issued_by_name ?? undefined, issuedByRole: r.issued_by_role ?? undefined,
   roomType: r.room_type ?? undefined, pilgrims: sortBy(r.payment_pilgrims).map(mPilgrim),
   /* الافتراض «صادرة» لا undefined: قاعدةٌ لم يُنفَّذ عليها ترحيل الموجة ٢
      تعيد صفوفاً بلا هذه الأعمدة، والشاشة يجب أن تعمل قبله. */
@@ -286,6 +305,10 @@ const customReqFrom = (r: any): CustomRequest => ({
   notes: r.notes ?? "", status: r.status ?? "new", createdAt: r.created_at ?? "", staff: r.staff ?? undefined,
   assignedTo: r.assigned_to ?? undefined, assignedAt: r.assigned_at ?? undefined, dueAt: r.due_at ?? undefined,
   closeReason: r.close_reason ?? undefined,
+  journeyKind: r.journey_kind ?? undefined, travelMode: r.travel_mode ?? undefined,
+  outboundTripId: r.outbound_trip_id ?? undefined, returnTripId: r.return_trip_id ?? undefined,
+  hotelRequested: r.hotel_requested ?? undefined, hotelNights: r.hotel_nights ?? undefined,
+  hotelNearHaram: r.hotel_near_haram ?? undefined,
 });
 const supportFrom = (r: any): SupportReq => ({
   id: r.id, category: r.category, title: r.title, desc: r.descr, priority: r.priority, status: r.status, date: r.date,

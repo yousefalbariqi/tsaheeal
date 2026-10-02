@@ -157,6 +157,9 @@ export interface CustomReqPayload {
   departDate: string; returnDate: string; persons: number;
   destination: string; roomType: string; hotelLevel: string; tripNotes: string;
   name: string; phone: string; city: string; notes: string;
+  journeyKind?: "one_way"|"round_trip"; travelMode?: "bus"|"flight";
+  outboundTripId?: string; returnTripId?: string;
+  hotelRequested?: boolean; hotelNights?: number; hotelNearHaram?: boolean;
 }
 
 /** يعيد رقم الطلب. لا يحجز مقاعد ولا يخصم شيئاً — مجرد تسجيل رغبة. */

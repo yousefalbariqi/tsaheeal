@@ -19,6 +19,7 @@ import { AppSelect } from "@/components/AppSelect";
 import { PASSWORD_MIN } from "@/lib/password";
 import { Pager, usePaged } from "@/components/Pager";
 import { EntityGate } from "@/components/States";
+import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
 
 const ROLE_COLORS:Record<UserRole,{bg:string;fg:string}> = {
   "مدير عام":     {bg:"#FBF3D6",fg:"#8A6A08"},
@@ -36,6 +37,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
   const [err,setErr]=useState("");
   const [busy,setBusy]=useState(false);
   const [tried,setTried]=useState(false);
+  const requestClose=useConfirmDiscard(form,onClose);
   const f=(k:keyof typeof form)=>(v:string)=>setForm(p=>({...p,[k]:v}));
   const isEdit = !!user.id;
   /* «اجعل الاسم والبريد إلزاميين وطبّق تحقق البريد وعدم التكرار» —
@@ -52,13 +54,13 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{background:"rgba(21,76,72,.55)"}} onClick={onClose}>
+      style={{background:"rgba(21,76,72,.55)"}}>
       <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
         className="w-full max-w-md rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
         <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
           <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
           <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0}}>{isEdit?"تعديل بيانات المستخدم":"دعوة مستخدم جديد"}</h3>
-          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={requestClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
         </div>
         <div className="p-6 flex flex-col gap-4">
           <div>
@@ -114,7 +116,7 @@ function UserModal({user,others,onSave,onClose}:{user:Partial<SystemUser>;others
               style={{background:B.gold,color:B.black,border:"none",opacity:busy||(tried&&invalid)?0.6:1}}>
               {busy&&<Spinner size={14} color={B.black}/>}
               {busy?"جارٍ الحفظ…":isEdit?"حفظ التعديلات":"إرسال الدعوة"}</button>
-            <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
+            <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
               style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
           </div>
         </div>

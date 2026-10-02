@@ -159,6 +159,7 @@ export default function AdminApp() {
   const session    = useStore(s=>s.session);
   const isStaff    = useStore(s=>s.isStaff);
   const profileReady = useStore(s=>s.profileReady);
+  const profileError = useStore(s=>s.profileError);
   const passwordRecovery = useStore(s=>s.passwordRecovery);
   const loaded     = useStore(s=>s.loaded);
   const loadError  = useStore(s=>s.loadError);
@@ -203,6 +204,7 @@ export default function AdminApp() {
     /* رابط الدعوة يفتح جلسةً من نوع استعادة: كلمة المرور أولاً ثم اللوحة. */
     if(passwordRecovery) return <SetPasswordPage/>;
     if(!profileReady) return null;
+    if(profileError) return <LoadErrorScreen message={profileError} onRetry={()=>useStore.getState()._loadProfile()}/>;
     if(!isStaff)      return <NotStaffScreen onSignOut={signOut}/>;
     if(loadError)     return <LoadErrorScreen message={loadError} onRetry={()=>useStore.getState().hydrate()}/>;
     if(!loaded)       return null;

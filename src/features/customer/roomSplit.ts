@@ -7,7 +7,7 @@
 
    وحدة نقيّة بلا React وبلا i18n: تأخذ `t` وسيطاً كما تفعل شاشات المستفيد،
    فتصلح للاستدعاء من الواجهة ومن بناء النص المحفوظ في القاعدة على السواء. */
-import type { RoomPrice } from "@/types";
+import type { Pkg, RoomPrice } from "@/types";
 
 /** توزيع مرشَّح: غرف من نوع واحد تستوعب كل المعتمرين. */
 export interface RoomSplit {
@@ -40,7 +40,14 @@ export interface RoomSplitLimits {
 
     صفّ الأسعار هو فئة السكن نفسها: «سكن مشترك · 3 أشخاص» يصف عدد النزلاء
     في الغرفة، لا عدد معتمري الطلب. تظهر كل الفئات المسجلة كما هي، ويُحصّل
-    سعر الغرفة المختارة مرة واحدة، بلا توزيع غرف افتراضي. */
+    سعر الغرفة المختارة مرة واحدة، بلا توزيع غرف افتراضي.
+
+    الترتيب ثابت لا يتبع ترتيب الإدخال في لوحة الإدارة: المشترك أولاً، ثم
+    الخاصة مجموعةً تصاعدياً بعدد الأسرّة (سرير واحد، سريران، ٣، ٤…). كان
+    العرض بترتيب الصفوف فيظهر «سريران ثم سرير واحد ثم أربعة» ويتشتّت
+    العميل. والمشترك يُباع بالسرير، فلا يُعرض إلا إن اتّسعت أسرّته للمجموعة
+    كلها — خمسة لا يسكنون غرفةً من أربعة أسرّة. وترتيب الصفوف في محرّر
+    الباقة لم يعد يحكم هذا العرض. */
 export function bookingRoomChoices(
   tiers: RoomPrice[] | undefined,
   persons: number,
@@ -58,25 +65,39 @@ export function bookingRoomChoices(
     if (!previous || tier.perNight < previous.perNight) choices.set(key, tier);
   }
 
-  return [...choices.values()].map(tier => ({
-    key: `${tier.type.trim()}|${tier.persons}`,
-    type: tier.type.trim(),
-    rooms: [tier],
-    capacity: tier.persons,
-    spare: 0,
-    // الاختيار يبدأ بغرفة واحدة، ويُعدّل العميل العدد للغرف الخاصة.
-    perNight: tier.perNight,
-    roomCount: 1,
-  }));
+  const shared = (tier: RoomPrice) => !isPrivateAccommodation({ type: tier.type.trim() });
+  return [...choices.values()]
+    // مشتركٌ بسرير واحد صفٌّ قديم من نموذج «سعر السرير» لا غرفةٌ من سرير:
+    // سعة غرفته مجهولة، فلا يُحجب عن المجموعة بحجّة الضيق.
+    .filter(tier => !shared(tier) || tier.persons <= 1 || tier.persons >= persons)
+    .sort((a, b) =>
+      Number(shared(b)) - Number(shared(a))
+      || a.persons - b.persons
+      || a.perNight - b.perNight)
+    .map(tier => ({
+      key: `${tier.type.trim()}|${tier.persons}`,
+      type: tier.type.trim(),
+      rooms: [tier],
+      capacity: tier.persons,
+      spare: 0,
+      // الاختيار يبدأ بغرفة واحدة، ويُعدّل العميل العدد للغرف الخاصة.
+      perNight: tier.perNight,
+      roomCount: 1,
+    }));
 }
 
 export const roomCountOf = (s: RoomSplit) => Math.max(1, Math.trunc(s.roomCount ?? 1));
 export const isPrivateAccommodation = (s: Pick<RoomSplit, "type">) => /خاص|private/i.test(s.type);
 
-/** إجمالي السكن = سعر الليلة × عدد الغرف × عدد الليالي.
-    عدد الغرف قرار مستقل عن عدد المعتمرين ولا يوزع النظام الأشخاص عليها. */
-export const splitTotal = (s: RoomSplit, nights = 1) =>
-  s.perNight * roomCountOf(s) * Math.max(1, Math.trunc(nights) || 1);
+/** إجمالي السكن الخاص = سعر الليلة × عدد الغرف × عدد الليالي.
+    أما السكن المشترك فسعره سعر السرير للفرد، ولذلك يضرب في عدد المعتمرين.
+    عدد الغرف قرار مستقل عن عدد المعتمرين في الغرف الخاصة فقط. */
+export const splitTotal = (s: RoomSplit, nights = 1, persons = 1) => {
+  const units = isPrivateAccommodation(s)
+    ? roomCountOf(s)
+    : Math.max(0, Math.trunc(persons) || 0);
+  return s.perNight * units * Math.max(1, Math.trunc(nights) || 1);
+};
 
 export interface PackagePriceBreakdown {
   seatPrice: number;
@@ -103,8 +124,33 @@ export function packagePrice(
   const transport = Math.max(0, transportUnits) * seatPrice;
   const roomCount = roomCountOf(split);
   const safeNights = Math.max(1, Math.trunc(nights) || 1);
-  const accommodation = splitTotal(split, safeNights);
+  const accommodation = splitTotal(split, safeNights, persons);
   return { seatPrice, transport, accommodation, roomCount, nights: safeNights, total: transport + accommodation };
+}
+
+/** أقل سعر حقيقي يمكن أن تبدأ منه الباقة لمستفيد واحد.
+
+    رقم بطاقة الاستكشاف يُبنى من معادلة الحجز نفسها، لا من رقم إعلاني
+    قديم. بذلك لا يرى العميل سعراً في البطاقة ثم يجد سعراً آخر بعد اختيار
+    السكن. الباقة بلا سكن (أو بيانات سكن قديمة ناقصة) تبقى على سعرها
+    المعلن كاحتياط. */
+export function packageStartingPrice(
+  pkg: Pick<Pkg, "marketPrice" | "seatCostOverride" | "nights" | "roomPrices">,
+  transportCost = 0,
+): number {
+  const advertised = Math.max(0, Number(pkg.marketPrice) || 0);
+  const nights = Math.max(0, Math.trunc(Number(pkg.nights) || 0));
+  const seatPrice = Math.max(0, Number(pkg.seatCostOverride ?? transportCost) || 0);
+  if (nights === 0) return advertised;
+
+  const nightly = (pkg.roomPrices ?? [])
+    .filter(room => !!room?.type?.trim() && Number(room.persons) > 0 && Number(room.perNight) >= 0)
+    .reduce<number | null>((lowest, room) => {
+      const price = Number(room.perNight);
+      return lowest === null || price < lowest ? price : lowest;
+    }, null);
+
+  return nightly === null ? advertised : seatPrice + nightly * Math.max(1, nights);
 }
 
 /** وصف فئة واحدة: «غرفة خاصة · 2 أفراد». */

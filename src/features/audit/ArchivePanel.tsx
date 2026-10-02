@@ -59,7 +59,7 @@ function PermanentDeleteDialog({ row, entityLabel, onConfirm, onCancel }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(14,12,11,0.78)", backdropFilter: "blur(4px)" }} onClick={onCancel}>
+      style={{ background: "rgba(14,12,11,0.78)", backdropFilter: "blur(4px)" }}>
       <div role="dialog" aria-modal="true" aria-label="حذف نهائي" onClick={e => e.stopPropagation()}
         className="rounded-2xl p-7 w-full" style={{ maxWidth: 420, background: "#fff" }}>
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: "#FBE6E6" }}>
