@@ -96,6 +96,8 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
     setForm(f => ({ ...f, internal: { ...f.internal, [k]: v } }));
   const addr = <K extends keyof AppSettings["pub"]["address"]>(k: K) => (v: string) =>
     setForm(f => ({ ...f, pub: { ...f.pub, address: { ...f.pub.address, [k]: v } } }));
+  const bank = <K extends keyof AppSettings["pub"]["bankTransfer"]>(k: K) => (v: string) =>
+    setForm(f => ({ ...f, pub: { ...f.pub, bankTransfer: { ...f.pub.bankTransfer, [k]: v } } }));
   const setHotelFeatureOptions = (options: HotelFeatureOption[]) => inte("hotelFeatureOptions")(options);
   const updateHotelFeatureOption = (index:number, patch:Partial<HotelFeatureOption>) =>
     setHotelFeatureOptions(form.internal.hotelFeatureOptions.map((option,i)=>i===index?{...option,...patch}:option));
@@ -346,6 +348,29 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
                 <input value={form.internal.supportEmail} type="email" inputMode="email"
                   onChange={e => inte("supportEmail")(e.target.value.trim())}
                   className={inp} style={{ ...ist, ...ltr, borderColor: badEmail ? "#BE2626" : B.border }} />
+              </Field>
+            </div>
+          </Card>
+
+          <Card title="التحويل البنكي"
+            note="تظهر هذه البيانات للعميل في رابط التحويل. لا تُعدّ العملية مدفوعةً إلا بعد أن يراجع الموظف الإيصال ويسجل مرجع التحويل.">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="اسم البنك">
+                <input value={form.pub.bankTransfer.bankName} placeholder="مثال: مصرف الراجحي"
+                  onChange={e => bank("bankName")(e.target.value)} className={inp} style={ist} />
+              </Field>
+              <Field label="اسم صاحب الحساب">
+                <input value={form.pub.bankTransfer.accountName} placeholder={form.pub.orgName || "اسم المؤسسة"}
+                  onChange={e => bank("accountName")(e.target.value)} className={inp} style={ist} />
+              </Field>
+              <Field label="رقم الآيبان" hint="راجعه من البنك قبل الحفظ.">
+                <input value={form.pub.bankTransfer.iban} placeholder="SA00 0000 0000 0000 0000 0000"
+                  onChange={e => bank("iban")(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 34))}
+                  className={inp} style={{ ...ist, ...ltr }} />
+              </Field>
+              <Field label="تعليمات إضافية">
+                <input value={form.pub.bankTransfer.instructions} placeholder="اكتب رقم الطلب في مرجع التحويل"
+                  onChange={e => bank("instructions")(e.target.value)} className={inp} style={ist} />
               </Field>
             </div>
           </Card>

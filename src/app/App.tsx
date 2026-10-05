@@ -1,14 +1,15 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router";
 import { motion } from "motion/react";
-import { X, Check, ShieldCheck, AlertTriangle } from "lucide-react";
+import { X, Check, ShieldCheck, AlertTriangle, Building2, Copy, MessageCircle } from "lucide-react";
 import { B } from "@/lib/theme";
 import { sar } from "@/lib/money";
-import { Spinner } from "@/components/Spinner";
 import { hideBootSplash } from "@/lib/bootSplash";
-import { fetchBookingForPay, confirmPayment, verifyDoc, VerifyUnavailableError,
+import { fetchBookingForPay, verifyDoc, VerifyUnavailableError,
          type PayView, type VerifyResult } from "@/features/customer/data";
 import { OrgLine } from "@/components/OrgLine";
+import { publicSettings, type PublicSettings } from "@/data/settings";
+import { copyText, openWhatsApp } from "@/lib/utils";
 
 /* ════════════════════════════════════════════════════════════
    تقسيم الحزمة عند الجذر — الاستيراد الساكن للوحتين كان يجعل البناء
@@ -26,13 +27,10 @@ const CustomerApp = lazy(() =>
 const PublicDashboard = lazy(() => import("@/features/public-dashboard/PublicDashboard"));
 
 /* ════════════════════════════════════════════════════════════
-   PUBLIC PAYMENT CHECKOUT — صفحة الدفع للعميل (/pay/:id)
+   PUBLIC BANK TRANSFER — صفحة التحويل للعميل (/pay/:id)
 ════════════════════════════════════════════════════════════ */
 const PAY_METHODS = [
-  {id:"mada",label:"مدى",emoji:"💳",card:true},
-  {id:"applepay",label:"Apple Pay",emoji:"",card:false},
-  {id:"visa",label:"Visa / Mastercard",emoji:"💳",card:true},
-  {id:"stcpay",label:"STC Pay",emoji:"📱",card:false},
+  {id:"bank_transfer",label:"تحويل بنكي",emoji:""},
 ];
 /* الرابط يُفتح من واتساب على جهاز بلا جلسة، فالتحقّق برمز الطلب في
    الرابط (pay_token). كانت الصفحة تقرأ من مخزن الموظف — وهو لا يُملأ
@@ -41,12 +39,11 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
   const [pay,setPay]=useState<PayView|null>(null);
   const [loading,setLoading]=useState(true);
   const [method,setMethod]=useState<string>("");
-  const [stage,setStage]=useState<"form"|"processing"|"success">("form");
+  const [stage,setStage]=useState<"form"|"success">("form");
   const [payErr,setPayErr]=useState("");
-  const [card,setCard]=useState({num:"",exp:"",cvv:""});
-  const sel = PAY_METHODS.find(m=>m.id===method);
+  const [settings,setSettings]=useState<PublicSettings|null>(null);
   const amount = pay ? sar(pay.total) : "";
-  const canPay = !!method && (!sel?.card || (card.num.replace(/\s/g,"").length>=12 && card.exp.length>=4 && card.cvv.length>=3));
+  const canPay = !!method;
 
   useEffect(()=>{ let alive=true;
     fetchBookingForPay(bookingId,token)
@@ -56,19 +53,19 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
   },[bookingId,token]);
   /* شاشة البدء تبقى حتى تصل تفاصيل الطلب — بلا شاشة تحميل وسيطة. */
   useEffect(()=>{ if(!loading) hideBootSplash(); },[loading]);
+  useEffect(()=>{ let alive=true;
+    void publicSettings().then(s=>{ if(alive) setSettings(s); });
+    return ()=>{ alive=false; };
+  },[]);
 
   const doPay=async()=>{
     if(!canPay) return;
-    setPayErr(""); setStage("processing");
-    try{
-      await confirmPayment(bookingId,token);
-      setStage("success");
-    }catch(e){
-      /* لا يُعرض «تم الدفع بنجاح» على عملية فاشلة — كان الخطأ يُبتلع. */
-      console.error("confirm_payment",e);
-      setStage("form");
-      setPayErr("تعذّر تأكيد الدفع. تأكد من صلاحية الرابط أو تواصل معنا.");
-    }
+    const phone = settings?.supportPhone;
+    if (!phone) { setPayErr("تعذّر تحميل رقم خدمة العملاء. أعد المحاولة."); return; }
+    /* لا نكتب في قاعدة البيانات هنا: العميل يرسل إيصال التحويل فقط،
+       والموظف يؤكد السداد بعد مراجعته من لوحة الإدارة. */
+    openWhatsApp(phone, `مرحباً، تم تحويل مبلغ ${amount} لطلب ${bookingId}.\nمرجع التحويل: `);
+    setStage("success");
   };
 
   if(loading) return null;
@@ -79,7 +76,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
       <div className="w-full my-6" style={{maxWidth:440}}>
         <div className="text-center mb-5">
           <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
-          <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TASAHEEL AL-UMRAH · SECURE PAYMENT</div>
+          <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TASAHEEL AL-UMRAH · BANK TRANSFER</div>
         </div>
         {pay && pay.payOpen === false ? (
           /* ── رابط مغلق ──
@@ -114,20 +111,20 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
         ) : stage==="success" ? (
           <motion.div initial={{opacity:0,scale:0.96}} animate={{opacity:1,scale:1}} className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
             <div className="flex flex-col items-center text-center px-6 py-9">
-              <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",damping:14}} className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background:"#E3F3E8"}}>
-                <Check size={34} style={{color:"#1E7A44"}}/>
+              <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",damping:14}} className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background:"#EAF1FE"}}>
+                <MessageCircle size={34} style={{color:"#2457A6"}}/>
               </motion.div>
-              <div className="font-extrabold text-xl" style={{color:B.black}}>تم الدفع بنجاح</div>
-              <div className="text-sm mt-1.5" style={{color:B.text2}}>شكراً لك، {pay.clientName}. تم استلام دفعتك.</div>
+              <div className="font-extrabold text-xl" style={{color:B.black}}>أرسل إيصال التحويل للفريق</div>
+              <div className="text-sm mt-1.5" style={{color:B.text2}}>لم يتغير وضع السداد. يؤكده الموظف بعد مراجعة التحويل.</div>
               <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-                {[["رقم الطلب",pay.id],["الباقة",pay.packageName],["طريقة الدفع",sel?.label??"—"],["المبلغ المدفوع",amount]].map(([l,v])=>(
+                {[["رقم الطلب",pay.id],["الباقة",pay.packageName],["طريقة السداد","تحويل بنكي"],["المبلغ المطلوب",amount]].map(([l,v])=>(
                   <div key={l} className="flex items-center justify-between gap-2">
                     <span style={{color:B.muted}}>{l}</span>
                     <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{v}</span>
                   </div>
                 ))}
               </div>
-              <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>سيصلك إشعار تأكيد عبر الرسائل، وستتحوّل حالة طلبك تلقائياً إلى «مكتمل».</div>
+              <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>احتفظ برقم التحويل أو صورة الإيصال. ستصلك رسالة بعد اعتماد الموظف له.</div>
             </div>
             <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}><OrgLine/></div>
           </motion.div>
@@ -146,7 +143,7 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
               </div>
             </div>
             <div className="px-6 py-5">
-              <div className="text-sm font-extrabold mb-3" style={{color:B.black}}>اختر طريقة الدفع</div>
+              <div className="text-sm font-extrabold mb-3" style={{color:B.black}}>طريقة السداد</div>
               <div className="grid grid-cols-2 gap-2.5">
                 {PAY_METHODS.map(m=>{
                   const on=method===m.id;
@@ -159,22 +156,13 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
                   );
                 })}
               </div>
-              {sel?.card&&(
-                <div className="mt-4 flex flex-col gap-2.5">
-                  <div>
-                    <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رقم البطاقة</label>
-                    <input inputMode="numeric" value={card.num} onChange={e=>setCard(c=>({...c,num:e.target.value.replace(/[^0-9 ]/g,"").slice(0,19)}))}
-                      placeholder="0000 0000 0000 0000" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-                      style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>تاريخ الانتهاء</label>
-                      <input inputMode="numeric" value={card.exp} onChange={e=>setCard(c=>({...c,exp:e.target.value.replace(/[^0-9/]/g,"").slice(0,5)}))}
-                        placeholder="MM/YY" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
-                    <div><label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>CVV</label>
-                      <input inputMode="numeric" value={card.cvv} onChange={e=>setCard(c=>({...c,cvv:e.target.value.replace(/[^0-9]/g,"").slice(0,4)}))}
-                        placeholder="123" className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,color:B.black,direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/></div>
-                  </div>
+              {method === "bank_transfer" && (
+                <div className="mt-4 rounded-xl p-4 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                  {settings?.bankTransfer.bankName && settings.bankTransfer.accountName && settings.bankTransfer.iban ? <>
+                    <div className="flex items-center gap-2 font-extrabold mb-3" style={{color:B.black}}><Building2 size={16} style={{color:B.gold}}/>بيانات التحويل</div>
+                    <div className="flex flex-col gap-2"><div><span style={{color:B.muted}}>البنك: </span>{settings.bankTransfer.bankName}</div><div><span style={{color:B.muted}}>صاحب الحساب: </span>{settings.bankTransfer.accountName}</div><div className="flex items-start justify-between gap-2"><span style={{color:B.muted}}>الآيبان: </span><button onClick={()=>copyText(settings.bankTransfer.iban)} className="font-bold text-left break-all cursor-pointer" style={{background:"none",border:"none",padding:0,color:"#2457A6",direction:"ltr",fontFamily:"var(--font-app)"}} title="نسخ الآيبان">{settings.bankTransfer.iban} <Copy size={12} className="inline"/></button></div>{settings.bankTransfer.instructions&&<div className="text-xs mt-1" style={{color:B.text2}}>{settings.bankTransfer.instructions}</div>}</div>
+                  </> : <div style={{color:B.text2}}>بيانات الحساب لم تُضبط بعد. اضغط «إرسال الإيصال» لطلبها من خدمة العملاء.</div>}
+                  <div className="text-xs mt-3" style={{color:B.text2}}>اكتب رقم الطلب <b style={{fontFamily:"var(--font-app)"}}>{pay.id}</b> في مرجع التحويل. لا يُعتبر الحجز مدفوعاً إلا بعد مراجعة الموظف.</div>
                 </div>
               )}
             </div>
@@ -183,15 +171,13 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
                 <div className="rounded-xl px-4 py-3 text-sm font-bold mb-3"
                   style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{payErr}</div>
               )}
-              <button onClick={doPay} disabled={!canPay||stage==="processing"}
+              <button onClick={doPay} disabled={!canPay}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm"
                 style={{background:canPay?B.gold:"#EEECEA",color:canPay?B.black:B.muted,border:"none",cursor:canPay?"pointer":"not-allowed"}}>
-                {stage==="processing"
-                  ? <><Spinner size={15} color={B.black}/>جارٍ المعالجة…</>
-                  : <><ShieldCheck size={15}/>ادفع {amount}</>}
+                <MessageCircle size={15}/>أرسل إيصال التحويل
               </button>
               <div className="flex items-center justify-center gap-1.5 mt-3 text-xs" style={{color:B.muted}}>
-                <ShieldCheck size={12}/>دفع آمن ومشفّر · الرابط صالح لمدة 24 ساعة
+                <ShieldCheck size={12}/>لا تُدخل أي بيانات بطاقة في هذا الرابط
               </div>
             </div>
           </div>

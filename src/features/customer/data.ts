@@ -306,14 +306,3 @@ export async function verifyDoc(id: string): Promise<VerifyResult | null> {
     docPhase: r.doc_phase ?? undefined, usedAt: r.used_at ?? undefined,
   };
 }
-
-/** يرمي عند الفشل — الاستدعاء السابق كان يبتلع الخطأ ويعرض «تم الدفع بنجاح». */
-export async function confirmPayment(bookingId: string, token: string): Promise<void> {
-  if (isSupabaseEnabled && supabase) {
-    const { error } = await supabase.rpc("confirm_payment", { p_booking_id: bookingId, p_token: token });
-    if (error) throw error;
-    return;
-  }
-  const st = useStore.getState();
-  writeLocalOnly(() => st.setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, paymentStatus: "verified", status: "paid" } : b)));
-}

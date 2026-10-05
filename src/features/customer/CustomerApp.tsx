@@ -213,6 +213,8 @@ export function CustomerApp(){
   const [pax,setPax]=useState<Pax[]>([emptyPax()]);
   const [paxTouched,setPaxTouched]=useState<Record<string,boolean>>({});
   const [paxTried,setPaxTried]=useState(false);
+  const [contactPhone,setContactPhone]=useState("");
+  const [contactTried,setContactTried]=useState(false);
   const [termsOpen,setTermsOpen]=useState(false);
   const [agreed,setAgreed]=useState(false);
   const [submitting,setSubmitting]=useState(false);
@@ -550,13 +552,10 @@ export function CustomerApp(){
     if(screen==="otp"&&!validPhone(loginPhone)){ replaceScreen("login"); return; }
     /* الجلسة تُقرأ بوعد — قبل جهوزها لا يُطرد أحد من مسار محمي. */
     if(!sessionReady) return;
-    if(!session&&(screen==="passengers"||screen==="review")){
-      rememberBookingResume(screen); setIntent("flow"); replaceScreen("login"); return;
-    }
     if(!session&&screen==="account"){ replaceScreen("login"); return; }
-  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,focusTrip,bookingNo,loginPhone,session,sessionReady,replaceScreen,rememberBookingResume]);
+  },[loading,routeReady,catErr,screen,route.unknown,route.packageId,activePkgs,pkg,trip,focusTrip,bookingNo,loginPhone,session,sessionReady,replaceScreen]);
 
-  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(0);setTravellerCounts(emptyTravellerCounts());setSplit(null);setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
+  function reset(){ clearDraft();setPkg(null);setTrip(null);setPersons(0);setTravellerCounts(emptyTravellerCounts());setSplit(null);setDepartureCity("");setTravellerType("");setPax([emptyPax()]);setPaxTouched({});setPaxTried(false);setContactPhone("");setContactTried(false);setAgreed(false);setBookingNo("");setSubmittedAt(null);setErrMsg(""); }
 
   // ── تحقق نموذج صاحب الحجز ──
   const paxErrs=useMemo(()=>pax.map(p=>paxErrors(p,t,lang)),[pax,t,lang]);
@@ -566,7 +565,8 @@ export function CustomerApp(){
   const errOf=(i:number,f:PaxField)=>(paxTried||paxTouched[`${i}.${f}`])?paxErrs[i]?.[f]:undefined;
   function goReview(){
     setPaxTried(true);
-    if(!paxValid){ window.scrollTo({top:0,behavior:"smooth"}); return; }
+    setContactTried(true);
+    if(!paxValid||!validPhone(contactPhone)){ window.scrollTo({top:0,behavior:"smooth"}); return; }
     window.scrollTo({top:0});
     setScreen("review");
   }
@@ -599,8 +599,19 @@ export function CustomerApp(){
   async function doSubmit(){
     if(submitting||!trip||!pkg||persons < 1) return;
     setErrMsg("");
-    /* الطلب يُنشأ بجوال موثّق — الجلسة قد تنتهي بين الخطوات. */
-    if(!session){ setErrMsg(t("errLoginRequired")); openLogin("flow"); return; }
+    if(travellerCountTotal(travellerCounts)!==persons){
+      setErrMsg("حدّد عدد المعتمرين والمعتمرات بحيث يساوي إجمالي الأشخاص.");
+      setScreen("focusConfigure",pkg.id);
+      return;
+    }
+    /* قد يصل العميل إلى الملخص من زر الرجوع أو بعد تحديث الصفحة، بينما
+       رقم التواصل حالة محلية لا يجوز أن تتحول إلى 400 غامض من الخادم. */
+    if(!validPhone(contactPhone)){
+      setContactTried(true);
+      setErrMsg("أدخل رقم جوال سعودي صحيحًا للتواصل معك قبل إرسال الطلب.");
+      setScreen("passengers");
+      return;
+    }
     if(!agreed){ setErrMsg(t("iAgreeRead")); return; }
     if(needsTravellerType&&!travellerType){
       setErrMsg(t("travellerTypeRequired"));
@@ -611,7 +622,7 @@ export function CustomerApp(){
     setSubmitting(true);
     try{
       const id=await submitBooking({
-        tripId:trip.id, packageId:pkg.id, clientName:pax[0].name, clientPhone:session.phoneLocal.replace(/\s/g,""),
+        tripId:trip.id, packageId:pkg.id, clientName:pax[0].name, clientPhone:contactPhone.replace(/\s/g,""),
         /* النصّ يُبنى بالعربية دائماً لا بلغة الواجهة: لوحة الموظف والتذاكر
            وصفحة الدفع تعرضه كما هو، فحجز بالإنجليزية كان يكتب فيها سطراً
            إنجليزياً وسط جدول عربي. والغرف تُحفظ مفصّلة بجواره. */
@@ -623,7 +634,7 @@ export function CustomerApp(){
         /* لا تُنشأ سجلات وهمية للمرافقين: سجلّ صاحب الحجز وحده الآن. */
         pilgrims:[pax[0]].map(p=>({name:p.name.trim(),docType:p.docType||undefined,idNumber:p.idNumber.trim(),
           nationality:p.nationality,gender:p.gender,ageGroup:p.ageGroup,birthDate:p.birthDate,
-          phone:(p.phone||session.phoneLocal).replace(/\s/g,"")})),
+          phone:(p.phone||contactPhone).replace(/\s/g,"")})),
       });
       /* المسوّدة تُمحى قبل الانتقال: الطلب صار في القاعدة، وبقاؤها
          يعيد المستفيد إلى نموذج مملوء لطلب أرسله. */
@@ -636,7 +647,7 @@ export function CustomerApp(){
          (رحلة محذوفة، صلاحية، شبكة). نعرض نصّه كما هو ونسجّله. */
       console.error("[booking] فشل إنشاء الحجز:",e);
       if(e instanceof SeatsError) setErrMsg(`${t("errSeats")} (${t("seatsLeft")}: ${e.available})`);
-      else if(e instanceof AuthRequiredError){ setErrMsg(t("errLoginRequired")); openLogin("flow"); }
+      else if(e instanceof AuthRequiredError) setErrMsg("تعذّر إرسال الطلب. حاول مرة أخرى أو تواصل معنا.");
       else setErrMsg((e as {message?:string})?.message||t("errUnknown"));
     }finally{ setSubmitting(false); }
   }
@@ -811,10 +822,9 @@ export function CustomerApp(){
     /* المعاينة تعرض ولا تحجز: باقةٌ مسودة قد تكون بلا أسعار ولا رحلات،
        والمضيّ فيها يُنتج طلباً على منتجٍ لم يُنشر بعد. */
     if(preview){ toast.info(t("previewNote")); return; }
-    if(!session){ openLogin("flow"); return; }
-    if(!session.profile?.complete){ setIntent("flow"); afterAuth(session); return; }
     setScreen("passengers");
   }
+
   function openLogin(from:"flow"|"track"){
     if(from==="flow") rememberBookingResume();
     else try{ sessionStorage.removeItem(BOOKING_RESUME_KEY); }catch{}
@@ -1038,6 +1048,17 @@ export function CustomerApp(){
               </div>
             );
           })}
+          <div className="p-4 flex flex-col gap-4" style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:R.card}}>
+            <div className="flex flex-col" style={{gap:3}}>
+              <strong style={{...T.body,color:C.ink}}>بيانات التواصل</strong>
+              <span style={{...T.small,color:C.ink2}}>سيتواصل معك فريق تساهيل للتأكد من البيانات قبل اعتماد الطلب.</span>
+            </div>
+            <LField label="رقم الجوال" hint="للتواصل معك بعد مراجعة الطلب" error={contactTried&&!validPhone(contactPhone)?t("invalidPhone"):undefined}>
+              <input value={contactPhone} onChange={e=>setContactPhone(e.target.value)} inputMode="tel" dir="ltr"
+                placeholder="05XXXXXXXX" className="w-full border px-3.5 focus:outline-none"
+                style={{borderColor:contactTried&&!validPhone(contactPhone)?C.danger:C.border,borderRadius:R.chip,height:52,fontSize:16,fontFamily:"var(--font-app)",background:C.white,color:C.ink}}/>
+            </LField>
+          </div>
           <CompanionNotice t={t}/>
           </div>
         </FlowScreen>}
@@ -1056,6 +1077,7 @@ export function CustomerApp(){
             {[[t("package"),pkg.name],
               [t("trip"),`${formatDate(trip.departureDate,lang)} · ${trip.departureTime}`],
               ...(needsDepartureCity ? [[t("departureCity"),departureCity]] : []),
+              ["توزيع المسافرين",`${travellerCounts.men} معتمر · ${travellerCounts.women} معتمرة`],
               [t("room"),split?splitSummary(split,t):"—"],
               [t("people"),`${persons}`]].map(([l,v])=>(
               <div key={l} className="flex items-start justify-between" style={{gap:16,...T.body}}>
@@ -1067,6 +1089,10 @@ export function CustomerApp(){
 
           <div className="rounded-xl px-4 py-3 text-sm" style={{background:"#EAF1FE",border:"1px solid #CBDBFB",color:"#1E52C7"}}>
             {t("seatArrangedByUs")}
+          </div>
+
+          <div className="rounded-xl px-4 py-3 text-sm" style={{background:"#FFF8E8",border:"1px solid #ECD9A4",color:C.ink2}}>
+            الطلب مبدئي. لن يُعتمد أو يُطلب منك الدفع إلا بعد اتصال فريق تساهيل ومراجعة البيانات معك.
           </div>
 
           {/* المعتمرون */}

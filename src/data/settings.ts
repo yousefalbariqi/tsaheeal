@@ -22,6 +22,15 @@ export interface OrgAddress {
   mapUrl: string;
 }
 
+/** بيانات التحويل المعروضة لصاحب رابط السداد. هذه بيانات عامة بطبيعتها،
+    لذلك لا تُحفظ في الشفرة أو في متغيرات البيئة. */
+export interface BankTransferSettings {
+  bankName: string;
+  accountName: string;
+  iban: string;
+  instructions: string;
+}
+
 /** ما يقرأه الزائر المجهول — تطبيق المستفيد يحتاجه قبل أي دخول. */
 export interface PublicSettings {
   orgName: string;
@@ -37,6 +46,8 @@ export interface PublicSettings {
       مخزَّن بصيغة E.164 (+966…): الرقم مفتاحٌ لرابط واتساب ولقوالب
       الرسائل، ونفسه بأربع صيغ يعني أربعة أرقام لا رقماً واحداً. */
   supportPhone: string;
+  /** حساب التحويل في مرحلة الإطلاق اليدوية. */
+  bankTransfer: BankTransferSettings;
   /** نافذة العمل بالساعات (توقيت الرياض) — عليها يُحسب وعد الردّ. */
   openHour: number;
   closeHour: number;
@@ -85,6 +96,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     domain: "tasaaheel.sa",
     address: { city: "", line: "", mapUrl: "" },
     supportPhone: "+966506210485",
+    /* لا نخترع رقم حساب؛ إذا لم يضبطه المدير يطلب العميل البيانات من الدعم. */
+    bankTransfer: { bankName: "", accountName: "", iban: "", instructions: "" },
     openHour: 6,
     closeHour: 22,
     /* السبت–الخميس: الجمعة وحدها إجازة. يُعدَّل من الشاشة. */
@@ -113,6 +126,7 @@ const mergePub = (raw: unknown): PublicSettings => {
   return {
     ...pub,
     address: { ...DEFAULT_SETTINGS.pub.address, ...(o.address ?? {}) },
+    bankTransfer: { ...DEFAULT_SETTINGS.pub.bankTransfer, ...(o.bankTransfer ?? {}) },
     workDays: Array.isArray(pub.workDays) ? pub.workDays : DEFAULT_SETTINGS.pub.workDays,
     holidays: Array.isArray(pub.holidays) ? pub.holidays : DEFAULT_SETTINGS.pub.holidays,
   };

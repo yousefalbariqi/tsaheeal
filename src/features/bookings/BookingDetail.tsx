@@ -57,7 +57,8 @@ import { acceptBooking, applyDiscount, cancelBooking, rejectBooking } from "./op
 import { toast } from "sonner";
 
 const validPhone = (p: string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
-const PAY_METHODS = ["تحويل بنكي", "كاش في الفرع", "بطاقة مدى", "Apple Pay", "تابي", "تمارا"];
+/* الإطلاق التجريبي: لا تُثبت اللوحة إلا تحويلاتٍ راجعها الموظف. */
+const PAY_METHODS = ["تحويل بنكي"];
 
 type WorkState = "ready" | "done" | "blocked";
 const card = { background: "#fff", border: `1px solid ${B.border}` } as const;
@@ -360,8 +361,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const [openedInvoice, setOpenedInvoice] = useState<Payment | null>(null);
   const [openedTicket, setOpenedTicket] = useState<TicketEntry | null>(null);
   const [loadingDocument, setLoadingDocument] = useState<"invoice" | "ticket" | null>(null);
-  const [payMethod, setPayMethod] = useState(booking.payMethod && booking.payMethod !== "—" ? booking.payMethod : PAY_METHODS[0]);
-  const payOptions = PAY_METHODS.includes(payMethod) ? PAY_METHODS : [payMethod, ...PAY_METHODS];
+  const [transferRef, setTransferRef] = useState(booking.txnNo && booking.txnNo !== "—" ? booking.txnNo : "");
 
   const invoice = payments.find(x => x.bookingId === booking.id);
   const ticket = tickets.find(x => x.bookingId === booking.id);
@@ -610,10 +610,14 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
 
   const recordPayment = async () => {
     if (busy) return;
+    if (!transferRef.trim()) {
+      toast.error("اكتب مرجع التحويل أو رقم الإيصال بعد مراجعته.");
+      return;
+    }
     setBusy("pay");
     clearSyncError();
-    onStatusChange(booking.id, "confirmed", { paymentStatus: "verified", payMethod, payDate: today });
-    void logDocEvent("booking", booking.id, "status", { note: `→ مؤكد — استُلم ${sar(booking.total)} · ${payMethod}` });
+    onStatusChange(booking.id, "confirmed", { paymentStatus: "verified", payMethod: "تحويل بنكي", txnNo: transferRef.trim(), payDate: today });
+    void logDocEvent("booking", booking.id, "status", { note: `→ مؤكد — استُلم ${sar(booking.total)} · تحويل بنكي · مرجع ${transferRef.trim()}` });
     /* التأكيد يُصدر الفاتورة والتذكرة في القاعدة (trg_booking_confirm_docs)،
        فتُنتظر الكتابة ثم يُعاد الجلب — وإلا قالت الشاشة «لم تصدر تذكرة»
        وهي صادرة. */
@@ -656,7 +660,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
       return `مرحباً ${ticket.clientName}،\nتذكرة تساهيل العمرة رقم ${ticket.ticketNo}\nالرحلة: ${ticket.tripDate} · ${ticket.tripTime}\nنقطة الانطلاق: ${ticket.departurePoint}\nرابط التحقق: ${invVerifyUrl(ticket.ticketNo)}`;
     }
     if (!paid && booking.payToken) {
-      return `مرحباً ${booking.clientName}،\nرابط دفع باقة (${pkg?.name ?? "العمرة"}):\n${payLinkFor(booking.id, booking.payToken)}\nالمبلغ المطلوب: ${sar(booking.total)}\nالرابط صالح لمدة ${payDeadlineHours(flowCtx)} ساعة.`;
+      return `مرحباً ${booking.clientName}،\nتعليمات تحويل باقة (${pkg?.name ?? "العمرة"}):\n${payLinkFor(booking.id, booking.payToken)}\nالمبلغ المطلوب: ${sar(booking.total)}\nبعد التحويل أرسل الإيصال للفريق. لا يُؤكّد السداد إلا بعد مراجعته.`;
     }
     return `مرحباً ${booking.clientName}، بخصوص طلبكم ${booking.id}`;
   };
@@ -676,7 +680,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const menuItems = [
     ...(seatsLocked && booking.status === "accepted" ? [{ label: "تغيير المقاعد", onClick: startPicking }] : []),
     ...(booking.payToken && !paid
-      ? [{ label: "نسخ رابط الدفع", onClick: () => { copyText(payLinkFor(booking.id, booking.payToken)); toast.success("نُسخ رابط الدفع"); } }]
+      ? [{ label: "نسخ رابط التحويل", onClick: () => { copyText(payLinkFor(booking.id, booking.payToken)); toast.success("نُسخ رابط التحويل"); } }]
       : []),
     ...closeActions(flowCtx).map(t => ({ label: t.label, danger: true, onClick: () => setPending(t) })),
   ];
@@ -756,7 +760,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
           <SmallButton icon={Phone} label="اتصال" href={`tel:${booking.clientPhone}`} />
           <SmallButton icon={Phone} label="واتساب" onClick={sendWhatsApp} bg="#25D366" color="#fff" />
           <SmallButton icon={FileText} label={details ? "إخفاء التفاصيل" : "تفاصيل أكثر"} onClick={() => setDetails(v => !v)} />
-          {booking.payToken && !paid && <SmallButton icon={Wallet} label="إرسال رابط الدفع" onClick={sendWhatsApp} bg="#EAF1FE" color="#2457A6" />}
+          {booking.payToken && !paid && <SmallButton icon={Wallet} label="إرسال تعليمات التحويل" onClick={sendWhatsApp} bg="#EAF1FE" color="#2457A6" />}
           {isAdmin && !paid && !closed && <SmallButton icon={Wallet} label={booking.discountPercent ? "تعديل الخصم الموثق" : "خصم موثق"} onClick={() => setDiscountOpen(v => !v)} bg="#FFF4DE" color="#8A6200" />}
           {paid && <SmallButton icon={Printer} label={loadingDocument === "invoice" ? "جارٍ فتح الفاتورة…" : "الفاتورة"} onClick={() => void openDocument("invoice")} />}
           {paid && <SmallButton icon={Printer} label={loadingDocument === "ticket" ? "جارٍ فتح التذكرة…" : "التذكرة"} onClick={() => void openDocument("ticket")} />}
@@ -790,8 +794,10 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                 : `المقاعد ${seatText(booking.seats)}`}
               onClick={startPicking} />
             {payStep === "ready" && (
-              <div style={{ width: 150 }}>
-                <AppSelect value={payMethod} onChange={setPayMethod} options={payOptions.map(m => ({ value: m, label: m }))} />
+              <div style={{ width: 220 }}>
+                <input value={transferRef} onChange={e => setTransferRef(e.target.value)} placeholder="مرجع التحويل أو رقم الإيصال"
+                  aria-label="مرجع التحويل أو رقم الإيصال" className="w-full rounded-xl border px-3 py-2 text-xs focus:outline-none"
+                  style={{ borderColor: B.border, color: B.black, direction: "ltr", fontFamily: "var(--font-app)" }} />
               </div>
             )}
             <WorkButton state={payStep} icon={Wallet} busy={busy === "pay"}

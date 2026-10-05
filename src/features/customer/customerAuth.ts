@@ -330,7 +330,15 @@ async function bootstrapSession(sess: Session): Promise<CustomerSession> {
   const { data, error } = await customerSupabase!.rpc("customer_bootstrap");
   if (error) { console.error("[auth] تعذّر تهيئة الحساب:", error); return base; }
   const row = data as Record<string, unknown> | null;
-  return { ...base, profile: mapProfile(row), claimed: Number(row?.claimed ?? 0) || undefined };
+  const profile = mapProfile(row);
+  const profilePhone = waNormalize(profile?.phone ?? "");
+  return {
+    ...base,
+    phone: phone || profilePhone,
+    phoneLocal: localPhone(phone || profilePhone),
+    profile,
+    claimed: Number(row?.claimed ?? 0) || undefined,
+  };
 }
 
 export async function loadSession(): Promise<CustomerSession | null> {
@@ -344,7 +352,9 @@ export async function loadSession(): Promise<CustomerSession | null> {
   const { data: row } = await customerSupabase!
     .from("customer_profiles").select("*").eq("id", sess.user.id).maybeSingle();
   if (!row) return bootstrapSession(sess);
-  return { userId: sess.user.id, phone, phoneLocal: localPhone(phone), profile: mapProfile(row) };
+  const profile = mapProfile(row as Record<string, unknown>);
+  const profilePhone = waNormalize(profile?.phone ?? "");
+  return { userId: sess.user.id, phone: phone || profilePhone, phoneLocal: localPhone(phone || profilePhone), profile };
 }
 
 /** للرسم الأول فقط — لا يُبنى عليه أي تصريح.
