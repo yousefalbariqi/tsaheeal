@@ -340,7 +340,16 @@ function QuickEdit({ booking, onSave, onCancel }: {
 }) {
   const [name, setName] = useState(booking.clientName);
   const [phone, setPhone] = useState(booking.clientPhone);
-  const [rows, setRows] = useState<Pilgrim[]>(() => booking.pilgrims.map(p => ({ ...p })));
+  /* الحجوزات الداخلية القديمة كانت تُنشأ بلا صف صاحب الطلب. نبدأ لها
+     صفاً جاهزاً باسم وجوال الحجز كي يصبح إدخال الهوية تصحيحاً بسيطاً لا
+     شاشةً فارغة لا يمكن العمل فيها. */
+  const [rows, setRows] = useState<Pilgrim[]>(() => booking.pilgrims.length
+    ? booking.pilgrims.map(p => ({ ...p }))
+    : [{
+      name: booking.clientName, docType: "national_id", idNumber: "", nationality: "سعودي",
+      gender: booking.travellerCounts?.women && !booking.travellerCounts?.men ? "female" : "male",
+      birthDate: "", phone: booking.clientPhone,
+    }]);
   const [err, setErr] = useState<string | null>(null);
   const set = (i: number, k: keyof Pilgrim, v: unknown) =>
     setRows(rs => rs.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
@@ -354,6 +363,9 @@ function QuickEdit({ booking, onSave, onCancel }: {
     /* الرقم المخزَّن لا يُعاد التحقق منه: طلبٌ قديمٌ بصيغةٍ أخرى كان
        يمنع تصحيح الاسم وحده. الجديد وحده يُفحص. */
     if (p !== booking.clientPhone && !validPhone(p)) { setErr("رقم جوال غير صحيح — 05xxxxxxxx."); return; }
+    if (rows.some(row => !(row.name ?? "").trim() || !(row.idNumber ?? "").trim())) {
+      setErr("أكمل اسم صاحب الطلب ورقم هويته أو جوازه قبل الحفظ."); return;
+    }
     const clientChanged = n !== booking.clientName || p !== booking.clientPhone;
     if (!clientChanged && !pilgrimsChanged) { onCancel(); return; }
     onSave(
@@ -1081,9 +1093,21 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
           {details && (
             <div id={detailsId} className="p-5 flex flex-col gap-6" style={{ borderTop: `1px solid ${B.border}` }}>
               <div>
+                <h4 className="ts-section-title" style={sectionTitle}>معلومات الحجز</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+                  <Fact label="رقم الحجز" ltr>{booking.id}</Fact>
+                  <Fact label="تاريخ الإنشاء">{fmtDate(booking.createdAt)}</Fact>
+                  <Fact label="الحالة"><StageTag booking={booking} /></Fact>
+                  <Fact label="الإجمالي">{sar(booking.total)}</Fact>
+                </div>
+              </div>
+              <div>
                 <h4 className="ts-section-title" style={sectionTitle}>بيانات صاحب الطلب</h4>
                 {!booking.pilgrims.length ? (
-                  <div className="rounded-xl px-4 py-5 text-sm text-center" style={{ border: `1px dashed ${B.borderStrong}`, color: B.muted }}>لا بيانات معتمرين في هذا الطلب.</div>
+                  <div className="rounded-xl px-4 py-5 text-sm text-center" style={{ border: `1px dashed ${B.borderStrong}`, color: B.muted }}>
+                    <div>لا توجد هوية محفوظة لصاحب هذا الطلب.</div>
+                    <Button size="sm" variant="secondary" className="mt-3" onClick={() => setEditing(true)}>إضافة رقم الهوية والبيانات</Button>
+                  </div>
                 ) : (
                   <>
                     <div className="hidden md:block ui-table-wrap" style={{ boxShadow: "none", borderRadius: 12 }}>
@@ -1137,7 +1161,9 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
                   <Fact label="نقطة الانطلاق">{trip?.departurePoint || "—"}</Fact>
                   <Fact label="مدينة الانطلاق">{trip?.departureCity || "—"}</Fact>
-                  <Fact label="الباص">{[trip?.busCode, trip?.busPlate].filter(Boolean).join(" · ") || "—"}</Fact>
+                  {/* رقم الباص واللوحة قد يجمعان لاتينيةً وعربيةً وأرقاماً.
+                      عزلهما LTR يمنع قلب اللوحة إلى «0000أأأ» داخل السطر العربي. */}
+                  <Fact label="الباص" ltr>{[trip?.busCode, trip?.busPlate].filter(Boolean).join(" · ") || "—"}</Fact>
                   <Fact label="مصدر الطلب">{booking.source === "internal" ? `داخلي · ${booking.staff || "—"}` : "من التطبيق"}</Fact>
                 </div>
                 {!!booking.rooms?.length && (

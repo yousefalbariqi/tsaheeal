@@ -73,6 +73,8 @@ function StageBadge({booking}:{booking:Booking}) {
 /* ════════ إضافة طلب جديد (حجز داخلي للموظف) ════════ */
 export interface InternalOrderInput {
   clientName:string; clientPhone:string; tripId:string; persons:number; payMethod:string;
+  /** بيانات صاحب الطلب تُحفظ من البداية؛ لا ينشأ طلب داخلي فارغ الهوية. */
+  owner:Pilgrim;
   /** توزيعٌ تشغيلي للمقاعد، لا يُستنتج من اسم صاحب الطلب أو ترتيبه. */
   travellerCounts:BookingTravellerCounts;
   /** ملخّص السكن المقروء + توزيعه المفصّل (يُحفظ في booking_rooms). */
@@ -122,6 +124,9 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
 }) {
   const [clientName,setClientName]=useState("");
   const [clientPhone,setClientPhone]=useState("");
+  const [ownerDocType,setOwnerDocType]=useState<"national_id"|"iqama"|"passport">("national_id");
+  const [ownerIdNumber,setOwnerIdNumber]=useState("");
+  const [ownerNationality,setOwnerNationality]=useState("سعودي");
   const [packageId,setPackageId]=useState("");
   const [tripId,setTripId]=useState("");
   const [travellerCounts,setTravellerCounts]=useState<BookingTravellerCounts>({men:1,women:0,children:0});
@@ -134,7 +139,7 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   const [hits,setHits]=useState<CustomerHit[]>([]);
   const [searching,setSearching]=useState(false);
   const [picked,setPicked]=useState<CustomerHit|null>(null);
-  const requestClose=useConfirmDiscard({clientName,clientPhone,packageId,tripId,travellerCounts,payMethod,split},onClose);
+  const requestClose=useConfirmDiscard({clientName,clientPhone,ownerDocType,ownerIdNumber,ownerNationality,packageId,tripId,travellerCounts,payMethod,split},onClose);
 
   /* isSellable لا `status === "open"`: العمود يبقى open بعد انطلاق
      الرحلة، فكانت قائمة «الرحلات المتاحة» تعرض للموظف رحلةً راحت أمس
@@ -175,12 +180,14 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
     return ()=>{ alive=false; clearTimeout(t); };
   },[clientPhone,clientName,picked]);
 
-  function pick(h:CustomerHit){ setPicked(h); setClientName(h.name); setClientPhone(h.phone); setHits([]); }
+  function pick(h:CustomerHit){ setPicked(h); setClientName(h.name); setClientPhone(h.phone); setOwnerIdNumber(h.idNumber ?? ""); setHits([]); }
 
   function validate(){
     const e:{[k:string]:string}={};
     if(!clientName.trim()) e.name="اسم العميل مطلوب";
     if(!validPhone(clientPhone)) e.phone="رقم جوال غير صحيح";
+    if(!ownerIdNumber.trim()) e.ownerId="رقم الهوية أو الجواز مطلوب";
+    if(!ownerNationality.trim()) e.ownerNationality="الجنسية مطلوبة";
     if(!packageId) e.pkg="اختر الباقة";
     if(!tripId) e.trip="اختر الرحلة";
     if(persons<1) e.persons="عدد المقاعد على الأقل 1";
@@ -197,6 +204,10 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
     setBusy(true);
     const err=onCreate({
       clientName:clientName.trim(),clientPhone:clientPhone.replace(/\s/g,""),tripId,persons,payMethod,
+      owner:{
+        name:clientName.trim(), docType:ownerDocType, idNumber:ownerIdNumber.trim(), nationality:ownerNationality.trim(),
+        gender:travellerCounts.women && !travellerCounts.men ? "female" : "male", birthDate:"", phone:clientPhone.replace(/\s/g,""),
+      },
       travellerCounts,
       roomType: housing&&split ? splitSummary(split,tAr) : "",
       rooms: housing&&split ? split.rooms.map(r=>({tierId:r.id,type:r.type,persons:r.persons,perNight:r.perNight})) : undefined,
@@ -267,6 +278,29 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
                 ))}
               </div>
             ) : null}
+          </FormSection>
+
+          <FormSection title="هوية صاحب الطلب">
+            <div className={fieldGrid}>
+              <div>
+                <Field label={<>نوع الوثيقة<span className="ui-req">*</span></>}>
+                  <AppSelect value={ownerDocType} onChange={v=>setOwnerDocType(v as typeof ownerDocType)} options={[
+                    {value:"national_id",label:"هوية وطنية"}, {value:"iqama",label:"إقامة"}, {value:"passport",label:"جواز سفر"},
+                  ]}/>
+                </Field>
+              </div>
+              <div>
+                <Field label={<>رقم الهوية أو الجواز<span className="ui-req">*</span></>} error={errors.ownerId}>
+                  <Input value={ownerIdNumber} invalid={!!errors.ownerId} inputMode="numeric" style={ltr}
+                    onChange={e=>setOwnerIdNumber(e.target.value)} placeholder={ownerDocType==="passport" ? "رقم الجواز" : "10XXXXXXXX"}/>
+                </Field>
+              </div>
+              <div>
+                <Field label={<>الجنسية<span className="ui-req">*</span></>} error={errors.ownerNationality}>
+                  <Input value={ownerNationality} invalid={!!errors.ownerNationality} onChange={e=>setOwnerNationality(e.target.value)} placeholder="مثال: سعودي"/>
+                </Field>
+              </div>
+            </div>
           </FormSection>
 
           <FormSection title="الباقة والرحلة">
@@ -482,7 +516,7 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
          السعر التي يمرّ بها طلب العميل. */
       total:d.total, status:"reviewing", paymentStatus:"none",
       payMethod:d.payMethod, seats:[], createdAt:todayYMD(),
-      staff:currentUser?.name??"—", createdBy:currentUser?.id, branchId:currentUser?.branch, source:"internal", sentDate:"", pilgrims:[],
+      staff:currentUser?.name??"—", createdBy:currentUser?.id, branchId:currentUser?.branch, source:"internal", sentDate:"", pilgrims:[d.owner],
     };
     clearSyncError();
     setBookings(p=>[booking,...p]);
