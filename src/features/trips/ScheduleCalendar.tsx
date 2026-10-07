@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, TONE } from "@/lib/theme";
+import { fmtDayDate } from "@/lib/dates";
+import { Button, IconButton } from "@/components/ui";
 import { parseYMD, ymd, todayYMD } from "@/lib/utils";
 import { AR_MONTHS } from "@/lib/trip";
 
@@ -14,7 +16,12 @@ import { AR_MONTHS } from "@/lib/trip";
    أعمدتها الضيقة.
 
    والأسبوع يبدأ بالسبت كما في التقويم السابق، والأرقام لاتينية كما في
-   بطاقتَي الذهاب والعودة فوقه — لا رقمان بخطَّين لتاريخٍ واحد. */
+   بطاقتَي الذهاب والعودة فوقه — لا رقمان بخطَّين لتاريخٍ واحد.
+
+   والألوان من لوحة الكسوة: الذهاب أسودُ ممتلئ والعودة أسودُ بإطار — لا
+   ذهبي. الذهبي في هذه النافذة لزرّ الإطلاق وحده، وخانةٌ ذهبية بجواره
+   كانت تُقرأ زرّاً ثانياً. واليوم الحالي حلقةٌ ذهبية رفيعة: علامة «أنت
+   هنا» لا اختيار. */
 
 const WEEK = ["سبت", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة"];
 /* getDay: الأحد ٠ … السبت ٦ ← عمود السبت أولاً. */
@@ -70,32 +77,23 @@ export function ScheduleCalendar({
   ];
   const marks = new Map(weekly.map(w => [w.date, w]));
   const hasRange = !!departure && !!returnDate && returnDate > departure;
-  const band = "#F7EEDC";
+  const band = B.fill;
 
   return (
-    <div className="w-full rounded-2xl overflow-hidden select-none" style={{ border: `1px solid ${B.border}`, background: "#fff" }}>
-      <div className="flex items-center justify-between px-3 py-2.5" style={{ background: B.primaryDeep }}>
-        <button type="button" onClick={() => canPrev && go(-1)} disabled={!canPrev} aria-label="الشهر السابق"
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.14)", color: "#fff", opacity: canPrev ? 1 : .35, cursor: canPrev ? "pointer" : "not-allowed" }}>
-          <ChevronRight size={15} />
-        </button>
-        <div className="flex items-baseline gap-2">
-          <span className="font-extrabold text-white" style={{ fontSize: 15 }}>{AR_MONTHS[view.m]}</span>
-          <span className="text-xs font-bold" style={{ color: B.gold2 }}>{view.y}</span>
-          {!onTodayMonth && <button type="button" onClick={jumpToday} className="text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer mr-1"
-            style={{ background: "rgba(231,194,113,.14)", border: "1px solid rgba(231,194,113,.35)", color: B.gold2 }}>اليوم</button>}
+    <div className="w-full select-none" style={{ border: `1px solid ${B.border}`, borderRadius: 14, background: B.surface, overflow: "hidden" }}>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5" style={{ borderBottom: `1px solid ${B.border}` }}>
+        <IconButton size="sm" variant="outline" label="الشهر السابق" disabled={!canPrev} onClick={() => canPrev && go(-1)}><ChevronRight size={16} /></IconButton>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-extrabold" style={{ fontSize: 15, color: B.black }}>{AR_MONTHS[view.m]}</span>
+          <span style={{ fontSize: 13, color: B.muted }}>{view.y}</span>
+          {!onTodayMonth && <Button size="sm" variant="ghost" onClick={jumpToday} style={{ height: 26, padding: "0 8px", fontSize: 12 }}>اليوم</Button>}
         </div>
-        <button type="button" onClick={() => go(1)} aria-label="الشهر التالي"
-          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-          style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.14)", color: "#fff" }}>
-          <ChevronLeft size={15} />
-        </button>
+        <IconButton size="sm" variant="outline" label="الشهر التالي" onClick={() => go(1)}><ChevronLeft size={16} /></IconButton>
       </div>
 
-      <div className="grid grid-cols-7 px-2 pt-2.5 pb-1" style={{ background: B.cream }}>
-        {WEEK.map((w, i) => (
-          <div key={w} className="text-center text-[11px] font-bold" style={{ color: i === 6 ? B.gold : B.muted }}>{w}</div>
+      <div className="grid grid-cols-7 px-2 pt-2.5 pb-1">
+        {WEEK.map(w => (
+          <div key={w} className="text-center" style={{ fontSize: 12, fontWeight: 600, color: B.muted }}>{w}</div>
         ))}
       </div>
 
@@ -103,7 +101,7 @@ export function ScheduleCalendar({
         <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.div key={`${view.y}-${view.m}`} custom={dir} variants={slide}
             initial="enter" animate="center" exit="exit" transition={{ duration: .18 }}
-            className="grid grid-cols-7 gap-y-1 px-2 pt-1.5 pb-2.5">
+            className="grid grid-cols-7 gap-y-1 px-2 pt-1 pb-2.5">
             {cells.map((d, i) => {
               if (!d) return <div key={`b${i}`} />;
               const disabled = d < min;
@@ -113,32 +111,35 @@ export function ScheduleCalendar({
               const mark = marks.get(d);
               const isToday = d === today;
               /* شريط المدة بين الذهاب والعودة: نصف خانة عند الطرفين كي
-                 يتّصل الشريط بالدائرة لا يتجاوزها. الصفحة RTL فالأقدم يمين. */
+                 يتّصل الشريط بالخانة لا يتجاوزها. الصفحة RTL فالأقدم يمين. */
               const bandBg = inRange ? band
                 : isDep && hasRange ? `linear-gradient(to left, transparent 50%, ${band} 50%)`
                 : isRet ? `linear-gradient(to right, transparent 50%, ${band} 50%)`
                 : "transparent";
               let bg = "transparent", fg: string = B.black, border = "1px solid transparent", label = "";
-              if (isDep) { bg = B.gold; label = weekly.length ? "رحلة 1" : "ذهاب"; }
-              else if (isRet) { bg = B.primaryDeep; fg = "#fff"; label = "عودة"; }
+              if (isDep) { bg = B.ink; fg = B.onInk; label = weekly.length ? "رحلة 1" : "ذهاب"; }
+              else if (isRet) { bg = B.surface; border = `1.5px solid ${B.black}`; label = "عودة"; }
               else if (mark) {
-                label = mark.skipped ? "مستبعدة" : `رحلة ${mark.index}`;
-                if (mark.skipped) { fg = B.muted; border = `1px dashed ${B.border}`; }
-                else if (mark.conflict) { bg = "#FBE6E6"; fg = "#BE2626"; border = "1px solid #F3C9C9"; }
-                else { bg = "#FFF4DE"; border = "1px solid #E6C77F"; }
+                /* المستبعدة تبقى برقمها مشطوباً: «رحلة ٣» التي لن تُطلق، لا خانةً
+                   فارغة يُظنّ أنها لم تُقترح أصلاً. */
+                label = `رحلة ${mark.index}`;
+                if (mark.skipped) { fg = B.muted; border = `1px dashed ${B.borderStrong}`; }
+                else if (mark.conflict) { bg = TONE.danger.bg; fg = TONE.danger.fg; border = `1px solid ${TONE.danger.line}`; }
+                else { bg = B.surface; border = `1px solid ${B.borderStrong}`; }
               }
-              if (disabled) fg = "#C9C1B6";
+              if (disabled) fg = B.placeholder;
+              const strike = mark?.skipped ? "line-through" : "none";
+              const say = `${fmtDayDate(d)}${label ? ` — ${mark?.skipped ? "مستبعدة" : mark?.conflict ? `${label}، المركبة مشغولة` : label}` : ""}`;
               return (
                 <div key={d} className="flex justify-center" style={{ background: bandBg }}>
                   <button type="button" disabled={disabled} onClick={() => onPick(d)}
-                    aria-label={d} aria-pressed={isDep || isRet}
-                    className={`trip-cal-day relative w-full max-w-[46px] h-[44px] rounded-xl flex flex-col items-center justify-center ${disabled ? "" : "cursor-pointer"}`}
-                    style={{ background: bg, color: fg, border, boxShadow: isDep ? "0 3px 10px rgba(192,134,44,.35)" : isRet ? "0 3px 10px rgba(21,76,72,.3)" : "none" }}>
-                    <span className="text-[13px] leading-none" style={{ fontWeight: isDep || isRet || mark ? 800 : 600, textDecoration: mark?.skipped ? "line-through" : "none" }}>
+                    aria-label={say} title={say} aria-pressed={isDep || isRet}
+                    className={`trip-cal-day relative w-full max-w-[60px] h-[48px] rounded-xl flex flex-col items-center justify-center ${disabled ? "" : "cursor-pointer"}`}
+                    style={{ background: bg, color: fg, border, boxShadow: isToday && !isDep ? `inset 0 0 0 1.5px ${B.gold}` : "none" }}>
+                    <span className="leading-none" style={{ fontSize: 14, fontWeight: isDep || isRet || mark ? 700 : 500, textDecoration: strike }}>
                       {Number(d.slice(8))}
                     </span>
-                    {label && <span className="text-[9px] font-bold leading-none mt-1" style={{ opacity: isDep || isRet ? .85 : 1 }}>{label}</span>}
-                    {isToday && !label && <span className="absolute bottom-1.5 w-1 h-1 rounded-full" style={{ background: B.primary }} />}
+                    {label && <span className="leading-none" style={{ fontSize: 12, fontWeight: 600, marginTop: 4, textDecoration: strike, opacity: isDep ? .8 : 1 }}>{label}</span>}
                   </button>
                 </div>
               );

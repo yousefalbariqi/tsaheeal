@@ -4,7 +4,6 @@ import gregorian from "react-date-object/calendars/gregorian";
 import arabic from "react-date-object/calendars/arabic";
 import gregorian_en from "react-date-object/locales/gregorian_en";
 import { ChevronDown } from "lucide-react";
-import { B } from "@/lib/theme";
 
 /* تاريخ الميلاد بالقوائم — بلا تقويم.
    يختار المستخدم: ميلادي | هجري، ثم السنة ثم الشهر ثم اليوم — كلها قوائم منسدلة.
@@ -57,33 +56,24 @@ function NativeSelect({ label, value, onChange, options, placeholder, disabled, 
   options: { value: string; label: string }[]; placeholder: string;
   disabled?: boolean; invalid?: boolean; dir: "rtl" | "ltr";
 }) {
+  /* الشكل من `.bd-*` في styles/customer-misc.css: حقلٌ بارتفاع ٥٢ وخطّ ١٦
+     (دون ١٦ يكبّر iOS الصفحة عند فتح القائمة) — لغة حقول واجهة العميل. */
   return (
-    <div className="flex flex-col gap-1 min-w-0">
-      <span className="text-[11px] font-bold" style={{ color: B.muted }}>{label}</span>
-      <div style={{ position: "relative" }}>
+    <label className="bd-field">
+      <span>{label}</span>
+      <div>
         <select
           value={value} onChange={e => onChange(e.target.value)} disabled={disabled} aria-label={label}
-          className="w-full border rounded-xl text-sm focus:outline-none"
-          style={{
-            borderColor: invalid ? "#E1A3A3" : B.border,
-            background: disabled ? B.fill : "#fff",
-            color: value ? B.black : B.placeholder,
-            fontFamily: "inherit", fontWeight: value ? 700 : 400,
-            padding: "9px 10px", paddingInlineEnd: 26, height: 40,
-            cursor: disabled ? "not-allowed" : "pointer",
-            appearance: "none", WebkitAppearance: "none", MozAppearance: "none",
-            textAlign: dir === "rtl" ? "right" : "left",
-          }}
+          aria-invalid={invalid || undefined}
+          data-empty={value ? undefined : ""} data-bad={invalid ? "" : undefined}
+          style={{ textAlign: dir === "rtl" ? "right" : "left" }}
         >
           <option value="" disabled>{placeholder}</option>
           {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <ChevronDown size={15} style={{
-          position: "absolute", insetInlineEnd: 8, top: "50%", transform: "translateY(-50%)",
-          color: B.muted, pointerEvents: "none",
-        }} />
+        <ChevronDown size={16} aria-hidden />
       </div>
-    </div>
+    </label>
   );
 }
 
@@ -206,33 +196,21 @@ export function BirthDateSelect({
     setY(null); setM(null); setD(null);
   }
 
-  const pillBase: React.CSSProperties = {
-    flex: 1, padding: "7px 10px", borderRadius: 10, fontSize: 13, fontWeight: 700,
-    cursor: disabled ? "not-allowed" : "pointer", border: "none", fontFamily: "inherit", transition: "all .15s",
-  };
-
   return (
-    <div {...aria} className="flex flex-col gap-2">
+    <div {...aria} className="bd-root">
       {/* ميلادي | هجري */}
-      {!hideCalendarSwitch && <div className="flex gap-1 p-1 rounded-xl" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
+      {!hideCalendarSwitch && (
+        <div className="bd-cal">
           {(["greg", "hijri"] as Cal[]).map(c => (
-            <button
-              key={c} type="button" disabled={disabled} onClick={() => switchCal(c)}
-              aria-pressed={cal === c}
-              style={{
-                ...pillBase,
-                background: cal === c ? B.gold : "transparent",
-                color: cal === c ? B.black : B.muted,
-                boxShadow: cal === c ? "0 1px 3px rgba(0,0,0,.08)" : "none",
-              }}
-            >
+            <button key={c} type="button" disabled={disabled} onClick={() => switchCal(c)} aria-pressed={cal === c}>
               {c === "greg" ? txt.greg : txt.hijri}
             </button>
           ))}
-        </div>}
+        </div>
+      )}
 
       {/* السنة ← الشهر ← اليوم — قوائم أصلية بلا بحث */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="bd-grid">
         <NativeSelect label={txt.year} placeholder={txt.pickYear} options={years}
           value={y ? String(y) : ""} onChange={setYear} dir={dir}
           disabled={disabled} invalid={invalid && !y} />

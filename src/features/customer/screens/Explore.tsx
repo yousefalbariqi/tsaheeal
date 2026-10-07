@@ -9,7 +9,7 @@
    إلا ما تفتحه «/». */
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { MapPin, CalendarDays, UserRound, Check, Headphones, ShieldCheck, UsersRound, ChevronLeft, ArrowLeft, ArrowRight, Tag, Star, SlidersHorizontal } from "lucide-react";
+import { MapPin, CalendarDays, CalendarX2, UserRound, Headphones, ShieldCheck, UsersRound, ChevronLeft, ArrowLeft, ArrowRight, Clock3, Star, SlidersHorizontal } from "lucide-react";
 import type { Pkg, Trip } from "@/types";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { flipRTL, money } from "../ui/tokens";
@@ -18,6 +18,9 @@ import { pkgCover } from "../gallery";
 import { LANGS, cityLabel, type Lang } from "../i18n";
 import { tripDeparture } from "@/lib/trip";
 import { todayYMD } from "@/lib/utils";
+import { fmtDayDate, fmtTime } from "@/lib/dates";
+import { availSeats } from "../data";
+import { availabilityLabel } from "./FocusBooking";
 
 
 export interface ExploreProps {
@@ -56,11 +59,15 @@ function TripsLoadingSkeleton({lang}:{lang:Lang}) {
         {Array.from({length:7},(_,i)=><span className="sk-bar" key={i}/>) }
       </div>
       <div className="ts-focus-loading-card" aria-hidden="true">
-        <span className="sk-bar"/><div><span className="sk-bar"/><span className="sk-bar"/><span className="sk-bar"/></div>
+        <span className="sk-bar"/><div><span className="sk-bar"/><span className="sk-bar"/><span className="sk-bar"/><span className="sk-bar"/></div>
       </div>
     </section>
   );
 }
+
+/* سهم «إلى الأمام»: يسارٌ في العربية ويمينٌ في الإنجليزية. `flipRTL`
+   مصمَّم لسهم الرجوع، فاستعماله هنا كان يوجّه سهم المتابعة إلى الخلف. */
+const forwardChevron = (lang: Lang) => flipRTL(lang === "ar" ? "ltr" : "rtl");
 
 /** وجهة الباقة معنى تجاري، لا نصّ حرّ. توجد بيانات قديمة مثل «مكة
     المكرمة» و«مكة والمدينة المنورة»؛ تحويلها هنا يمنع سقوط رحلة سليمة من
@@ -123,8 +130,8 @@ function DestinationChoice({ onChoose, signedIn, onAccount, t, lang, setLang }: 
       fallback: "/gallery/quba.jpg",
     },
   ];
-  /* ثلاث بطاقات تبقى مرئية دائماً. عند الحركة يدخل رأيٌ واحد من اليمين
-     ويخرج الأقدم من اليسار، فتبدو الآراء كسلسلة لا كصفحتين متبادلتين. */
+  /* الآراء صفٌّ يُسحب باليد ويقف عند كل بطاقة؛ لا حركة تلقائية تسحب
+     النص من تحت عين القارئ. */
   const reviews = lang === "ar"
     ? [
         ["أحمد", "تنظيم ممتاز وخدمة مريحة."],
@@ -154,69 +161,73 @@ function DestinationChoice({ onChoose, signedIn, onAccount, t, lang, setLang }: 
         ["Fatimah", "A helpful team and a lovely experience."],
         ["Omar", "The trip details were very clear."],
       ];
+  const ar = lang === "ar";
   return (
     <section className="ts-destination-choice" aria-labelledby="destination-title">
       <header className="ts-destination-header">
         <button type="button" className="ts-destination-brand" aria-label={t("brand")}>
-          <TasaheelMark size={60} plain />
+          <TasaheelMark size={48} plain />
         </button>
         <div className="ts-destination-actions">
           <button type="button" className="ts-mobile-auth" onClick={onAccount}>
-            <UserRound size={16}/>{signedIn ? t("profile") : t("login")}
+            <UserRound size={18}/>{signedIn ? t("profile") : t("login")}
           </button>
           <LangSwitch compact lang={lang} setLang={setLang} langs={LANGS} label={t("language")} />
         </div>
       </header>
 
       <div className="ts-destination-content">
-        <p className="ts-destination-overline">{lang === "ar" ? "تساهيل العمرة" : "Tasaheel Umrah"}</p>
-        <h1 id="destination-title">{lang === "ar" ? "رحلة إلى أطهر البقاع" : "A journey to the holiest places"}</h1>
-        <p className="ts-destination-lead">{lang === "ar" ? "نسهّل رحلتك.. لتقترب أكثر من بيت الله" : "We make your journey easier, so you can draw closer to the House of Allah."}</p>
+        <p className="ts-destination-overline">{ar ? "تساهيل العمرة" : "Tasaheel Umrah"}</p>
+        <h1 id="destination-title">{ar ? "رحلة إلى أطهر البقاع" : "A journey to the holiest places"}</h1>
+        <p className="ts-destination-lead">{ar ? "نسهّل رحلتك.. لتقترب أكثر من بيت الله" : "We make your journey easier, so you can draw closer to the House of Allah."}</p>
 
-        <div className="ts-destination-cards" role="group" aria-label={lang === "ar" ? "اختر وجهة رحلتك" : "Choose your destination"}>
+        <p className="ts-destination-prompt" id="destination-prompt">{ar ? "اختر وجهتك لنبدأ" : "Choose your destination to begin"}</p>
+        {/* البطاقتان متساويتان: لا علامة اختيار ولا حدّ ذهبي على الأولى —
+            كانت تبدو مختارةً سلفاً فيتردّد العميل أيضغطها أم لا. */}
+        <div className="ts-destination-cards" role="group" aria-labelledby="destination-prompt">
           {destinations.map((item, index) => (
             <button key={item.key} type="button" className="ts-destination-card" onClick={() => onChoose(item.key)}>
-              <img src={item.image} alt="" loading={index === 0 ? "eager" : "lazy"}
+              <img src={item.image} alt="" width={640} height={400} decoding="async"
+                loading={index === 0 ? "eager" : "lazy"}
                 onError={e=>{ e.currentTarget.src=item.fallback; }}/>
-              {index === 0 && <span className="ts-destination-selected" aria-label={lang === "ar" ? "الخيار الموصى به" : "Recommended option"}><Check size={14}/></span>}
               <span className="ts-destination-card-copy">
-                <strong>{item.title}</strong>
-                <small>{item.note}</small>
+                <span className="ts-destination-card-text">
+                  <strong>{item.title}</strong>
+                  <small>{item.note}</small>
+                </span>
+                <span className="ts-destination-card-go" aria-hidden="true"><ChevronLeft size={22} style={forwardChevron(lang)}/></span>
               </span>
             </button>
           ))}
         </div>
 
-        <p className="ts-destination-prompt">{lang === "ar" ? "اختر وجهتك · لنبدأ رحلتك" : "Choose your destination to begin"}</p>
-        <div className="ts-destination-trust" aria-label={lang === "ar" ? "مزايا الخدمة" : "Service benefits"}>
-          <span><UsersRound size={20}/>{lang === "ar" ? "آلاف المعتمرين يسافرون معنا" : "Thousands travel with us"}</span>
-          <span><ShieldCheck size={20}/>{lang === "ar" ? "موثوق ومعتمد" : "Trusted and verified"}</span>
-          <span><Headphones size={20}/>{lang === "ar" ? "دعم في كل خطوة" : "Support at every step"}</span>
-        </div>
+        <ul className="ts-destination-trust" aria-label={ar ? "مزايا الخدمة" : "Service benefits"}>
+          <li><UsersRound size={22}/>{ar ? "آلاف المعتمرين يسافرون معنا" : "Thousands travel with us"}</li>
+          <li><ShieldCheck size={22}/>{ar ? "موثوق ومعتمد" : "Trusted and verified"}</li>
+          <li><Headphones size={22}/>{ar ? "دعم في كل خطوة" : "Support at every step"}</li>
+        </ul>
 
         <section className="ts-destination-reviews" aria-labelledby="pilgrim-reviews-title">
-          <h2 id="pilgrim-reviews-title">{lang === "ar" ? "ماذا يقول المعتمرون؟" : "What do pilgrims say?"}</h2>
-          <div className="ts-destination-review-carousel" aria-live="off">
-            <div className="ts-destination-review-track">
-              {[...reviews, ...reviews].map(([name, quote], index) => {
-                const duplicate = index >= reviews.length;
-                return <figure className="ts-destination-review" dir={lang === "ar" ? "rtl" : "ltr"}
-                  aria-hidden={duplicate || undefined} key={`${duplicate ? "copy" : "source"}-${name}`}>
-                  <div className="ts-destination-review-stars" aria-label={lang === "ar" ? "خمسة من خمسة" : "Five out of five"}>
-                    {Array.from({ length: 5 }, (_, starIndex) => <Star key={starIndex} size={11} fill="currentColor" />)}
+          <h2 id="pilgrim-reviews-title">{ar ? "ماذا يقول المعتمرون؟" : "What do pilgrims say?"}</h2>
+          <ul className="ts-destination-review-row" tabIndex={0} aria-label={ar ? "آراء المعتمرين — اسحب للمزيد" : "Pilgrim reviews — swipe for more"}>
+            {reviews.map(([name, quote]) => (
+              <li key={name} style={{ display: "contents" }}>
+                <figure className="ts-destination-review">
+                  <div className="ts-destination-review-stars" role="img" aria-label={ar ? "خمسة من خمسة" : "Five out of five"}>
+                    {Array.from({ length: 5 }, (_, starIndex) => <Star key={starIndex} size={16} fill="currentColor" strokeWidth={0} />)}
                   </div>
                   <blockquote>{quote}</blockquote>
                   <figcaption>{name}</figcaption>
-                </figure>;
-              })}
-            </div>
-          </div>
+                </figure>
+              </li>
+            ))}
+          </ul>
         </section>
 
         <footer className="ts-destination-footer">
-          <img src="/mosque-footer-silhouette.png" alt="" aria-hidden="true" />
-          <p>{lang === "ar" ? "رحلتك.. بركة وأثر" : "Your journey: blessing and impact."}</p>
-          <small>{lang === "ar" ? "تساهيل العمرة" : "Tasaheel Umrah"}</small>
+          <img src="/mosque-footer-silhouette.png" alt="" aria-hidden="true" width={2172} height={724} loading="lazy" decoding="async" />
+          <p>{ar ? "رحلتك.. بركة وأثر" : "Your journey: blessing and impact."}</p>
+          <small>{ar ? "تساهيل العمرة" : "Tasaheel Umrah"}</small>
         </footer>
       </div>
     </section>
@@ -242,6 +253,13 @@ const dateParts = (iso: string, lang: Lang, calendar: CalendarSystem = "gregory"
     month: new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(date),
   };
 };
+/* خانة اليوم عرضها 44 بكسل: «الخميس» و«الأربعاء» كانتا تُقصّان بثلاث
+   نقاط. بلا أداة التعريف تسع الخانة الاسم كاملاً ويبقى مقروءاً. */
+const shortWeekday = (iso: string, lang: Lang): string => {
+  const date = new Date(`${iso}T00:00:00`);
+  if (lang !== "ar") return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
+  return new Intl.DateTimeFormat("ar-SA", { weekday: "long" }).format(date).replace(/^ال/, "");
+};
 const tripTimeLabel = (hhmm: string | undefined, lang: Lang): string => {
   const m = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? "");
   if (!m) return lang === "ar" ? "غير محدد" : "Not set";
@@ -249,10 +267,16 @@ const tripTimeLabel = (hhmm: string | undefined, lang: Lang): string => {
   const value = `${hour % 12 === 0 ? 12 : hour % 12}:${m[2]}`;
   return `${value} ${lang === "ar" ? (hour < 12 ? "ص" : "م") : (hour < 12 ? "AM" : "PM")}`;
 };
+/* العربي الميلادي من lib/dates كبقية التطبيق. الهجري والإنجليزي يبقيان
+   على منسّق هذه الشاشة: lib/dates ميلاديٌّ عربيٌّ وحده. والوقت الغائب
+   يُحذف من السطر بدل «غير محدد» ملتصقةً بتاريخٍ معروف. */
 const tripScheduleLabel = (iso: string | undefined, hhmm: string | undefined, lang: Lang, calendar: CalendarSystem): string => {
   if (!iso) return lang === "ar" ? "غير محدد" : "Not set";
+  const hasTime = /^\d{1,2}:\d{2}/.test(hhmm ?? "");
+  if (lang === "ar" && calendar === "gregory") return hasTime ? `${fmtDayDate(iso)} · ${fmtTime(hhmm)}` : fmtDayDate(iso);
   const date = dateParts(iso, lang, calendar);
-  return `${date.weekday} ${date.day} ${date.monthName} · ${tripTimeLabel(hhmm, lang)}`;
+  const day = `${date.weekday} ${date.day} ${date.monthName}`;
+  return hasTime ? `${day} · ${tripTimeLabel(hhmm, lang)}` : day;
 };
 const departureBranchLabel = (trip: Trip, city = "", lang: Lang): string => {
   const stop = city ? trip.departureStops?.find(s => s.city.trim() === city.trim()) : trip.departureStops?.[0];
@@ -265,17 +289,16 @@ const departureBranchLabel = (trip: Trip, city = "", lang: Lang): string => {
    كاملاً، أما هنا فنضيف دافعاً قصيراً للحجز. نعيد الحساب كل دقيقة كي لا
    يبقى «بعد يوم» ظاهراً بعد وصول موعد الرحلة. */
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-type LaunchCountdown = { label: string; compact: string };
+type LaunchCountdown = { label: string };
 const launchCountdown = (trip: Trip, now: Date, lang: Lang): LaunchCountdown | null => {
   const departure = tripDeparture(trip);
   if (!departure) return null;
   const days = Math.round((startOfDay(departure) - startOfDay(now)) / 86_400_000);
-  if (days <= 0) return lang === "ar" ? { label: "ينطلق اليوم", compact: "اليوم" } : { label: "Departs today", compact: "Today" };
-  if (days === 1) return lang === "ar" ? { label: "ينطلق غداً", compact: "غداً" } : { label: "Departs tomorrow", compact: "Tomorrow" };
-  const count = new Intl.NumberFormat(lang === "ar" ? "ar-SA" : "en-US").format(days);
-  return lang === "ar"
-    ? { label: `ينطلق بعد ${count} أيام`, compact: `بعد ${count} أيام` }
-    : { label: `In ${count} days`, compact: `In ${count} days` };
+  if (days <= 0) return { label: lang === "ar" ? "ينطلق اليوم" : "Departs today" };
+  if (days === 1) return { label: lang === "ar" ? "ينطلق غداً" : "Departs tomorrow" };
+  if (lang !== "ar") return { label: `In ${days} days` };
+  /* أرقام لاتينية كبقية التطبيق، والمعدود يتبع عدده: يومين، 3 أيام، 11 يوماً. */
+  return { label: `ينطلق بعد ${days === 2 ? "يومين" : days <= 10 ? `${days} أيام` : `${days} يوماً`}` };
 };
 
 /* المرحلة الثانية للتجربة: خطٌ زمني للمغادرات. الأيام الفارغة تمرّ
@@ -349,105 +372,138 @@ function FocusTrips({ packages, tripsOf, priceOf, destination, departureCity = "
     setSelectedDate(null);
   };
   const goToCurrentWeek = () => { setWeekDirection("previous"); setWeekOffset(0); setSelectedDate(null); };
+  /* أسبوعٌ بلا رحلات لا يُترك فراغاً تحت الأيام: نقول ذلك ونعرض القفز
+     إلى أقرب أسبوعٍ فيه رحلة — عرضٌ فقط، لا يغيّر ما يُحمَّل. */
+  const weekStart = dates[0];
+  const nextTripDate = useMemo(() => upcoming.map(entry => entry.next.departureDate).filter(date => date > dates[6]).sort()[0] ?? null, [upcoming, dates]);
+  const jumpToNextTrip = () => {
+    if (!nextTripDate) { goToCurrentWeek(); return; }
+    const days = Math.round((Date.parse(`${nextTripDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+    setWeekDirection("next");
+    setWeekOffset(Math.floor(days / 7));
+    setSelectedDate(nextTripDate);
+  };
+  const ar = lang === "ar";
+  const dir = ar ? "rtl" : "ltr";
+  const PrevIcon = ar ? ArrowRight : ArrowLeft;
+  const NextIcon = ar ? ArrowLeft : ArrowRight;
   return (
     <section className="ts-focus-trips" aria-labelledby="focus-title">
       <div className="ts-focus-hero">
-        <img src={heroImage} alt="" onError={e => { e.currentTarget.src = "/bg-haram.jpg"; }}/>
+        <img src={heroImage} alt="" width={1040} height={1280} decoding="async" onError={e => { e.currentTarget.src = "/bg-haram.jpg"; }}/>
         <div className="ts-focus-hero-shade"/>
-        <button type="button" className="ts-focus-back" onClick={onBack} aria-label={lang === "ar" ? "تغيير الوجهة" : "Change destination"}>
-          <ChevronLeft size={24} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
+        <button type="button" className="ts-focus-back" onClick={onBack} aria-label={ar ? "تغيير الوجهة" : "Change destination"}>
+          <ChevronLeft size={24} style={flipRTL(dir)}/>
         </button>
-        <div className="ts-focus-brand"><TasaheelMark size={48} plain /></div>
+        {/* في مربّعه الأبيض: العلامة سوداء والصورة تحتها داكنة. */}
+        <div className="ts-focus-brand"><TasaheelMark size={44} /></div>
         <div className="ts-focus-title">
           <h1 id="focus-title">{destinationLabel}</h1>
-          <p>{lang === "ar" ? "رحلات مختارة بعناية" : "Carefully selected journeys"}</p>
+          <p>{ar ? "رحلات مختارة بعناية" : "Carefully selected journeys"}</p>
         </div>
       </div>
 
       <div className="ts-focus-body">
         <button type="button" className="ts-focus-customize" onClick={onCustom}>
           <span className="ts-focus-customize-icon"><SlidersHorizontal size={21}/></span>
-          <span><strong>{lang === "ar" ? "خصص رحلتك" : "Tailor your trip"}</strong><small>{lang === "ar" ? "اختر المدينة والمدة والفندق، وسنتولى الباقي" : "Choose your city, duration and hotel — we'll handle the rest."}</small></span>
-          <ChevronLeft size={20} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/>
+          <span><strong>{ar ? "خصص رحلتك" : "Tailor your trip"}</strong><small>{ar ? "اختر المدينة والمدة والفندق، وسنتولى الباقي" : "Choose your city, duration and hotel — we'll handle the rest."}</small></span>
+          <ChevronLeft size={20} style={forwardChevron(lang)}/>
         </button>
         {loading ? <TripsLoadingSkeleton lang={lang}/> : <>
         {!awaitingCity && <div className="ts-focus-timeline-head">
-          <div><span>{lang === "ar" ? (departureCity ? `أقرب رحلات من ${departureCity} إلى ${destinationLabel}` : "مواعيد الانطلاق") : "Departure dates"}</span><small>{lang === "ar" ? "اختر تاريخ الانطلاق المناسب لك" : "Choose the departure date that suits you"}</small></div>
-          <div className="ts-focus-calendar-switch" role="group" aria-label={lang === "ar" ? "نظام التاريخ" : "Calendar system"}>
-            <button type="button" className={calendar === "gregory" ? "active" : ""} onClick={() => setCalendar("gregory")}>{lang === "ar" ? "ميلادي" : "Gregorian"}</button>
-            <button type="button" className={calendar === "islamic" ? "active" : ""} onClick={() => setCalendar("islamic")}>{lang === "ar" ? "هجري" : "Hijri"}</button>
-          </div>
+          <h2>{ar ? (departureCity ? `رحلات ${departureCity} إلى ${destinationLabel}` : "مواعيد الانطلاق") : "Departure dates"}</h2>
+          <small>{ar ? "اختر تاريخ الانطلاق المناسب لك" : "Choose the departure date that suits you"}</small>
         </div>}
         {awaitingCity && (
           <div className="ts-focus-empty">
-            <MapPin size={26}/>
-            <strong>{lang === "ar" ? "اختر مدينة الانطلاق" : "Choose your departure city"}</strong>
-            <small>{lang === "ar" ? "لنعرض لك الرحلات التي تنطلق من مدينتك وحدها." : "So we show only the trips departing from your city."}</small>
-            <button type="button" className="ts-focus-empty-action" onClick={onPickDepartureCity}>{lang === "ar" ? "اختيار المدينة" : "Choose city"}</button>
+            <span className="ts-focus-empty-icon"><MapPin size={26}/></span>
+            <strong>{ar ? "اختر مدينة الانطلاق" : "Choose your departure city"}</strong>
+            <small>{ar ? "لنعرض لك الرحلات التي تنطلق من مدينتك وحدها." : "So we show only the trips departing from your city."}</small>
+            <button type="button" className="ts-focus-empty-action" onClick={onPickDepartureCity}>{ar ? "اختيار المدينة" : "Choose city"}</button>
           </div>
         )}
         {!awaitingCity && upcoming.length === 0 && (
           /* المدينة قد لا تُسيّر رحلةً في هذه الفترة. كان الخط يُرسم
              فارغاً وتحته زرُّ «تحميل مزيد» يُضغط بلا نتيجة إلى الأبد. */
           <div className="ts-focus-empty">
-            <CalendarDays size={26}/>
-            <strong>{lang === "ar"
+            <span className="ts-focus-empty-icon"><CalendarX2 size={26}/></span>
+            <strong>{ar
               ? (departureCity ? `لا رحلات من ${departureCity} حالياً` : "لا رحلات متاحة حالياً")
               : (departureCity ? `No trips from ${departureCity} yet` : "No trips available yet")}</strong>
-            <small>{lang === "ar" ? "جرّب مدينة أخرى أو عد لاحقاً — نضيف المواعيد أولاً بأول." : "Try another city or check back soon — new dates are added regularly."}</small>
-            {departureRequired && <button type="button" className="ts-focus-empty-action" onClick={onPickDepartureCity}>{lang === "ar" ? "تغيير مدينة الانطلاق" : "Change departure city"}</button>}
+            <small>{ar ? "جرّب مدينة أخرى أو عد لاحقاً — نضيف المواعيد أولاً بأول." : "Try another city or check back soon — new dates are added regularly."}</small>
+            {departureRequired && <button type="button" className="ts-focus-empty-action is-quiet" onClick={onPickDepartureCity}>{ar ? "تغيير مدينة الانطلاق" : "Change departure city"}</button>}
           </div>
         )}
         {!awaitingCity && upcoming.length > 0 && <>
-        <section className="ts-week-picker" aria-label={lang === "ar" ? "اختيار أسبوع وموعد الانطلاق" : "Choose week and departure date"}>
-          <header><span><CalendarDays size={16}/>{timelineDates[0]?.part.month}</span></header>
+        <section className="ts-week-picker" aria-label={ar ? "اختيار أسبوع وموعد الانطلاق" : "Choose week and departure date"}>
+          <header>
+            <span className="ts-week-month"><CalendarDays size={18}/>{timelineDates[0]?.part.month}</span>
+            <div className="ts-focus-calendar-switch" role="group" aria-label={ar ? "نظام التاريخ" : "Calendar system"}>
+              <button type="button" className={calendar === "gregory" ? "active" : ""} aria-pressed={calendar === "gregory"} onClick={() => setCalendar("gregory")}>{ar ? "ميلادي" : "Gregorian"}</button>
+              <button type="button" className={calendar === "islamic" ? "active" : ""} aria-pressed={calendar === "islamic"} onClick={() => setCalendar("islamic")}>{ar ? "هجري" : "Hijri"}</button>
+            </div>
+          </header>
           <AnimatePresence mode="wait" initial={false}>
           <motion.div key={weekOffset} className="ts-week-days" role="list"
             initial={{ opacity: 0, x: weekDirection === "next" ? -18 : 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: weekDirection === "next" ? 18 : -18 }} transition={{ duration: .18, ease: "easeOut" }}>
           {timelineDates.map(({ iso, part, trips }) => {
             const isToday = iso === today;
             const selected = iso === activeDate;
-            const label = trips.length === 0 ? "—" : lang === "ar" ? `${trips.length} ${trips.length === 1 ? "رحلة" : "رحلات"}` : `${trips.length}`;
+            const countLabel = ar ? (trips.length === 1 ? "رحلة واحدة" : trips.length === 2 ? "رحلتان" : `${trips.length} رحلات`) : `${trips.length} ${trips.length === 1 ? "trip" : "trips"}`;
             const className = `ts-week-day${trips.length ? " available" : ""}${selected ? " selected" : ""}${isToday ? " today" : ""}`;
-            const content = <><b>{part.weekday}</b><time>{part.day}</time><small>{isToday ? (lang === "ar" ? "اليوم" : "Today") : label}</small></>;
-            return trips.length ? <button key={iso} type="button" role="listitem" className={className} onClick={() => setSelectedDate(iso)} aria-pressed={selected}>{content}</button>
-              : <span key={iso} role="listitem" className={className} aria-label={`${part.weekday} ${part.day}: ${lang === "ar" ? "لا رحلات" : "No trips"}`}>{content}</span>;
+            /* «اليوم» يحلّ محلّ اسم اليوم لا محلّ العدد: كان يُخفي عدد رحلات اليوم نفسه. */
+            const content = <><b>{isToday ? (ar ? "اليوم" : "Today") : shortWeekday(iso, lang)}</b><time dateTime={iso}>{part.day}</time>{trips.length ? <i>{trips.length}</i> : <i aria-hidden="true"/>}</>;
+            return trips.length ? <button key={iso} type="button" role="listitem" className={className} onClick={() => setSelectedDate(iso)} aria-pressed={selected} aria-label={`${part.weekday} ${part.day} ${part.monthName}: ${countLabel}`}>{content}</button>
+              : <span key={iso} role="listitem" className={className} aria-label={`${part.weekday} ${part.day}: ${ar ? "لا رحلات" : "No trips"}`}>{content}</span>;
           })}
           </motion.div>
           </AnimatePresence>
-          <nav className="ts-week-nav" aria-label={lang === "ar" ? "تنقل الأسابيع" : "Week navigation"}>
+          <nav className="ts-week-nav" aria-label={ar ? "تنقل الأسابيع" : "Week navigation"}>
             <button type="button" disabled={weekOffset === 0} onClick={() => moveWeek("previous")}>
-              <span>{lang === "ar" ? "الأسبوع السابق" : "Previous week"}</span><ArrowRight size={16}/>
+              <PrevIcon size={18}/><span>{ar ? "السابق" : "Previous"}</span>
             </button>
-            <button type="button" className="current" disabled={weekOffset === 0} onClick={goToCurrentWeek}>{lang === "ar" ? "هذا الأسبوع" : "This week"}</button>
+            <button type="button" className="current" disabled={weekOffset === 0} onClick={goToCurrentWeek}>{ar ? "هذا الأسبوع" : "This week"}</button>
             <button type="button" onClick={() => moveWeek("next")}>
-              <ArrowLeft size={16}/><span>{lang === "ar" ? "الأسبوع القادم" : "Next week"}</span>
+              <span>{ar ? "التالي" : "Next"}</span><NextIcon size={18}/>
             </button>
           </nav>
         </section>
         <AnimatePresence mode="wait" initial={false}>
           {selectedTimeline && <motion.section key={selectedTimeline.iso} className="ts-focus-timeline-packages" aria-labelledby={`packages-${selectedTimeline.iso}`}
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-            <header><h2 id={`packages-${selectedTimeline.iso}`}>{lang === "ar" ? `رحلات ${selectedTimeline.part.weekday} ${selectedTimeline.part.day} ${selectedTimeline.part.monthName}` : `${selectedTimeline.part.weekday} ${selectedTimeline.part.day} trips`}</h2><span>{selectedTrips.length} {lang === "ar" ? (selectedTrips.length === 1 ? "رحلة متاحة" : "رحلات متاحة") : "available"}</span></header>
+            <header><h2 id={`packages-${selectedTimeline.iso}`}>{ar ? `رحلات ${selectedTimeline.part.weekday} ${selectedTimeline.part.day} ${selectedTimeline.part.monthName}` : `${selectedTimeline.part.weekday} ${selectedTimeline.part.day} trips`}</h2><span>{ar ? (selectedTrips.length === 1 ? "رحلة واحدة" : selectedTrips.length === 2 ? "رحلتان" : `${selectedTrips.length} رحلات`) : `${selectedTrips.length} available`}</span></header>
             <div className="ts-focus-package-list">
               {selectedTrips.map(({ pkg, next }) => {
                 const stop = departureCity ? next.departureStops?.find(s => s.city.trim() === departureCity.trim()) : next.departureStops?.[0];
                 const countdown = launchCountdown(next, now, lang);
                 const departure = tripScheduleLabel(next.departureDate, stop?.time ?? next.departureTime, lang, calendar);
                 const returnTrip = tripScheduleLabel(next.returnDate, next.returnTime, lang, calendar);
-                const packageName = pkg.name || (lang === "ar" ? `باقة ${pkg.destination} · ${pkg.days} أيام` : `${cityLabel(pkg.destination, lang)} · ${pkg.days} days`);
-                return <button key={next.id} type="button" className="ts-focus-trip-card" onClick={() => onOpen(pkg, next)}>
-                  <img src={pkgCover(pkg)} alt="" loading="lazy" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/>
-                  {countdown && <span className="ts-focus-trip-countdown" aria-label={countdown.label}><CalendarDays size={12}/><span aria-hidden>{countdown.label}</span><span className="ts-focus-trip-countdown-compact" aria-hidden>{countdown.compact}</span></span>}
-                  <span className="ts-focus-trip-info" aria-label={`${packageName}. ${lang === "ar" ? `الذهاب: ${departure}. العودة: ${returnTrip}.` : `Departure: ${departure}. Return: ${returnTrip}.`}`}>
-                    <span className="ts-focus-trip-copy">
-                      <strong>{packageName}</strong>
-                      <small className="ts-focus-trip-branch"><MapPin size={14}/><span className="ts-focus-trip-depart">{departureBranchLabel(next, departureCity, lang)}</span></small>
-                      <span className="ts-focus-trip-schedule">
-                        <small><b>{lang === "ar" ? "الذهاب:" : "Departure:"}</b><time>{departure}</time></small>
-                        <small><b>{lang === "ar" ? "العودة:" : "Return:"}</b><time>{returnTrip}</time></small>
+                const packageName = pkg.name || (ar ? `باقة ${pkg.destination} · ${pkg.days} أيام` : `${cityLabel(pkg.destination, lang)} · ${pkg.days} days`);
+                const branch = departureBranchLabel(next, departureCity, lang);
+                /* العدد يظهر حين يقترب الامتلاء فقط — القاعدة نفسها في صفحة الرحلة. */
+                const seats = availSeats(next);
+                return <button key={next.id} type="button" className="ts-focus-trip-card" onClick={() => onOpen(pkg, next)}
+                  aria-label={`${packageName}. ${ar ? `الذهاب: ${departure}. العودة: ${returnTrip}. تبدأ من ${money(priceOf(pkg))} ريال. عرض التفاصيل` : `Departure: ${departure}. Return: ${returnTrip}. From ${money(priceOf(pkg))} SAR. View details`}`}>
+                  <span className="ts-focus-trip-photo">
+                    <img src={pkgCover(pkg)} alt="" width={640} height={360} loading="lazy" decoding="async" onError={e => { e.currentTarget.src = "/gallery/haram-drone.jpg"; }}/>
+                    {countdown && <span className="ts-focus-trip-countdown"><Clock3 size={14}/>{countdown.label}</span>}
+                  </span>
+                  <span className="ts-focus-trip-info">
+                    <strong>{packageName}</strong>
+                    <span className="ts-focus-trip-schedule">
+                      <span><b>{ar ? "الذهاب" : "Departs"}</b><time>{departure}</time></span>
+                      <span><b>{ar ? "العودة" : "Returns"}</b><time>{returnTrip}</time></span>
+                    </span>
+                    {(branch || seats <= 6) && <span className="ts-focus-trip-meta">
+                      {branch && <span className="ts-focus-trip-branch"><MapPin size={16}/><span className="ts-focus-trip-depart">{branch}</span></span>}
+                      {seats <= 6 && <span className="ts-focus-trip-seats">{availabilityLabel(seats, lang)}</span>}
+                    </span>}
+                    <span className="ts-focus-trip-foot">
+                      <span className="ts-focus-trip-price">
+                        <small>{ar ? "تبدأ من" : "From"}</small>
+                        <span><b>{money(priceOf(pkg))}</b>{ar ? "ر.س" : "SAR"}</span>
                       </span>
-                      <em><Tag size={14}/>{lang === "ar" ? `تبدأ من ${money(priceOf(pkg))} ر.س` : `From ${money(priceOf(pkg))} SAR`}</em>
+                      <span className="ts-focus-trip-go">{ar ? "عرض التفاصيل" : "View details"}<i><ChevronLeft size={20} style={forwardChevron(lang)}/></i></span>
                     </span>
                   </span>
                 </button>;
@@ -455,7 +511,16 @@ function FocusTrips({ packages, tripsOf, priceOf, destination, departureCity = "
             </div>
           </motion.section>}
         </AnimatePresence>
-        <button type="button" className="ts-focus-all-trips" onClick={onBack}>{lang === "ar" ? "عرض جميع الرحلات" : "View all journeys"}<ChevronLeft size={18} style={flipRTL(lang === "ar" ? "rtl" : "ltr")}/></button>
+        {!selectedTimeline && <div className="ts-focus-empty" key={weekStart}>
+          <span className="ts-focus-empty-icon"><CalendarX2 size={26}/></span>
+          <strong>{ar ? "لا رحلات في هذا الأسبوع" : "No trips this week"}</strong>
+          <small>{nextTripDate
+            ? (ar ? `أقرب رحلة ${fmtDayDate(nextTripDate)}.` : "The next departure is in a later week.")
+            : (ar ? "لا مواعيد بعد هذا الأسبوع حالياً — نضيف المواعيد أولاً بأول." : "No later dates yet — new dates are added regularly.")}</small>
+          <button type="button" className="ts-focus-empty-action is-quiet" onClick={jumpToNextTrip}>{nextTripDate ? (ar ? "الانتقال إلى أقرب رحلة" : "Go to next departure") : (ar ? "العودة إلى هذا الأسبوع" : "Back to this week")}</button>
+        </div>}
+        {/* كان اسمه «عرض جميع الرحلات» وهو يعيد إلى اختيار الوجهة؛ الاسم الآن يقول ما يفعله. */}
+        <button type="button" className="ts-focus-all-trips" onClick={onBack}>{ar ? "تغيير الوجهة" : "Change destination"}</button>
         </>}
         </>}
       </div>

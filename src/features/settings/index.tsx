@@ -7,14 +7,15 @@
    نموذج بمسوّدة وزرّ حفظ لا حفظٌ تلقائي مع كل حرف: هذه قيم تسري على
    كل الفواتير والتذاكر ورقم الدعم — «١٠١٠٥٣٧٣٩» نصف مكتوبٍ لا يُحفظ. */
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
 import { AlertTriangle, Check, RotateCcw, Save, ShieldCheck, Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { B } from "@/lib/theme";
+import { B, ELEV, TONE } from "@/lib/theme";
 import { PageHeader } from "@/components/PageHeader";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
-import { Spinner } from "@/components/Spinner";
+import { AppSelect } from "@/components/AppSelect";
+import { fmtDayDate, fmtTime } from "@/lib/dates";
+import { Button, IconButton, Note } from "@/components/ui";
 import { useRole } from "@/lib/useRole";
 import { isSupabaseEnabled } from "@/supabase/client";
 import {
@@ -34,16 +35,30 @@ import { ArchivePanel } from "@/features/audit/ArchivePanel";
    sla.ts، فالفهرس هنا هو القيمة المخزَّنة بلا ترجمة بينهما. */
 const WEEK = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
-const inp = "w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none";
-const ist = { borderColor: B.border, fontFamily: "inherit", color: B.black } as const;
-const ltr = { direction: "ltr" as const, textAlign: "right" as const };
+const inp = "ui-input";
+/* حقول الأرقام والروابط تُكتب يساراً-يميناً وتُحاذى يميناً مع بقية النموذج العربي. */
+const ltr = { textAlign: "right" as const };
 
-function Card({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+/* أقسام الصفحة — العنوان والمعرّف معاً، فيُبنى منهما فهرس الجانب. */
+const SECTIONS = [
+  ["set-org", "بيانات المؤسسة"],
+  ["set-contact", "التواصل"],
+  ["set-bank", "التحويل البنكي"],
+  ["set-hours", "ساعات العمل ووعد الردّ"],
+  ["set-booking", "افتراضات الحجز"],
+  ["set-features", "مكتبة مرافق الفندق"],
+  ["set-archive", "الأرشيف"],
+  ["set-audit", "سجل التدقيق"],
+] as const;
+
+function Card({ id, title, note, children }: { id?: string; title: string; note?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl p-5 md:p-6" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-      <h2 className="font-extrabold text-base" style={{ color: B.primaryDeep, margin: 0 }}>{title}</h2>
-      {note && <p className="text-xs mt-1 mb-4 leading-relaxed" style={{ color: B.muted }}>{note}</p>}
-      <div className={note ? "" : "mt-4"}>{children}</div>
+    <section id={id} className="ui-card" style={{ scrollMarginTop: 96 }}>
+      <div className="px-5 md:px-6 pt-5">
+        <h2 className="ui-card-title" style={{ fontSize: 16 }}>{title}</h2>
+        {note && <p className="ui-card-sub" style={{ marginTop: 4, lineHeight: 1.8, maxWidth: 640 }}>{note}</p>}
+      </div>
+      <div className="px-5 md:px-6 pb-5 md:pb-6 pt-4">{children}</div>
     </section>
   );
 }
@@ -51,12 +66,8 @@ function Card({ title, note, children }: { title: string; note?: string; childre
 /** ساعة يُختار منها 0–23 — النافذة أوقاتٌ صحيحة لا نصّ حرّ. */
 function HourSelect({ value, onChange, id }: { value: number; onChange: (n: number) => void; id?: string }) {
   return (
-    <select id={id} value={value} onChange={e => onChange(Number(e.target.value))}
-      className={inp} style={{ ...ist, cursor: "pointer" }}>
-      {Array.from({ length: 24 }, (_, h) => (
-        <option key={h} value={h}>{`${String(h).padStart(2, "0")}:00`}</option>
-      ))}
-    </select>
+    <AppSelect id={id} value={String(value)} onChange={v => onChange(Number(v))}
+      options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` }))} />
   );
 }
 
@@ -70,13 +81,12 @@ function NumField({ value, onChange, min = 1, max = 999, id }: {
         const n = Number(raw);
         onChange(Number.isFinite(n) ? Math.min(max, Math.max(min, n || min)) : min);
       }}
-      className={inp} style={{ ...ist, ...ltr }} />
+      className={inp} dir="ltr" style={ltr} />
   );
 }
 
 export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
   const { isAdmin } = useRole();
-  const [search, setSearch] = useState("");
   const [saved, setSaved] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [form, setForm] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -217,11 +227,12 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
       const day = Math.floor((Date.now() + RIYADH) / DAY) + dayOffset;
       return day * DAY + hour * 3_600_000 + min * 60_000 - RIYADH;
     };
-    const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+    /* الإزاحة تجعل نصّ ISO يحمل ساعة الرياض؛ والصياغة من lib/dates كبقية
+       اللوحة — «الخميس 8 أكتوبر · 8:00 ص» لا «2026-10-08 · 08:00» التي
+       ينقلب ترتيبها وسط السطر العربي. */
     const fmt = (utc: number) => {
-      const d = new Date(utc + RIYADH);
-      const wd = DAYS_AR[(((Math.floor((utc + RIYADH) / DAY) + 4) % 7) + 7) % 7];
-      return `${wd} ${d.toISOString().slice(0, 10)} · ${d.toISOString().slice(11, 16)}`;
+      const iso = new Date(utc + RIYADH).toISOString();
+      return `${fmtDayDate(iso.slice(0, 10))} · ${fmtTime(iso.slice(11, 16))}`;
     };
 
     /* ثلاث حالاتٍ هي ما سأل عنه الفريق: داخل الدوام، وبعد الإغلاق،
@@ -253,247 +264,241 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
 
   if (loading) return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{ background: B.bg }}>
-      <PageHeader title="الإعدادات" crumb="إعدادات النظام" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen} />
-      <div className="flex-1 flex items-center justify-center"><Spinner size={22} /></div>
+      <PageHeader title="الإعدادات" crumb="إعدادات النظام" search="" onSearch={() => {}} hideSearch onMenuOpen={onMenuOpen} />
+      <div role="status" aria-label="جارٍ تحميل الإعدادات" className="px-4 md:px-8 pt-1 flex flex-col gap-4" style={{ maxWidth: 900 }}>
+        {[180, 120, 160].map((h, i) => (
+          <div key={i} className="ui-card p-6 flex flex-col gap-3">
+            <span className="sk-bar" style={{ height: 14, width: 160 }} />
+            <span className="sk-bar" style={{ height: 10, width: "55%" }} />
+            <span className="sk-bar" style={{ height: h - 80, marginTop: 8 }} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{ background: B.bg }}>
-      <PageHeader title="الإعدادات" crumb="إعدادات النظام" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen} />
+      <PageHeader title="الإعدادات" crumb="إعدادات النظام" search="" onSearch={() => {}} hideSearch onMenuOpen={onMenuOpen} />
 
-      <main className="flex-1 px-4 md:px-8 pb-32 pt-5 flex flex-col gap-4" style={{ maxWidth: 900 }}>
+      <div className="flex-1 flex items-start gap-8 px-4 md:px-8 pt-1">
+      <main className="flex-1 min-w-0 pb-10 flex flex-col gap-4" style={{ maxWidth: 900 }}>
         {/* القراءة للجميع والكتابة للمدير — يُقال صريحاً بدل حقولٍ
             تُملأ ثم يردّها الخادم. */}
-        {!isAdmin && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-            style={{ background: "#FBF3D6", border: "1px solid #E8D9A8", color: "#6b5306" }}>
-            <ShieldCheck size={16} style={{ flexShrink: 0, color: "#8A6A08" }} />
-            <span className="text-sm">هذه الإعدادات للعرض — تعديلها لمدير النظام.</span>
-          </div>
-        )}
-        {!isSupabaseEnabled && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-            style={{ background: "#EAF1FE", border: "1px solid #C9DBFB", color: "#1E52C7" }}>
-            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-            <span className="text-sm">وضع التجربة: بلا قاعدة بيانات — التعديل لا يُحفظ بعد تحديث الصفحة.</span>
-          </div>
-        )}
+        {!isAdmin && <Note tone="warn" icon={<ShieldCheck size={16} />}>هذه الإعدادات للعرض — تعديلها لمدير النظام.</Note>}
+        {!isSupabaseEnabled && <Note tone="info" icon={<AlertTriangle size={16} />}>وضع التجربة: بلا قاعدة بيانات — التعديل لا يُحفظ بعد تحديث الصفحة.</Note>}
 
         <fieldset disabled={!isAdmin} style={{ border: "none", padding: 0, margin: 0 }} className="flex flex-col gap-4">
-          <Card title="بيانات المؤسسة"
+          <Card id="set-org" title="بيانات المؤسسة"
             note="تظهر في الفاتورة والتذكرة وصفحة الدفع وإشعار الإلغاء — أربعة مواضع كانت تحمل نسخاً منفصلة من نفس الرقم.">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="اسم المؤسسة">
+              <div><Field label="اسم المؤسسة">
                 <input value={form.pub.orgName} onChange={e => pub("orgName")(e.target.value)}
-                  className={inp} style={ist} />
-              </Field>
-              <Field label="السجل التجاري">
+                  className={inp} />
+              </Field></div>
+              <div><Field label="السجل التجاري">
                 <NumericInput value={form.pub.crNumber}
                   onValueChange={v => pub("crNumber")(v.slice(0, 12))}
-                  className={inp} style={{ ...ist, ...ltr }} />
-              </Field>
-              <Field label="النطاق"
+                  className={inp} dir="ltr" style={ltr} />
+              </Field></div>
+              <div><Field label="النطاق"
                 error={badDomain ? "نطاق غير صحيح — مثال: tasaheel.sa" : undefined}>
                 <input value={form.pub.domain} onChange={e => pub("domain")(e.target.value.trim())}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badDomain ? "#BE2626" : B.border }} />
-              </Field>
-              <Field label="الرقم الضريبي"
+                  className={inp} aria-invalid={badDomain} dir="ltr" style={ltr} />
+              </Field></div>
+              <div><Field label="الرقم الضريبي"
                 hint={form.pub.vatNumber ? undefined : "اتركه فارغاً إن لم تكن المنشأة مسجّلة — تُصدَر الفاتورة أوّلية غير ضريبية"}
                 error={badVat ? "الرقم الضريبي ١٥ رقماً يبدأ وينتهي بـ3" : undefined}>
                 <NumericInput value={form.pub.vatNumber} placeholder="3XXXXXXXXXXXX3"
                   onValueChange={v => pub("vatNumber")(v.slice(0, 15))}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badVat ? "#BE2626" : B.border }} />
-              </Field>
+                  className={inp} aria-invalid={badVat} dir="ltr" style={ltr} />
+              </Field></div>
             </div>
 
             {/* العنوان: مصدر المدينة على كل مستند. كانت «الرياض» مكتوبةً
                 في ترويسة الفاتورة والفرع في الدمّام. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-              <Field label="المدينة"
+              <div><Field label="المدينة"
                 hint="تُطبع على الفاتورة والتذكرة">
                 <input value={form.pub.address.city} placeholder="الدمام"
                   onChange={e => addr("city")(e.target.value)}
-                  className={inp} style={ist} />
-              </Field>
-              <Field label="العنوان">
+                  className={inp} />
+              </Field></div>
+              <div><Field label="العنوان">
                 <input value={form.pub.address.line} placeholder="طريق الملك فهد، حي الشاطئ"
                   onChange={e => addr("line")(e.target.value)}
-                  className={inp} style={ist} />
-              </Field>
-              <Field label="رابط الموقع على الخرائط"
+                  className={inp} />
+              </Field></div>
+              <div><Field label="رابط الموقع على الخرائط"
                 error={badMap ? mapVerdict.reason : undefined}>
                 <input value={form.pub.address.mapUrl} placeholder="https://maps.app.goo.gl/…"
                   onChange={e => addr("mapUrl")(e.target.value.trim())}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badMap ? "#BE2626" : B.border }} />
-              </Field>
+                  className={inp} aria-invalid={badMap} dir="ltr" style={ltr} />
+              </Field></div>
             </div>
           </Card>
 
-          <Card title="التواصل"
+          <Card id="set-contact" title="التواصل"
             note="رقم الواتساب هو ما يفتحه الزرّ العائم في كل شاشات المستفيد.">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* يُخزَّن E.164 لا كما كُتب: الرقم مفتاحُ رابط واتساب وقوالب
                   الرسائل، و«0501234567» و«+966501234567» و«966501234567»
                   ثلاث صيغ لرقمٍ واحد. التطبيع عند الحفظ لا عند العرض. */}
-              <Field label="واتساب خدمة العملاء"
+              <div><Field label="واتساب خدمة العملاء"
                 hint={phoneOk ? `يُحفظ ${toE164(form.pub.supportPhone)}` : undefined}
                 error={badPhone ? (phoneError(form.pub.supportPhone, { required: true, mobileOnly: true }) ?? undefined) : undefined}>
                 <input value={form.pub.supportPhone} inputMode="tel" placeholder="05xxxxxxxx"
                   onChange={e => pub("supportPhone")(e.target.value.replace(/[^\d+ ]/g, "").slice(0, 18))}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badPhone ? "#BE2626" : B.border }} />
-              </Field>
-              <Field label="بريد الدعم الفني"
+                  className={inp} aria-invalid={badPhone} dir="ltr" style={ltr} />
+              </Field></div>
+              <div><Field label="بريد الدعم الفني"
                 error={badEmail ? "بريد غير صحيح." : undefined}>
                 <input value={form.internal.supportEmail} type="email" inputMode="email"
                   onChange={e => inte("supportEmail")(e.target.value.trim())}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badEmail ? "#BE2626" : B.border }} />
-              </Field>
+                  className={inp} aria-invalid={badEmail} dir="ltr" style={ltr} />
+              </Field></div>
             </div>
           </Card>
 
-          <Card title="التحويل البنكي"
+          <Card id="set-bank" title="التحويل البنكي"
             note="تظهر هذه البيانات للعميل في رابط التحويل. لا تُعدّ العملية مدفوعةً إلا بعد أن يراجع الموظف الإيصال ويسجل مرجع التحويل.">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="اسم البنك">
+              <div><Field label="اسم البنك">
                 <input value={form.pub.bankTransfer.bankName} placeholder="مثال: مصرف الراجحي"
-                  onChange={e => bank("bankName")(e.target.value)} className={inp} style={ist} />
-              </Field>
-              <Field label="اسم صاحب الحساب">
+                  onChange={e => bank("bankName")(e.target.value)} className={inp} />
+              </Field></div>
+              <div><Field label="اسم صاحب الحساب">
                 <input value={form.pub.bankTransfer.accountName} placeholder={form.pub.orgName || "اسم المؤسسة"}
-                  onChange={e => bank("accountName")(e.target.value)} className={inp} style={ist} />
-              </Field>
-              <Field label="رقم الآيبان" hint="راجعه من البنك قبل الحفظ.">
+                  onChange={e => bank("accountName")(e.target.value)} className={inp} />
+              </Field></div>
+              <div><Field label="رقم الآيبان" hint="راجعه من البنك قبل الحفظ.">
                 <input value={form.pub.bankTransfer.iban} placeholder="SA00 0000 0000 0000 0000 0000"
                   onChange={e => bank("iban")(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 34))}
-                  className={inp} style={{ ...ist, ...ltr }} />
-              </Field>
-              <Field label="تعليمات إضافية">
+                  className={inp} dir="ltr" style={ltr} />
+              </Field></div>
+              <div><Field label="تعليمات إضافية">
                 <input value={form.pub.bankTransfer.instructions} placeholder="اكتب رقم الطلب في مرجع التحويل"
-                  onChange={e => bank("instructions")(e.target.value)} className={inp} style={ist} />
-              </Field>
+                  onChange={e => bank("instructions")(e.target.value)} className={inp} />
+              </Field></div>
             </div>
           </Card>
 
-          <Card title="ساعات العمل ووعد الردّ"
+          <Card id="set-hours" title="ساعات العمل ووعد الردّ"
             note="وعد الردّ يُحسب بساعات العمل لا بالساعة الجدارية: طلبٌ يصل بعد الإغلاق يبدأ عدّاده من فتح اليوم التالي. التوقيت توقيت الرياض.">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="الفتح">
+              <div><Field label="الفتح">
                 <HourSelect value={form.pub.openHour} onChange={pub("openHour")} />
-              </Field>
-              <Field label="الإغلاق"
+              </Field></div>
+              <div><Field label="الإغلاق"
                 error={badWindow ? "الإغلاق يجب أن يكون بعد الفتح." : undefined}>
                 <HourSelect value={form.pub.closeHour} onChange={pub("closeHour")} />
-              </Field>
-              <Field label="وعد الردّ (ساعات عمل)">
+              </Field></div>
+              <div><Field label="وعد الردّ (ساعات عمل)">
                 <NumField value={form.pub.slaHours} onChange={pub("slaHours")} min={1} max={72} />
-              </Field>
+              </Field></div>
             </div>
 
             {/* أيام العمل — نافذةُ ساعاتٍ بلا أيام كانت تجعل العدّاد يمشي
                 يوم الجمعة والمكتب مغلق. */}
             <div className="mt-4">
-              <label className="block text-xs font-bold mb-2" style={{ color: B.text3 }}>أيام العمل</label>
-              <div className="flex flex-wrap gap-2">
+              <span className="ui-label">أيام العمل</span>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="أيام العمل">
                 {WEEK.map((d, i) => {
                   const on = form.pub.workDays.includes(i);
                   return (
-                    <button key={i} type="button" aria-pressed={on}
+                    <button key={i} type="button" aria-pressed={on} className="ui-chip"
                       onClick={() => pub("workDays")(
                         on ? form.pub.workDays.filter(x => x !== i)
-                           : [...form.pub.workDays, i].sort((a, b) => a - b))}
-                      className="px-3 py-2 rounded-xl text-sm font-bold"
-                      style={{
-                        border: `1px solid ${on ? B.gold : B.border}`,
-                        background: on ? B.gold : "#fff",
-                        color: on ? B.black : B.text2,
-                        cursor: isAdmin ? "pointer" : "not-allowed",
-                      }}>{d}</button>
+                           : [...form.pub.workDays, i].sort((a, b) => a - b))}>{d}</button>
                   );
                 })}
               </div>
-              {noWorkDays && (
-                <p className="text-xs font-bold mt-1" style={{ color: "#BE2626" }}>
-                  اختر يوم عمل واحداً على الأقل — وإلا لا يمشي وعد الردّ أبداً.
-                </p>
-              )}
+              {noWorkDays && <p role="alert" className="ui-error">اختر يوم عمل واحداً على الأقل — وإلا لا يمشي وعد الردّ أبداً.</p>}
             </div>
 
             {/* الإجازات والاستثناءات */}
             <div className="mt-4">
-              <Field label="الإجازات الرسمية والاستثناءات"
+              <div><Field label="الإجازات الرسمية والاستثناءات"
                 hint="تواريخ بصيغة YYYY-MM-DD مفصولة بفاصلة — لا يُحتسب فيها وعد الردّ"
                 error={badHolidays ? "تاريخ غير صحيح — الصيغة YYYY-MM-DD" : undefined}>
                 <input value={holidayText} placeholder="2026-09-23, 2026-04-10"
                   onChange={e => setHolidayText(e.target.value)}
-                  className={inp} style={{ ...ist, ...ltr, borderColor: badHolidays ? "#BE2626" : B.border }} />
-              </Field>
+                  className={inp} aria-invalid={badHolidays} dir="ltr" style={ltr} />
+              </Field></div>
             </div>
 
             {/* ── معاينة وعد الردّ ──
                 الإعداد رقمٌ مجرّد حتى يُرى أثره. المعاينة تُجيب السؤال
                 الذي طرحه الفريق: «متى ينتهي الوعد لطلبٍ يصل قبل الإغلاق
                 وبعده؟» — بالحساب نفسه الذي يراه العميل لا بشرحٍ نصّي. */}
-            <div className="mt-4 rounded-xl px-4 py-3" style={{ background: B.cream, border: "1px solid #EDE4CF" }}>
-              <div className="text-xs font-extrabold mb-2" style={{ color: B.black }}>معاينة: متى ينتهي الوعد؟</div>
-              <div className="flex flex-col gap-1.5">
+            <div className="mt-5 px-4 py-3.5" style={{ borderRadius: 12, background: B.fill }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: B.black, marginBottom: 8 }}>معاينة: متى ينتهي الوعد؟</div>
+              <div className="flex flex-col gap-2">
                 {slaPreview.map(r => (
-                  <div key={r.label} className="flex items-baseline justify-between gap-3 text-xs">
+                  <div key={r.label} className="flex items-baseline justify-between gap-3 flex-wrap" style={{ fontSize: 13 }}>
                     <span style={{ color: B.text2 }}>{r.label}</span>
-                    <span className="font-bold" style={{ color: r.late ? "#8A6A08" : B.black, fontFamily: "var(--font-app)" }}>{r.due}</span>
+                    <span style={{ fontWeight: 600, color: r.late ? TONE.warn.fg : B.black }}>{r.due}</span>
                   </div>
                 ))}
+                {!slaPreview.length && <span style={{ fontSize: 13, color: B.muted }}>صحّح الحقول المعلَّمة لتظهر المعاينة.</span>}
               </div>
             </div>
           </Card>
 
-          <Card title="افتراضات الحجز"
+          <Card id="set-booking" title="افتراضات الحجز"
             note="تُطبَّق على الرحلات الجديدة؛ الرحلة القائمة تحتفظ بإعداداتها الخاصة.">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="مهلة سداد رابط الدفع (ساعة)">
+              <div><Field label="مهلة سداد رابط الدفع (ساعة)">
                 <NumField value={form.internal.paymentDeadlineHours} onChange={inte("paymentDeadlineHours")} min={1} max={168} />
-              </Field>
-              <Field label="أقصى معتمرين في الطلب">
+              </Field></div>
+              <div><Field label="أقصى معتمرين في الطلب">
                 <NumField value={form.internal.maxPilgrimsPerBooking} onChange={inte("maxPilgrimsPerBooking")} min={1} max={60} />
-              </Field>
-              <Field label="تنبيه قبل الانطلاق (ساعة)">
+              </Field></div>
+              <div><Field label="تنبيه قبل الانطلاق (ساعة)">
                 <NumField value={form.internal.departureAlertHours} onChange={inte("departureAlertHours")} min={1} max={168} />
-              </Field>
+              </Field></div>
             </div>
           </Card>
 
-          <Card title="مكتبة مرافق الفندق"
+          <Card id="set-features" title="مكتبة مرافق الفندق"
             note="هذه القائمة هي المصدر الوحيد لرموز المرافق في نموذج الفندق. اختر اسماً واضحاً مثل «مطعم»؛ لا يحتاج الموظف إلى لصق رموز Emoji قد تختلف بين الأجهزة.">
             <div className="flex flex-col gap-2.5">
               {form.internal.hotelFeatureOptions.map((option,index)=>(
                 <div key={option.id} className="flex items-center gap-2">
-                  <select value={option.id} onChange={e=>{
-                    const next=e.target.value as HotelFeatureIconKey;
-                    /* منع تكرار الرمز: كل اسم مرتبط برمز عرض واحد واضح. */
-                    if(form.internal.hotelFeatureOptions.some((row,i)=>i!==index&&row.id===next)) return;
-                    updateHotelFeatureOption(index,{id:next,label:option.label||HOTEL_FEATURE_ICON_LABELS[next]});
-                  }} className={inp} style={{...ist,width:170,cursor:"pointer"}}>
-                    {HOTEL_FEATURE_ICON_KEYS.map(key=><option key={key} value={key}>{HOTEL_FEATURE_ICON_LABELS[key]}</option>)}
-                  </select>
+                  <div style={{ width: 180, flexShrink: 0 }}>
+                    <AppSelect ariaLabel="رمز المرفق" value={option.id} onChange={v => {
+                      const next = v as HotelFeatureIconKey;
+                      /* منع تكرار الرمز: كل اسم مرتبط برمز عرض واحد واضح. */
+                      if(form.internal.hotelFeatureOptions.some((row,i)=>i!==index&&row.id===next)) return;
+                      updateHotelFeatureOption(index,{id:next,label:option.label||HOTEL_FEATURE_ICON_LABELS[next]});
+                    }} options={HOTEL_FEATURE_ICON_KEYS.map(key=>({value:key,label:HOTEL_FEATURE_ICON_LABELS[key]}))}/>
+                  </div>
                   <input value={option.label} onChange={e=>updateHotelFeatureOption(index,{label:e.target.value})}
-                    placeholder="الاسم الظاهر" className={inp} style={ist}/>
-                  <button type="button" aria-label={`حذف ${option.label}`} title="حذف من مكتبة المرافق"
-                    disabled={form.internal.hotelFeatureOptions.length===1} onClick={()=>removeHotelFeatureOption(option.id)}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626",opacity:form.internal.hotelFeatureOptions.length===1 ? .45 : 1,cursor:form.internal.hotelFeatureOptions.length===1?"not-allowed":"pointer"}}><X size={15}/></button>
+                    placeholder="الاسم الظاهر" aria-label="الاسم الظاهر" className={inp}/>
+                  <IconButton variant="outline" className="ui-iconbtn--danger" label={`حذف ${option.label} من مكتبة المرافق`}
+                    disabled={form.internal.hotelFeatureOptions.length===1} onClick={()=>removeHotelFeatureOption(option.id)}><X size={16}/></IconButton>
                 </div>
               ))}
-              <button type="button" onClick={addHotelFeatureOption} disabled={form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length}
-                className="self-start flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08",cursor:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length?"not-allowed":"pointer",opacity:form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length ? .55 : 1}}><Plus size={13}/>إضافة مرفق معتمد</button>
+              <Button size="sm" variant="secondary" className="self-start" icon={<Plus size={14}/>} onClick={addHotelFeatureOption}
+                disabled={form.internal.hotelFeatureOptions.length>=HOTEL_FEATURE_ICON_KEYS.length}>إضافة مرفق معتمد</Button>
             </div>
           </Card>
         </fieldset>
 
         {/* السجلّ والأرشيف للقراءة والإجراء المباشر، فهما خارج fieldset الكتابة. */}
-        <ArchivePanel />
-        <AuditLog />
+        <div id="set-archive" style={{ scrollMarginTop: 96 }}><ArchivePanel /></div>
+        <div id="set-audit" style={{ scrollMarginTop: 96 }}><AuditLog /></div>
       </main>
+
+      {/* فهرس الأقسام — ثمانية أقسامٍ في عمودٍ واحد طويل؛ الفهرس يختصر التمرير. */}
+      <nav aria-label="أقسام الإعدادات" className="hidden xl:flex flex-col gap-0.5 flex-shrink-0 sticky" style={{ top: 96, width: 200 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: B.muted, padding: "0 12px 6px" }}>في هذه الصفحة</span>
+        {SECTIONS.map(([id, title]) => (
+          <button key={id} type="button" className="ui-btn ui-btn--ghost ui-btn--sm" style={{ justifyContent: "flex-start", fontWeight: 500 }}
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{title}</button>
+        ))}
+      </nav>
+      </div>
 
       {/* ── شريط الحفظ ──
           كان لا يظهر إلا بعد أول تعديل، فالفريق فتح الصفحة ولم يجد زرّ
@@ -502,42 +507,28 @@ export function SettingsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
 
           الآن مثبَّت دائماً لمدير النظام، ويقول حالته: «كل التغييرات
           محفوظة» ساكناً، أو «لديك تغييرات لم تُحفظ» بارزاً. والزرّ يُعطَّل
-          حين لا شيء يُحفَظ — حاضرٌ ليُعرَف مكانه، لا ليُضغط بلا أثر. */}
+          حين لا شيء يُحفَظ — حاضرٌ ليُعرَف مكانه، لا ليُضغط بلا أثر.
+
+          لاصقٌ بأسفل عمود الصفحة (sticky) لا مثبَّتٌ على الشاشة بإزاحةٍ تساوي
+          عرض القائمة الجانبية: يتبع عموده أياً كان عرضها. */}
       {isAdmin && (
-        <div
-          className="fixed bottom-0 inset-x-0 md:right-64 z-40 flex items-center justify-between gap-3 px-4 md:px-8 py-3"
+        <div className="sticky bottom-0 z-30 flex items-center justify-between gap-3 flex-wrap px-4 md:px-8 py-3"
           style={{
-            background: "#fff",
-            borderTop: `1px solid ${dirty ? (blocked ? "#F3C9C9" : B.gold) : B.border}`,
-            boxShadow: dirty ? "0 -6px 24px -12px rgba(0,0,0,.2)" : "none",
+            background: dirty ? B.ink : "rgba(255,255,255,.92)", backdropFilter: "blur(8px)",
+            borderTop: `1px solid ${dirty ? B.ink : B.border}`,
+            boxShadow: dirty ? ELEV[3] : "none",
+            transition: "background-color .2s ease",
           }}>
-          <span className="text-sm font-bold flex items-center gap-2"
-            style={{ color: blocked ? "#BE2626" : dirty ? B.text2 : B.muted }}>
-            {!dirty && <Check size={14} style={{ color: "#1E7A44" }} />}
+          <span role="status" className="flex items-center gap-2" style={{ fontSize: 14, fontWeight: 500, color: blocked ? (dirty ? "#F1B4B4" : TONE.danger.fg) : dirty ? B.onInk : B.muted }}>
+            {blocked ? <AlertTriangle size={15} /> : !dirty && <Check size={15} style={{ color: TONE.success.fg }} />}
             {blocked ? "صحّح الحقول المعلَّمة قبل الحفظ"
               : dirty ? "لديك تغييرات لم تُحفظ"
               : "كل التغييرات محفوظة"}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={() => setForm(saved)} disabled={busy || !dirty}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold"
-              style={{
-                background: "#fff", border: `1px solid ${B.border}`,
-                color: dirty ? B.text2 : B.muted,
-                cursor: dirty && !busy ? "pointer" : "not-allowed",
-              }}>
-              <RotateCcw size={14} />تراجع
-            </button>
-            <button onClick={submit} disabled={busy || blocked || !dirty}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold"
-              style={{
-                background: dirty && !blocked ? B.gold : "#EEECEA",
-                color: dirty && !blocked ? B.black : B.muted,
-                border: "none",
-                cursor: dirty && !blocked && !busy ? "pointer" : "not-allowed",
-              }}>
-              {busy ? <Spinner size={14} color={B.black} /> : <Save size={14} />}حفظ
-            </button>
+            <Button variant={dirty ? "dark" : "secondary"} icon={<RotateCcw size={15} />} disabled={busy || !dirty} onClick={() => setForm(saved)}
+              style={dirty ? { background: "rgba(244,239,228,.1)", borderColor: "rgba(244,239,228,.18)" } : undefined}>تراجع</Button>
+            <Button variant="primary" icon={<Save size={15} />} loading={busy} disabled={blocked || !dirty} onClick={submit}>حفظ</Button>
           </div>
         </div>
       )}

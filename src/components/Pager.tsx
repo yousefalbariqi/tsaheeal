@@ -73,32 +73,31 @@ export function Pager({ p, unit = "صف" }: { p: Paged<unknown>; unit?: string }
   if (p.pages <= 1) return null;
   const num = (n: number) => n.toLocaleString("en-US");
 
+  /* الصفحة الحالية سوداء لا ذهبية: «أنت هنا» في قائمة أرقام ليس فعلاً. */
   const btn = (on: boolean, active = false) => ({
-    minWidth: 34, height: 34, padding: "0 9px", borderRadius: 10,
-    fontSize: 13, fontWeight: 700, fontFamily: "var(--font-app)",
+    minWidth: 32, height: 32, padding: "0 8px", borderRadius: 10,
+    fontSize: 13, fontWeight: 600, fontFamily: "var(--font-app)",
     cursor: on ? ("pointer" as const) : ("not-allowed" as const),
-    background: active ? B.gold : "#fff",
-    border: `1px solid ${active ? B.gold : B.border}`,
-    color: active ? B.black : on ? B.text2 : B.muted,
+    background: active ? B.ink : "transparent",
+    border: "1px solid transparent",
+    color: active ? B.onInk : on ? B.text2 : B.placeholder,
     display: "flex", alignItems: "center", justifyContent: "center",
-    opacity: on ? 1 : 0.55,
   });
 
   return (
     /* شريط قائم بنفسه لا ذيلٌ للجدول: الجدول يظهر على المكتب والبطاقات
        على الجوال، وشريطٌ واحد بعدهما يخدم الاثنين بلا تكرار. */
     <nav aria-label="ترقيم الصفحات"
-      className="flex flex-wrap items-center justify-between gap-3 px-4 md:px-5 py-3 mt-3"
-      style={{ background: "#fff", border: `1px solid ${B.border}`, borderRadius: 16 }}>
-      <div className="text-xs" style={{ color: B.muted }}>
-        <span style={{ fontFamily: "var(--font-app)", color: B.text2, fontWeight: 700 }}>
+      className="flex flex-wrap items-center justify-between gap-3 px-1 pt-4">
+      <div className="text-sm" style={{ color: B.muted }}>
+        <span style={{ color: B.text3, fontWeight: 600 }}>
           {num(p.from)}–{num(p.to)}
         </span>
         {" من "}
-        <span style={{ fontFamily: "var(--font-app)", color: B.text2, fontWeight: 700 }}>{num(p.total)}</span>
+        <span style={{ color: B.text3, fontWeight: 600 }}>{num(p.total)}</span>
         {` ${unit}`}
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         {/* في RTL «السابق» يشير يميناً — السهم يتبع اتجاه القراءة. */}
         <button onClick={() => p.setPage(p.page - 1)} disabled={p.page <= 1}
           aria-label="الصفحة السابقة" style={btn(p.page > 1)}>

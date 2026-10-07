@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Heart, Share, Star, X, Minus, Plus, Play, Images, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { C, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
+import { C, G, T, R, SPACE, SHADOW, CTA_GRADIENT, FONT, LTR, MOTION, flipRTL, money, prefersReducedMotion } from "./tokens";
 import { useDialogA11y } from "@/lib/useDialogA11y";
 
 /* ── اتجاه الصفحة ─────────────────────────────────────────────── */
@@ -479,10 +479,10 @@ export function CTAButton({ children, onClick, disabled, variant = "green", full
      للمفعَّل وحده فيكسب التباين معنى — «صار جاهزاً» يُرى من طرف العين. */
   const off = !!disabled;
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button type="button" onClick={onClick} disabled={disabled} className="ts-cta"
       style={{
-        background: off ? C.fill : variant === "dark" ? C.greenDeep : CTA_GRADIENT,
-        color: off ? C.ink3 : C.white,
+        background: off ? C.fill : variant === "dark" ? G.deep : CTA_GRADIENT,
+        color: off ? C.ink3 : variant === "dark" ? "#F4EFE4" : C.ink,
         border: off ? `1px solid ${C.line}` : "none",
         borderRadius: R.pill, paddingInline: 28, height: 50, width: full ? "100%" : undefined,
         fontFamily: FONT.sans, fontSize: 16, fontWeight: 600,
@@ -1201,7 +1201,7 @@ export function Sheet({ open, onClose, title, children, footer, tall = false, wi
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className={`ts-sheet-overlay${center ? " ts-sheet-overlay--center" : ""}`}
-          style={{ background: "rgba(0,0,0,.45)" }}>
+          style={{ background: "rgba(20,17,14,.56)" }}>
           <motion.div
             ref={a11y.ref}
             {...a11y.panelProps}
@@ -1220,6 +1220,8 @@ export function Sheet({ open, onClose, title, children, footer, tall = false, wi
                  إطار تركيز: الإطار على عنصرٍ ليس هدف تنقّلٍ يُشوّش. */
               outline: "none",
             }}>
+            {/* مقبض الورقة — يقول «هذه ورقةٌ فوق الصفحة» على الجوال؛ يُخفى في النافذة الوسطى. */}
+            <span aria-hidden className="ts-sheet-grip" />
             <div className="ts-sheet-head" style={{ borderBottom: `1px solid ${C.line}` }}>
               {dismissible
                 ? <button onClick={onClose} aria-label="إغلاق" className="ts-sheet-close" style={{ color: C.ink }}>

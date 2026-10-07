@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { B } from "@/lib/theme";
-import { genderGlyph } from "@/lib/utils";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowUp, Check, Lock, Mars, Venus } from "lucide-react";
+import { B, TONE } from "@/lib/theme";
 import { buildBusRows } from "@/lib/buses";
 
 /* مخطط مقاعد الباص المشترك (كروكي) — يُستخدم في اختيار المقاعد بالإدارة وصفحة العميل.
@@ -12,6 +12,18 @@ import { buildBusRows } from "@/lib/buses";
    واحدة بـ١٤٧ مقعداً. والتبويب المفتوح أوّلاً هو باص أول مقعدٍ مختار، أو
    أول باصٍ فيه مكان — فالحجز يملأ الأول ثم ينتقل إلى الثاني. والأرقام
    المرسومة أرقام الباص (١…٤٩)، والمختار يُعاد بأرقام الرحلة كما هي. */
+
+/* ألوان حالات المقعد — مصدرها الواحد هنا، ويقرؤها من يكتب مفتاحاً أو
+   سطراً يشرح الكروكي (شاشة الطلب). الذكر من لون «المعلومة» في اللوحة،
+   والمحجوز بلا توزيع من المحايد. والأنثى والخصوصية لا مقابل لهما في
+   TONE فيُعرَّفان هنا بالدرجة نفسها من الهدوء: حشوةٌ باهتة وحدٌّ ونصّ.
+   واللون ليس الخبر وحده: كل مقعدٍ يحمل أيقونة حاله، فيُقرأ بلا تمييز ألوان. */
+export const SEAT_TONE = {
+  male:    TONE.info,
+  female:  { bg: "#FBEFF4", line: "#EBCBDA", fg: "#A3275F" },
+  privacy: { bg: "#F3EEFA", line: "#DCCFF0", fg: "#6A3FA0" },
+  taken:   TONE.neutral,
+} as const;
 
 /** ملاحظة موضع المقعد (شباك/ممر/أمامي). */
 export function seatNote(num: number, capacity: number): string {
@@ -25,6 +37,15 @@ export function seatNote(num: number, capacity: number): string {
   else if (idx === 0 || idx === row.length - 1) parts.push("جانب الشباك");
   return parts.join(" · ");
 }
+
+const SEAT = 44;
+/* الصنف يحمل ما لا يعرفه التنسيق المضمَّن: المرور والتركيز. والألوان
+   متغيّراتٌ يضبطها كل مقعدٍ بحسب حاله، فالصنف واحدٌ للحالات كلّها. */
+const SEAT_CLASS = "relative flex flex-col items-center justify-center gap-0.5 rounded-[10px] border p-0 "
+  + "bg-[var(--seat-bg)] border-[color:var(--seat-bd)] text-[color:var(--seat-fg)] "
+  + "transition-[border-color,box-shadow,background-color] duration-100 "
+  + "enabled:cursor-pointer enabled:hover:border-[color:var(--k-text)] disabled:cursor-not-allowed "
+  + "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--k-gold)]";
 
 export function BusSeatGrid({
   capacity, buses = 1, occupied, selected, need, onToggle, occGender, selGender, privacySeats, selectedPrivacySeats, showLegend = true,
@@ -60,81 +81,98 @@ export function BusSeatGrid({
     const isSel = selected.includes(num);
     const isPrivacy = privacySeats?.has(num) ?? false;
     const isSelectedPrivacy = selectedPrivacySeats?.has(num) ?? false;
-    let bg = "#fff", bd = B.border, fg = B.text2, ring = "none", cursor = "pointer";
+    let bg: string = B.surface, bd: string = B.borderStrong, fg: string = B.text3, ring = "none";
     let gender: "male" | "female" | null = null;
+    let state = "متاح";
     if (occ) {
-      cursor = "not-allowed"; gender = occGender?.(num) ?? null;
-      if (isPrivacy) { bg = "#F3EAFE"; bd = "#D9C4F3"; fg = "#6F3AA8"; }
-      else if (gender === "female") { bg = "#FBE9F1"; bd = "#F3CADF"; fg = "#B4266E"; }
-      else if (gender === "male") { bg = "#EAF1FE"; bd = "#CBDBFB"; fg = "#1E52C7"; }
-      else { bg = "#EEECEA"; bd = "#D6CFC6"; fg = "#9a9186"; } // رمادي = محجوز (عميل)
+      gender = occGender?.(num) ?? null;
+      const t = isPrivacy ? SEAT_TONE.privacy : gender ? SEAT_TONE[gender] : SEAT_TONE.taken;
+      bg = t.bg; bd = t.line; fg = t.fg;
+      state = isPrivacy ? "مفرّغ للخصوصية" : gender === "female" ? "محجوز · أنثى" : gender === "male" ? "محجوز · ذكر" : "محجوز";
     }
     if (isSel) {
       gender = selGender?.(num) ?? null;
-      bg = isSelectedPrivacy ? "#F3EAFE" : gender === "female" ? "#FBE9F1" : gender === "male" ? "#EAF1FE" : "#FFF7EA";
-      fg = isSelectedPrivacy ? "#6F3AA8" : gender === "female" ? "#B4266E" : gender === "male" ? "#1E52C7" : "#8a6a08";
-      bd = isSelectedPrivacy ? "#A876D1" : B.gold; ring = `0 0 0 2px ${isSelectedPrivacy ? "#A876D1" : B.gold}`;
+      const t = isSelectedPrivacy ? SEAT_TONE.privacy : gender ? SEAT_TONE[gender] : TONE.gold;
+      bg = t.bg; fg = t.fg; bd = B.gold;
+      /* حلقة الاختيار ذهبيةٌ في كل حال — «هذا مقعدك» علامةٌ واحدة، ولون
+         الحشوة تحتها يقول لمن هو. */
+      ring = `0 0 0 2px ${B.gold}`;
+      state = isSelectedPrivacy ? "مختار · مفرّغ للخصوصية" : gender === "female" ? "مختار · أنثى" : gender === "male" ? "مختار · ذكر" : "مختار";
     }
+    const local = num - offset;
+    const where = busCount > 1 ? `باص ${bus} · ` : "";
+    const Glyph = isPrivacy || isSelectedPrivacy ? Lock : gender === "female" ? Venus : gender === "male" ? Mars : null;
     return (
-      <button key={num} onClick={() => !occ && onToggle(num)} disabled={occ} title={`${busCount > 1 ? `باص ${bus} · ` : ""}${isPrivacy ? `مقعد ${num - offset} مفرّغ للخصوصية` : `مقعد ${num - offset}`}`}
-        className="relative flex flex-col items-center justify-center rounded-[10px]"
-        style={{ width: 42, height: 42, border: `1px solid ${bd}`, background: bg, color: fg, boxShadow: ring, cursor, padding: 0, lineHeight: 1.02 }}>
-        <span style={{ fontSize: 13, fontWeight: 800 }}>{num - offset}</span>
-        {isPrivacy || isSelectedPrivacy
-          ? <span style={{ fontSize: 9, fontWeight: 800, lineHeight: 1 }}>خصوصية</span>
-          : gender && <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{genderGlyph(gender)}</span>}
-        {isSel && <span className="absolute flex items-center justify-center rounded-full" style={{ top: -6, insetInlineStart: -6, width: 16, height: 16, background: B.gold, color: B.black, fontSize: 10, fontWeight: 800 }}>×</span>}
+      <button key={num} type="button" onClick={() => !occ && onToggle(num)} disabled={occ}
+        aria-pressed={occ ? undefined : isSel} aria-label={`${where}مقعد ${local} — ${state}`}
+        title={`${where}${isPrivacy ? `مقعد ${local} مفرّغ للخصوصية` : `مقعد ${local}`}`}
+        className={SEAT_CLASS}
+        style={{ width: SEAT, height: SEAT, boxShadow: ring, lineHeight: 1, ["--seat-bg" as string]: bg, ["--seat-bd" as string]: bd, ["--seat-fg" as string]: fg }}>
+        <span style={{ fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{local}</span>
+        {Glyph && <Glyph size={11} strokeWidth={2.4} aria-hidden />}
+        {isSel && (
+          <span aria-hidden className="absolute flex items-center justify-center rounded-full"
+            style={{ top: -6, insetInlineStart: -6, width: 16, height: 16, background: B.gold, color: B.black, boxShadow: `0 0 0 2px ${B.surface}` }}>
+            <Check size={10} strokeWidth={3} />
+          </span>
+        )}
       </button>
     );
   };
+  const swatch = (t: { bg: string; line: string }, ring?: boolean) => (
+    <span aria-hidden className="rounded" style={{ width: 14, height: 14, background: t.bg, border: `1px solid ${ring ? B.gold : t.line}`, boxShadow: ring ? `0 0 0 1.5px ${B.gold}` : "none" }} />
+  );
+  const legend: [string, ReactNode][] = [
+    ["متاح", swatch({ bg: B.surface, line: B.borderStrong })],
+    ["ذكر", swatch(SEAT_TONE.male)],
+    ["أنثى", swatch(SEAT_TONE.female)],
+    ["محجوز بلا توزيع", swatch(SEAT_TONE.taken)],
+    ["مفرّغ للخصوصية", swatch(SEAT_TONE.privacy)],
+    ["اختيارك", swatch(TONE.gold, true)],
+  ];
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col items-center gap-4">
       {busCount > 1 && (
-        <div role="tablist" aria-label="باصات الرحلة" className="flex flex-wrap gap-1.5 justify-center">
+        <div role="tablist" aria-label="باصات الرحلة" className="ui-seg flex-wrap justify-center" style={{ maxWidth: "100%" }}>
           {Array.from({ length: busCount }, (_, i) => i + 1).map(b => {
             const on = b === bus;
             const free = freeIn(b);
             const mine = selected.filter(n => busOf(n) === b).length;
             return (
-              <button key={b} role="tab" aria-selected={on} onClick={() => setPicked(b)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
-                style={{ background: on ? B.gold : "#fff", color: on ? B.black : B.text2, border: `1px solid ${on ? B.gold : B.border}` }}>
+              <button key={b} type="button" role="tab" aria-selected={on} onClick={() => setPicked(b)}
+                className={`ui-seg-item${on ? " is-on" : ""}`}>
                 باص {b}
-                <span style={{ fontWeight: 600, color: on ? B.black : free ? B.muted : "#BE2626" }}>{free ? `${free} متاح` : "ممتلئ"}</span>
-                {mine > 0 && <span className="px-1.5 rounded-md" style={{ background: on ? "#fff" : B.goldTint, color: on ? B.black : "#8a6a08" }}>{mine} مختار</span>}
+                <span style={{ fontWeight: 500, color: free ? B.muted : TONE.danger.fg }}>{free ? `${free} متاح` : "ممتلئ"}</span>
+                {mine > 0 && <span className="rounded-md px-1.5" style={{ background: TONE.gold.bg, color: TONE.gold.fg, fontSize: 12, lineHeight: "18px" }}>{mine} مختار</span>}
               </button>
             );
           })}
         </div>
       )}
-      <div className="flex items-center justify-center">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ background: B.gold, color: B.black }}>⬆ مقدمة {busCount > 1 ? `الباص ${bus}` : "الحافلة"} · السائق</span>
-      </div>
-      <div className="flex flex-col gap-2 items-center">
-        {rows.map((row, ri) => (
-          <div key={ri} className="flex gap-2 items-center justify-center">
-            {row.length === 4
-              ? <>{seatBtn(row[0])}{seatBtn(row[1])}<div style={{ width: 26 }} />{seatBtn(row[2])}{seatBtn(row[3])}</>
-              : row.map(seatBtn)}
-          </div>
-        ))}
+      {/* جسم الحافلة: مقدّمةٌ مستديرة وحدٌّ هادئ — يُقرأ الاتجاه من الشكل
+          قبل أن يُقرأ من النصّ. */}
+      <div className="flex flex-col items-center" style={{ padding: "12px 16px 16px", background: B.bg, border: `1px solid ${B.border}`, borderRadius: "36px 36px 18px 18px", maxWidth: "100%" }}>
+        <div className="inline-flex items-center gap-1.5 text-xs" style={{ color: B.muted, fontWeight: 500, paddingBottom: 10, marginBottom: 12, borderBottom: `1px dashed ${B.borderStrong}`, alignSelf: "stretch", justifyContent: "center" }}>
+          <ArrowUp size={12} aria-hidden />مقدمة {busCount > 1 ? `الباص ${bus}` : "الحافلة"} · السائق
+        </div>
+        <div className="flex flex-col gap-2 items-center">
+          {rows.map((row, ri) => (
+            <div key={ri} className="flex gap-2 items-center justify-center">
+              {row.length === 4
+                ? <>{seatBtn(row[0])}{seatBtn(row[1])}<div aria-hidden style={{ width: 28 }} />{seatBtn(row[2])}{seatBtn(row[3])}</>
+                : row.map(seatBtn)}
+            </div>
+          ))}
+        </div>
       </div>
       {showLegend && (
-        <div className="flex flex-wrap gap-3 justify-center pt-3" style={{ borderTop: `1px solid ${B.border}` }}>
-          {[["#fff", B.border, "متاح"], ["#EAF1FE", "#CBDBFB", "ذكر"], ["#FBE9F1", "#F3CADF", "أنثى"], ["#EEECEA", "#D6CFC6", "محجوز بلا توزيع"]].map(([bg, bd, l]) => (
-            <span key={l} className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: B.text2 }}>
-              <span className="rounded" style={{ width: 14, height: 14, background: bg as string, border: `1px solid ${bd}` }} />{l}
-            </span>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 justify-center">
+          {legend.map(([l, sw]) => (
+            <span key={l} className="inline-flex items-center gap-1.5 text-xs" style={{ color: B.text2, fontWeight: 500 }}>{sw}{l}</span>
           ))}
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: B.text2 }}>
-            <span className="rounded" style={{ width: 14, height: 14, background: "#F3EAFE", border: "1px solid #D9C4F3" }} />مفرّغ للخصوصية
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: B.text2 }}>
-            <span className="rounded" style={{ width: 14, height: 14, background: "#FFF7EA", border: `1px solid ${B.gold}`, boxShadow: `0 0 0 2px ${B.gold}` }} />اختيارك
-          </span>
         </div>
       )}
-      <div className="text-xs" style={{ color: B.muted }}>المختار: {selected.length} / {need}</div>
+      <div className="text-xs self-stretch" style={{ color: B.muted }}>المختار: {selected.length} / {need}</div>
     </div>
   );
 }

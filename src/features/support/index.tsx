@@ -1,18 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  X, ImagePlus, FileText, Clock, CheckCircle2, UserCheck, MessageSquare,
+  X, FileText, Clock, CheckCircle2, UserCheck, MessageSquare, LifeBuoy, SearchX, Plus, UploadCloud,
   ArrowRight, Paperclip, Copy, AlertTriangle, Send,
 } from "lucide-react";
 import { toast } from "sonner";
-import { B } from "@/lib/theme";
-import { EntityGate } from "@/components/States";
+import { B, TONE, type ToneName } from "@/lib/theme";
+import { EntityGate, EmptyState } from "@/components/States";
 import type { SupportPriority, SupportStatus, SupportReq, SystemUser } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { Field } from "@/components/Field";
+import { StatusBadge } from "@/components/StatusBadge";
 import { EventTimeline } from "@/components/EventTimeline";
+import { Badge, Button, IconButton, Input, ModalIcon, Note, Segmented, Textarea } from "@/components/ui";
 import { useStore } from "@/store/useStore";
 import { newId } from "@/lib/utils";
+import { statusLabel } from "@/lib/status";
+import { fmtDate, fmtDateTime, fmtRelativeDay } from "@/lib/dates";
 import { uploadMedia, MAX_IMAGE_BYTES, MEDIA_BUCKET, MediaError, takeFile } from "@/lib/mediaUpload";
 import { supabase, isSupabaseEnabled } from "@/supabase/client";
 import { fetchSettings } from "@/data/settings";
@@ -21,27 +25,25 @@ import { logDocEvent, type DocType } from "@/features/docs/docEvents";
 
 const SUPPORT_CATS = ["عام","تقني — أخطاء في النظام","مالي — فواتير وتحصيل","محتوى — تعديل النصوص","باقات ورحلات","حجوزات وتذاكر","طلب ميزة جديدة"];
 
-const PRIO_MAP:Record<SupportPriority,{bg:string;fg:string;border:string}> = {
-  "عاجل":   {bg:"#FBE6E6",fg:"#BE2626",border:"#F3C9C9"},
-  "متوسط":  {bg:"#FBF3D6",fg:"#8A6A08",border:"#F0E3AE"},
-  "منخفض":  {bg:"#E3F3E8",fg:"#1E7A44",border:"#C4E4CE"},
-};
-
-const STATUS_LEGEND:[string,string][] = [
-  ["مُرسَل","تم إرسال الطلب وهو في انتظار المراجعة من الفريق التقني"],
-  ["قيد المراجعة","يعمل الفريق على دراسة الطلب وإيجاد حل مناسب"],
-  ["تم الحل","تم معالجة الطلب — يُرجى التحقق من الحل وإبلاغنا"],
-  ["مغلق","تم إغلاق الطلب بعد التأكيد من الطرفين"],
-];
+/* الأولوية بلون المعنى من اللوحة: العاجل خطر، المتوسط تنبيه، والمنخفض
+   محايد — كان أخضر، والأخضر يُقرأ «تمّ» لا «غير مستعجل». */
+const PRIORITIES: SupportPriority[] = ["عاجل","متوسط","منخفض"];
+const PRIO_TONE: Record<SupportPriority,ToneName> = { "عاجل":"danger", "متوسط":"warn", "منخفض":"neutral" };
+const PrioBadge = ({p}:{p:SupportPriority}) => <Badge tone={PRIO_TONE[p]}>{p}</Badge>;
 
 const SUP_STATUSES:SupportStatus[] = ["sent","reviewing","resolved","closed"];
+/* صياغة الحالة المعروضة من معجم اللوحة (lib/status) عبر <StatusBadge>، فلا
+   خريطة ألوانٍ محلية. هذه الصياغة القديمة باقيةٌ لنصّ الملاحظة المكتوبة في
+   سجلّ الأحداث وحده — ما يُحفظ لا يتغيّر بتغيير المظهر. */
 const SUP_STATUS_LABELS:Record<SupportStatus,string> = {sent:"مُرسَل",reviewing:"قيد المراجعة",resolved:"تم الحل",closed:"مغلق"};
-const SUP_STATUS_COLORS:Record<SupportStatus,{bg:string;fg:string}> = {
-  sent:     {bg:"#EAF1FE",fg:"#1E52C7"},
-  reviewing:{bg:"#FBF3D6",fg:"#8A6A08"},
-  resolved: {bg:"#E3F3E8",fg:"#1E7A44"},
-  closed:   {bg:"#EEECEA",fg:"#5C554E"},
-};
+const supLabel = (s:SupportStatus) => statusLabel(s,"support");
+
+const STATUS_LEGEND:[SupportStatus,string][] = [
+  ["sent","تم إرسال الطلب وهو في انتظار المراجعة من الفريق التقني"],
+  ["reviewing","يعمل الفريق على دراسة الطلب وإيجاد حل مناسب"],
+  ["resolved","تم معالجة الطلب — يُرجى التحقق من الحل وإبلاغنا"],
+  ["closed","تم إغلاق الطلب بعد التأكيد من الطرفين"],
+];
 
 /* نوع المستند في سجلّ الأحداث. قائمة DocEventType في types/index.ts
    تُحرَّر بالتوازي من غيرنا فلا تُوسَّع من هنا — التحويل موضعيّ، والقاعدة
@@ -148,8 +150,10 @@ const submittedMs = (r:SupportReq):number => {
   return Number.isNaN(d) ? Date.now() : d;
 };
 
+/* lib/dates يقرأ نصّ التخزين كما كُتب (بلا منطقة زمنية)؛ اللحظة تُحوَّل
+   أوّلاً إلى ساعة الرياض ثم تُنسَّق بصياغة اللوحة. */
 const fmtWhen = (ms:number):string =>
-  new Date(ms).toLocaleString("ar-SA-u-nu-latn", { dateStyle:"medium", timeStyle:"short", timeZone:"Asia/Riyadh" });
+  fmtDateTime(new Date(ms + 3 * 3_600_000).toISOString().slice(0,16).replace("T"," "));
 
 /** «ساعتَي عمل» · «٣ ساعات عمل» · «١٢ ساعة عمل». */
 const hoursLabel = (n:number):string =>
@@ -174,14 +178,14 @@ function replyPromise(cfg:SlaConfig, r:SupportReq, now:number):ReplyPromise {
 function PromiseLine({ p }:{ p:ReplyPromise }) {
   if (p.kind === "unknown") return <span className="text-xs" style={{color:B.muted}}>وعد الردّ غير محسوب</span>;
   if (p.kind === "answered") {
-    return <span className="text-xs inline-flex items-center gap-1" style={{color:"#1E7A44"}}>
-      <CheckCircle2 size={11}/>تم الردّ{p.at != null && <> · <span style={{fontFamily:"var(--font-app)"}}>{fmtWhen(p.at)}</span></>}
+    return <span className="text-xs inline-flex items-center gap-1" style={{color:TONE.success.fg}}>
+      <CheckCircle2 size={13}/>تم الردّ{p.at != null && <> · {fmtWhen(p.at)}</>}
     </span>;
   }
   const overdue = p.kind === "overdue";
-  return <span className="text-xs inline-flex items-center gap-1 font-bold" style={{color: overdue ? "#BE2626" : B.text2}}>
-    {overdue ? <AlertTriangle size={11}/> : <Clock size={11}/>}
-    {overdue ? "متأخّر عن الوعد" : "الردّ قبل"} <span style={{fontFamily:"var(--font-app)", fontWeight:600}}>{fmtWhen(p.due)}</span>
+  return <span className="text-xs inline-flex items-center gap-1" style={{color: overdue ? TONE.danger.fg : B.text2, fontWeight: overdue ? 600 : 400}}>
+    {overdue ? <AlertTriangle size={13}/> : <Clock size={13}/>}
+    {overdue ? "متأخّر عن الوعد" : "الردّ قبل"} {fmtWhen(p.due)}
   </span>;
 }
 
@@ -289,74 +293,132 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     setTimeout(()=>setHighlightId(h=>(h===id?null:h)),3000);
   }
 
+  /* على الجوال القائمة أوّلاً واللوحة تحتها: فتحُ طلبٍ أو طلبُ نموذجٍ جديد
+     ينزل إليها، وإلا ضُغط الصفّ ولم يتغيّر شيءٌ على الشاشة. على المكتب
+     اللوحتان متجاورتان فلا تمرير. */
+  const mainRef=useRef<HTMLDivElement>(null);
+  const revealMain=()=>{ if(window.matchMedia?.("(max-width: 1023px)").matches)
+    setTimeout(()=>mainRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60); };
+
   const q=search.trim();
   const visible = q ? reqs.filter(r=>r.id.includes(q)||r.title.includes(q)||r.category.includes(q)) : reqs;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="الدعم الفني" crumb="إرسال طلب دعم" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      <main className="flex-1 px-4 md:px-8 py-6 max-w-5xl">
-        {/* ── بيانات المُرسِل ──
-            كانت أربع قيم مكتوبة في الشفرة: «سالم أحمد» و«مدير النظام»
-            و0501234567 وsalem@tasahheel.com — تُعرض لكل من يفتح الشاشة
-            مهما كان. يوسف يفتحها فيقرأ بيانات سالم، ويرسل طلباً منسوباً
-            إلى شخصٍ آخر. الآن من الجلسة الفعلية (profiles + auth).
-
-            وما لا تعرفه الجلسة يُقال «—» صراحةً: قيمةٌ مخترعة في حقل
-            هوية أسوأ من فراغٍ معلَن. */}
-        <div className="rounded-2xl px-6 py-5 mb-6" style={{background:B.surface,border:`1px solid ${B.border}`}}>
-          <div className="text-xs font-bold mb-3" style={{color:B.primaryDeep}}>بيانات المُرسِل (من حسابك)</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {sender.map(f=>(
-              <div key={f.l}>
-                <div className="text-xs mb-0.5" style={{color:B.muted,fontWeight:600}}>{f.l}</div>
-                <div className="font-bold text-sm" style={{color:B.black}}>{f.v}</div>
+      <PageHeader title="الدعم الفني" crumb="طلبات الدعم" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        searchPlaceholder="ابحث برقم الطلب أو عنوانه أو قسمه"
+        actions={openReq&&<Button variant="secondary" icon={<Plus size={16}/>} onClick={()=>{ setOpenId(null); revealMain(); }}>
+          <span className="hidden sm:inline">طلب جديد</span><span className="sm:hidden">جديد</span>
+        </Button>}/>
+      {/* لوحتان: القائمة عند البداية، وبجانبها الطلب المفتوح أو نموذج طلبٍ
+          جديد. على الجوال القائمة أوّلاً ثم اللوحة تحتها. */}
+      <main className="flex-1 px-4 md:px-8 pt-1 pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)] gap-5 items-start">
+          <aside className="flex flex-col gap-4 min-w-0">
+            {/* ── الطلبات السابقة — من جدول support عبر المخزن، لا قائمة ثابتة ──
+                كل صفٍّ يحمل حالته وتاريخه ووعد ردّه: «متأخّر عن الوعد»
+                يُقرأ من القائمة قبل أن يُفتح الطلب. */}
+            <section className="ui-card">
+              <div className="ui-card-head">
+                <h2 className="ui-card-title">الطلبات السابقة</h2>
+                <span className="ts-count">{visible.length}{q&&reqs.length!==visible.length?` من ${reqs.length}`:""}</span>
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="p-2">
+              <EntityGate entity="support" label="طلبات الدعم" cols={3} rows={3}>
+                {visible.length===0 ? (
+                  <EmptyState compact icon={q?<SearchX size={20}/>:<LifeBuoy size={20}/>}
+                    title={q?"لا طلب يطابق البحث":"لا طلبات سابقة"}
+                    note={q?"جرّب رقماً أو كلمةً أخرى.":"ما ترسله من النموذج يظهر هنا بحالته ووعد ردّه."}
+                    action={q?<Button variant="secondary" onClick={()=>setSearch("")}>مسح البحث</Button>:undefined}/>
+                ) : (
+                <div className="flex flex-col gap-0.5 lg:overflow-y-auto" style={{maxHeight:"min(620px, 70vh)",overflowY:"auto"}}>
+                  {visible.map(r=>{
+                    const isOpen=openId===r.id, lit=highlightId===r.id;
+                    const assignee=r.assignedTo?users.find(u=>u.id===r.assignedTo):undefined;
+                    return (
+                      <button key={r.id} id={`sup-${r.id}`} type="button" onClick={()=>{ setOpenId(isOpen?null:r.id); if(!isOpen) revealMain(); }}
+                        aria-pressed={isOpen} aria-label={`فتح الطلب ${r.id}`}
+                        className={`ts-pick${isOpen?" is-on":""}`}
+                        style={{alignItems:"flex-start",transition:"box-shadow .3s, background-color .12s",
+                          boxShadow:lit?"inset 0 0 0 2px var(--k-gold)":"none"}}>
+                        <span className="flex-1 min-w-0 flex flex-col gap-1.5">
+                          <span className="flex items-start justify-between gap-2">
+                            <b className="min-w-0" style={{fontSize:14,fontWeight:600,color:B.black,lineHeight:1.5}}>{r.title}</b>
+                            <span className="flex-shrink-0"><StatusBadge status={r.status} entity="support"/></span>
+                          </span>
+                          <span className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs" style={{color:B.muted}}>
+                            <span dir="ltr">{r.id}</span>
+                            <span aria-hidden>·</span>
+                            <span>{r.category.split("—")[0].trim()}</span>
+                            <span aria-hidden>·</span>
+                            <span title={fmtDate(r.date)}>{fmtRelativeDay(r.date)||r.date}</span>
+                            {!!r.attachments?.length&&<span className="inline-flex items-center gap-0.5"><Paperclip size={12}/>{r.attachments.length}</span>}
+                          </span>
+                          <span className="flex items-center justify-between gap-2 flex-wrap">
+                            <PromiseLine p={replyPromise(sla,r,now)}/>
+                            <span className="inline-flex items-center gap-2">
+                              {assignee&&<span className="text-xs inline-flex items-center gap-1" style={{color:B.text2}}><UserCheck size={13}/>{assignee.name}</span>}
+                              <PrioBadge p={r.priority}/>
+                            </span>
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                )}
+              </EntityGate>
+              </div>
+            </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 flex flex-col gap-6">
+            {/* Status legend */}
+            <section className="ui-card p-5">
+              <h2 className="ts-section-title mb-3">حالات طلب الدعم</h2>
+              <div className="flex flex-col gap-3">
+                {STATUS_LEGEND.map(([k,v])=>(
+                  <div key={k} className="flex gap-3 items-start">
+                    <span className="flex-shrink-0" style={{minWidth:104}}><StatusBadge status={k} entity="support"/></span>
+                    <span className="text-xs" style={{color:B.text2,lineHeight:1.7}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+
+          <div ref={mainRef} className="flex flex-col gap-4 min-w-0 order-last" style={{maxWidth:860,scrollMarginTop:88}}>
             {/* ── ما بعد الإرسال: رقم التذكرة وموعد الردّ ── */}
             {lastSent&&(
-              <div role="status" className="rounded-2xl p-5" style={{background:"#E3F3E8",border:"1px solid #C4E4CE"}}>
+              <div role="status" className="rounded-2xl p-5" style={{background:TONE.success.bg,border:`1px solid ${TONE.success.line}`}}>
                 <div className="flex items-start gap-3">
-                  <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:"#fff"}}>
-                    <CheckCircle2 size={20} style={{color:"#1E7A44"}}/>
-                  </span>
+                  <ModalIcon tone="success"><CheckCircle2 size={20}/></ModalIcon>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-extrabold text-base" style={{color:"#1E7A44"}}>تم إرسال الطلب</div>
-                      <button aria-label="إغلاق" title="إغلاق" onClick={()=>setLastSent(null)}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer" style={{background:"transparent",border:"none",color:B.text2}}><X size={14}/></button>
+                      <div className="font-extrabold" style={{color:TONE.success.fg,fontSize:15}}>تم إرسال الطلب</div>
+                      <IconButton size="sm" label="إغلاق" onClick={()=>setLastSent(null)}><X size={15}/></IconButton>
                     </div>
                     <div className="grid sm:grid-cols-2 gap-4 mt-3">
-                      <div>
-                        <div className="text-xs font-bold mb-1" style={{color:B.text3}}>رقم التذكرة</div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-lg" dir="ltr" style={{color:B.black}}>{lastSent.id}</span>
-                          <button aria-label="نسخ رقم التذكرة" title="نسخ رقم التذكرة"
-                            onClick={()=>{ navigator.clipboard?.writeText(lastSent.id).then(()=>toast.success("نُسخ رقم التذكرة")).catch(()=>{}); }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}><Copy size={12}/></button>
-                        </div>
+                      <div className="ts-kv">
+                        <span className="ts-kv-k">رقم التذكرة</span>
+                        <span className="flex items-center gap-2">
+                          <span className="font-extrabold" dir="ltr" style={{color:B.black,fontSize:17}}>{lastSent.id}</span>
+                          <IconButton size="sm" variant="outline" label="نسخ رقم التذكرة"
+                            onClick={()=>{ navigator.clipboard?.writeText(lastSent.id).then(()=>toast.success("نُسخ رقم التذكرة")).catch(()=>{}); }}><Copy size={14}/></IconButton>
+                        </span>
                       </div>
-                      <div>
-                        <div className="text-xs font-bold mb-1" style={{color:B.text3}}>الردّ المتوقّع قبل</div>
-                        <div className="font-bold text-sm" style={{color:B.black,fontFamily:"var(--font-app)"}}>{lastSent.dueAt!=null?fmtWhen(lastSent.dueAt):"—"}</div>
-                        <div className="text-xs mt-0.5" style={{color:B.muted}}>
-                          خلال {hoursLabel(sla.slaHours)} · الدوام <span dir="ltr" style={{fontFamily:"var(--font-app)"}}>{sla.openHour}:00–{sla.closeHour}:00</span> بتوقيت الرياض
-                        </div>
+                      <div className="ts-kv">
+                        <span className="ts-kv-k">الردّ المتوقّع قبل</span>
+                        <span className="ts-kv-v">{lastSent.dueAt!=null?fmtWhen(lastSent.dueAt):"—"}</span>
+                        <span className="text-xs" style={{color:B.text2}}>
+                          خلال {hoursLabel(sla.slaHours)} · الدوام <span dir="ltr">{sla.openHour}:00–{sla.closeHour}:00</span> بتوقيت الرياض
+                        </span>
                       </div>
                     </div>
                     {lastSent.afterHours&&(
-                      <div className="text-xs mt-3 px-3 py-2 rounded-lg" style={{background:"#FBF3D6",color:"#8A6A08"}}>
-                        أُرسل خارج ساعات العمل — يبدأ احتساب الوعد من فتح المكتب في أوّل يوم عملٍ قادم.
-                      </div>
+                      <Note tone="warn" className="mt-3">أُرسل خارج ساعات العمل — يبدأ احتساب الوعد من فتح المكتب في أوّل يوم عملٍ قادم.</Note>
                     )}
+                    {/* داكنٌ لا ذهبي: زرّ الإرسال في النموذج تحته هو الأساسي. */}
                     <div className="flex gap-2 mt-3">
-                      <button onClick={()=>follow(lastSent.id)}
-                        className="px-4 py-2 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>متابعة الطلب</button>
+                      <Button variant="dark" onClick={()=>{ follow(lastSent.id); revealMain(); }}>متابعة الطلب</Button>
                     </div>
                   </div>
                 </div>
@@ -368,141 +430,100 @@ export function SupportPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
                 onBack={()=>setOpenId(null)} patch={p=>patchReq(openReq.id,p)}/>
             ) : (
               /* ── Form ── */
-              <div className="rounded-2xl p-6" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                <div className="font-extrabold text-base mb-5" style={{color:B.black,fontFamily:"var(--font-app)"}}>نموذج إرسال الطلب</div>
-                <div className="flex flex-col gap-4">
+              <section className="ui-card">
+                <div className="ui-card-head">
                   <div>
-                    <Field label="القسم">
-                      <AppSelect value={category} onChange={setCategory} options={SUPPORT_CATS.map(c=>({value:c,label:c}))}/>
-                    </Field>
+                    <h2 className="ui-card-title">طلب دعم جديد</h2>
+                    <div className="ui-card-sub">اشرح المشكلة، ويصل الطلب إلى الفريق التقني برقمٍ تتابعه به.</div>
+                  </div>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  {/* ── بيانات المُرسِل ──
+                      كانت أربع قيم مكتوبة في الشفرة: «سالم أحمد» و«مدير النظام»
+                      و0501234567 وsalem@tasahheel.com — تُعرض لكل من يفتح الشاشة
+                      مهما كان. يوسف يفتحها فيقرأ بيانات سالم، ويرسل طلباً منسوباً
+                      إلى شخصٍ آخر. الآن من الجلسة الفعلية (profiles + auth).
+
+                      وما لا تعرفه الجلسة يُقال «—» صراحةً: قيمةٌ مخترعة في حقل
+                      هوية أسوأ من فراغٍ معلَن. وهي داخل النموذج لا فوق الصفحة:
+                      تخصّ الطلب الجديد وحده. */}
+                  <div className="rounded-xl px-4 py-3" style={{background:B.fill}}>
+                    <div className="text-xs mb-2" style={{color:B.muted}}>يُرسَل باسم حسابك</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {sender.map(f=>(
+                        <div key={f.l} className="ts-kv"><span className="ts-kv-k">{f.l}</span><span className="ts-kv-v">{f.v}</span></div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <Field label="القسم">
+                        <AppSelect value={category} onChange={setCategory} options={SUPPORT_CATS.map(c=>({value:c,label:c}))}/>
+                      </Field>
+                    </div>
+                    <div>
+                      <div className="ui-label" id="sup-prio-label">أولوية الطلب</div>
+                      <Segmented label="أولوية الطلب" value={priority} onChange={v=>setPriority(v)} className="w-full"
+                        options={PRIORITIES.map(p=>({value:p,label:<><span aria-hidden className="rounded-full" style={{width:7,height:7,background:TONE[PRIO_TONE[p]].fg}}/>{p}</>}))}/>
+                    </div>
                   </div>
                   <div>
-                    <Field label="عنوان المشكلة">
-                      <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: لا أستطيع إصدار تذكرة"
-                        className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                    <Field label={<>عنوان المشكلة<span className="ui-req">*</span></>}>
+                      <Input value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: لا أستطيع إصدار تذكرة"/>
                     </Field>
                   </div>
                   <div>
                     <Field label="وصف المشكلة">
-                      <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5}
-                        placeholder="اشرح المشكلة بالتفصيل — الخطوات التي أدّت إليها، ما تتوقعه، وما حدث فعلاً..."
-                        className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none resize-none" style={{borderColor:B.border,fontFamily:"inherit"}}/>
+                      <Textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5} style={{resize:"none"}}
+                        placeholder="اشرح المشكلة بالتفصيل — الخطوات التي أدّت إليها، ما تتوقعه، وما حدث فعلاً..."/>
                     </Field>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>أولوية الطلب</label>
-                    <div className="flex gap-2">
-                      {(["عاجل","متوسط","منخفض"] as SupportPriority[]).map(p=>{
-                        const pm=PRIO_MAP[p];
-                        const active=priority===p;
-                        return (
-                          <button key={p} type="button" onClick={()=>setPriority(p)}
-                            className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                            style={{border:`1px solid ${active?pm.border:B.border}`,background:active?pm.bg:"#fff",color:active?pm.fg:B.text2}}>
-                            {p}
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
                   {/* Attachments */}
                   <div>
-                    <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>
-                      المرفقات <span className="font-normal" style={{color:B.muted}}>(اختياري — صورة JPG/PNG/WebP أو PDF، حتى {mb(MAX_IMAGE_BYTES)} ميغابايت، {MAX_ATTACHMENTS} كحدّ أقصى)</span>
-                    </label>
-                    <div className="flex flex-wrap gap-2 items-center">
-                      {attachments.map((url,i)=>(
-                        <div key={i} className="relative rounded-xl overflow-hidden" style={{width:72,height:72,border:`1px solid ${B.border}`,background:B.fill}}>
-                          {isPdfUrl(url)
-                            ? <div className="w-full h-full flex flex-col items-center justify-center gap-1" style={{color:B.text2}}><FileText size={20}/><span style={{fontSize:9,fontWeight:700}}>PDF</span></div>
-                            : <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
-                          <button aria-label="إزالة المرفق" title="إزالة المرفق" onClick={()=>setAttachments(a=>a.filter((_,idx)=>idx!==i))} className="absolute top-0.5 left-0.5 w-5 h-5 rounded-md flex items-center justify-center cursor-pointer" style={{background:"rgba(190,38,38,0.92)",border:"none",color:"#fff"}}><X size={11}/></button>
-                        </div>
-                      ))}
-                      {attachments.length<MAX_ATTACHMENTS&&(
-                        <label className="flex flex-col items-center justify-center gap-1 rounded-xl" style={{width:72,height:72,border:`1.5px dashed ${B.border}`,background:B.fill,color:B.muted,cursor:uploading?"progress":"pointer",opacity:uploading?0.6:1}}>
-                          <ImagePlus size={18}/><span style={{fontSize:9,fontWeight:700}}>{uploading?"جارٍ الرفع…":"إرفاق"}</span>
-                          <input type="file" accept={ACCEPT} className="hidden" disabled={uploading} onChange={pickAttachment}/>
-                        </label>
-                      )}
-                    </div>
+                    <div className="ui-label">المرفقات <span style={{fontWeight:400,color:B.muted}}>— اختياري</span></div>
+                    {attachments.length<MAX_ATTACHMENTS&&(
+                      <label className="flex items-center gap-3 rounded-xl px-4 py-3.5 focus-within:outline focus-within:outline-2"
+                        style={{border:`1.5px dashed ${B.borderStrong}`,background:B.fill,outlineColor:B.gold,cursor:uploading?"progress":"pointer",opacity:uploading?0.6:1}}>
+                        <span aria-hidden className="flex items-center justify-center flex-shrink-0"
+                          style={{width:40,height:40,borderRadius:12,background:B.surface,color:B.text2,border:`1px solid ${B.border}`}}><UploadCloud size={18}/></span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold" style={{color:B.black}}>{uploading?"جارٍ الرفع…":"أرفق صورةً أو ملف PDF"}</span>
+                          <span className="block text-xs mt-0.5" style={{color:B.muted,lineHeight:1.6}}>JPG أو PNG أو WebP أو PDF · حتى {mb(MAX_IMAGE_BYTES)} ميغابايت · {MAX_ATTACHMENTS} كحدّ أقصى</span>
+                        </span>
+                        <input type="file" accept={ACCEPT} className="sr-only" disabled={uploading} onChange={pickAttachment}/>
+                      </label>
+                    )}
+                    {attachments.length>0&&(
+                      <div className="flex flex-wrap gap-2 items-center mt-2.5">
+                        {attachments.map((url,i)=>(
+                          <div key={i} className="relative rounded-xl overflow-hidden" style={{width:72,height:72,border:`1px solid ${B.border}`,background:B.fill}}>
+                            {isPdfUrl(url)
+                              ? <div className="w-full h-full flex flex-col items-center justify-center gap-1" style={{color:B.text2}}><FileText size={20}/><span style={{fontSize:12,fontWeight:600}}>PDF</span></div>
+                              : <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                            <button type="button" aria-label="إزالة المرفق" title="إزالة المرفق" onClick={()=>setAttachments(a=>a.filter((_,idx)=>idx!==i))}
+                              className="absolute flex items-center justify-center cursor-pointer"
+                              style={{top:4,insetInlineEnd:4,width:22,height:22,borderRadius:999,background:B.ink,border:"none",color:B.onInk}}><X size={13}/></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {/* Submit */}
-                  <button onClick={submit} disabled={!title.trim()||uploading}
-                    className="w-full py-3 rounded-xl font-extrabold text-base cursor-pointer transition-all"
-                    style={{background:title.trim()&&!uploading?B.gold:"#D8D0C4",color:title.trim()&&!uploading?B.black:"#9a9186",border:"none"}}>
-                    {uploading?"انتظر اكتمال رفع المرفق…":"إرسال طلب الدعم"}
-                  </button>
-                  <div className="text-xs text-center" style={{color:supportEmail===""?"#8A6A08":B.muted}}>
-                    {supportEmail===undefined
-                      ? "…"
-                      : supportEmail
-                        ? <>سيتم إرسال الطلب إلى البريد التقني المسجّل في إعدادات النظام
-                            {" "}<span style={{fontFamily:"var(--font-app)",color:B.text2}}>{supportEmail}</span></>
-                        : "لم يُضبط بريد الدعم الفني في الإعدادات — يُسجَّل الطلب في النظام ولا يُرسَل بريد. اطلب من مدير النظام ضبطه."}
-                  </div>
+                  {supportEmail===""&&(
+                    <Note tone="warn" icon={<AlertTriangle size={15}/>}>لم يُضبط بريد الدعم الفني في الإعدادات — يُسجَّل الطلب في النظام ولا يُرسَل بريد. اطلب من مدير النظام ضبطه.</Note>
+                  )}
                 </div>
-              </div>
+                <div className="flex items-center gap-3 flex-wrap px-5 py-4" style={{borderTop:`1px solid ${B.border}`}}>
+                  <Button variant="primary" icon={<Send size={16}/>} onClick={submit} disabled={!title.trim()||uploading}>
+                    {uploading?"انتظر اكتمال رفع المرفق…":"إرسال طلب الدعم"}
+                  </Button>
+                  <span className="text-xs min-w-0" style={{color:B.muted,lineHeight:1.6}}>
+                    {supportEmail===undefined ? "…" : supportEmail
+                      ? <>يُرسَل إلى البريد التقني المسجّل في الإعدادات <span dir="ltr" style={{color:B.text2}}>{supportEmail}</span></>
+                      : null}
+                  </span>
+                </div>
+              </section>
             )}
-          </div>
-
-          {/* ── Sidebar: legend + history ── */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
-            {/* Status legend */}
-            <div className="rounded-2xl p-5" style={{background:B.cream,border:`1px solid #EDE4CF`}}>
-              <div className="font-extrabold text-sm mb-4" style={{color:B.black}}>حالات طلب الدعم</div>
-              <div className="flex flex-col gap-3">
-                {STATUS_LEGEND.map(([k,v])=>(
-                  <div key={k} className="flex gap-3 items-start">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text3}}>{k}</span>
-                    <span className="text-xs leading-relaxed" style={{color:B.text2}}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* ── الطلبات السابقة — من جدول support عبر المخزن، لا قائمة ثابتة ──
-                كل بطاقة تحمل حالتها وتاريخها ووعد ردّها: «متأخّر عن الوعد»
-                يُقرأ من القائمة قبل أن يُفتح الطلب. */}
-            <div className="rounded-2xl p-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="font-extrabold text-sm" style={{color:B.black}}>الطلبات السابقة</div>
-                <span className="text-xs font-bold" style={{color:B.muted}}>{visible.length}{q&&reqs.length!==visible.length?` من ${reqs.length}`:""}</span>
-              </div>
-              <EntityGate entity="support" label="طلبات الدعم" cols={3} rows={3}>
-              <div className="flex flex-col gap-3">
-                {visible.map(r=>{
-                  const sc=SUP_STATUS_COLORS[r.status];
-                  const pm=PRIO_MAP[r.priority];
-                  const isOpen=openId===r.id, lit=highlightId===r.id;
-                  const assignee=r.assignedTo?users.find(u=>u.id===r.assignedTo):undefined;
-                  return (
-                    <button key={r.id} id={`sup-${r.id}`} type="button" onClick={()=>setOpenId(isOpen?null:r.id)}
-                      aria-pressed={isOpen} aria-label={`فتح الطلب ${r.id}`}
-                      className="rounded-xl p-3 text-right cursor-pointer w-full"
-                      style={{border:`1px solid ${isOpen?B.gold:B.border}`,background:lit?B.black:isOpen?"#F3F8F7":"#fff",
-                              boxShadow:lit?`0 0 0 3px ${B.gold2}`:"none",transition:"box-shadow .3s, background .3s",fontFamily:"inherit"}}>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-mono text-xs font-bold" dir="ltr" style={{color:B.muted}}>{r.id}</span>
-                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{background:sc.bg,color:sc.fg}}>{SUP_STATUS_LABELS[r.status]}</span>
-                      </div>
-                      <div className="font-bold text-sm mb-2" style={{color:B.black}}>{r.title}</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs" style={{color:B.muted}}>{r.category.split("—")[0].trim()}</span>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded" style={{background:pm.bg,color:pm.fg}}>{r.priority}</span>
-                        {!!r.attachments?.length&&<span className="text-xs inline-flex items-center gap-0.5" style={{color:B.muted}}><Paperclip size={10}/>{r.attachments.length}</span>}
-                        <span className="text-xs font-mono mr-auto" dir="ltr" style={{color:B.muted}}>{r.date}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 flex-wrap" style={{borderTop:`1px dashed ${B.border}`}}>
-                        <PromiseLine p={replyPromise(sla,r,now)}/>
-                        {assignee&&<span className="text-xs inline-flex items-center gap-1" style={{color:"#7226BE"}}><UserCheck size={11}/>{assignee.name}</span>}
-                      </div>
-                    </button>
-                  );
-                })}
-                {visible.length===0&&<p className="text-sm text-center py-4" style={{color:B.muted}}>{q?"لا طلب يطابق البحث":"لا توجد طلبات سابقة"}</p>}
-              </div>
-              </EntityGate>
-            </div>
           </div>
         </div>
       </main>
@@ -529,7 +550,6 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
   const activeUsers=users.filter(u=>u.status==="active"&&isUuid(u.id));
   const assignee=users.find(u=>u.id===req.assignedTo);
   const sender=req.createdBy?users.find(u=>u.id===req.createdBy):undefined;
-  const sc=SUP_STATUS_COLORS[req.status]; const pm=PRIO_MAP[req.priority];
   const promise=replyPromise(sla,req,now);
   const needsResolution=pendingStatus==="resolved"||pendingStatus==="closed";
 
@@ -571,47 +591,41 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
     setNote(""); bump();
   }
 
-  const row=(icon:React.ReactNode,l:string,v:React.ReactNode)=>(
-    <div key={l} className="flex items-start gap-2 py-2" style={{borderBottom:`1px solid ${B.border}`}}>
-      <span style={{color:B.muted,marginTop:2}}>{icon}</span>
-      <span className="text-xs font-semibold" style={{color:B.muted,minWidth:88}}>{l}</span>
-      <span className="text-sm font-bold flex-1" style={{color:B.black}}>{v||"—"}</span>
-    </div>
+  const kv=(l:string,v:React.ReactNode)=>(
+    <div key={l} className="ts-kv"><span className="ts-kv-k">{l}</span><span className="ts-kv-v">{v||"—"}</span></div>
   );
-  const inp="w-full rounded-xl border px-3 py-2.5 text-sm resize-none focus:outline-none";
-  const ist={borderColor:B.border,fontFamily:"inherit",color:B.black} as const;
 
   return (
-    <div className="rounded-2xl p-6" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-      <div className="flex items-center gap-3 mb-4">
-        <button onClick={onBack} aria-label="رجوع إلى النموذج" title="رجوع إلى النموذج"
-          className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ArrowRight size={16}/></button>
-        <span className="font-mono text-xs font-bold" dir="ltr" style={{color:B.muted}}>{req.id}</span>
-        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{background:sc.bg,color:sc.fg}}>{SUP_STATUS_LABELS[req.status]}</span>
-        <span className="text-xs font-bold px-2 py-0.5 rounded" style={{background:pm.bg,color:pm.fg}}>{req.priority}</span>
+    <section className="ui-card">
+      <div className="ui-card-head" style={{justifyContent:"flex-start"}}>
+        <IconButton variant="outline" label="رجوع إلى النموذج" onClick={onBack}><ArrowRight size={16}/></IconButton>
+        <span className="text-xs font-bold" dir="ltr" style={{color:B.muted}}>{req.id}</span>
+        <StatusBadge status={req.status} entity="support"/>
+        <PrioBadge p={req.priority}/>
       </div>
-      <h2 className="text-lg font-extrabold m-0 mb-3" style={{color:B.black}}>{req.title}</h2>
+      <div className="p-5">
+      <h2 className="m-0 mb-4" style={{color:B.black,fontSize:17,fontWeight:700,lineHeight:1.5}}>{req.title}</h2>
 
-      <div className="flex flex-col">
-        {row(<FileText size={13}/>,"القسم",req.category)}
-        {row(<UserCheck size={13}/>,"المُرسِل",sender?.name??(req.createdBy?"موظف":"—"))}
-        {row(<Send size={13}/>,"أُرسل",<span style={{fontFamily:"var(--font-app)",fontWeight:600}}>{fmtWhen(submittedMs(req))}</span>)}
-        {row(<Clock size={13}/>,"وعد الردّ",<PromiseLine p={promise}/>)}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {kv("القسم",req.category)}
+        {kv("المُرسِل",sender?.name??(req.createdBy?"موظف":"—"))}
+        {kv("أُرسل",fmtWhen(submittedMs(req)))}
+        {kv("وعد الردّ",<PromiseLine p={promise}/>)}
       </div>
 
-      <div className="rounded-xl px-4 py-3 mt-4 text-sm whitespace-pre-line" style={{background:B.fill,border:`1px solid ${B.border}`,color:req.desc?B.text3:B.muted}}>
+      <div className="rounded-xl px-4 py-3 mt-4 text-sm whitespace-pre-line" style={{background:B.fill,color:req.desc?B.text3:B.muted,lineHeight:1.8}}>
         {req.desc||"بلا وصف"}
       </div>
 
       {!!req.attachments?.length&&(
         <div className="mt-4">
-          <div className="text-xs font-bold mb-2 flex items-center gap-1" style={{color:B.text3}}><Paperclip size={12}/>المرفقات ({req.attachments.length})</div>
+          <div className="ui-label flex items-center gap-1"><Paperclip size={13}/>المرفقات ({req.attachments.length})</div>
           <div className="flex flex-wrap gap-2">
             {req.attachments.map((url,i)=>(
               <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="فتح المرفق في تبويب جديد"
                 className="rounded-xl overflow-hidden flex items-center justify-center" style={{width:88,height:88,border:`1px solid ${B.border}`,background:B.fill,color:B.text2}}>
                 {isPdfUrl(url)
-                  ? <span className="flex flex-col items-center gap-1"><FileText size={22}/><span style={{fontSize:10,fontWeight:700}}>PDF</span></span>
+                  ? <span className="flex flex-col items-center gap-1"><FileText size={22}/><span style={{fontSize:12,fontWeight:600}}>PDF</span></span>
                   : <img src={url} alt={`مرفق ${i+1}`} style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
               </a>
             ))}
@@ -619,81 +633,79 @@ function SupportDetail({ req, users, currentUserId, sla, now, onBack, patch }:{
         </div>
       )}
 
-      {/* ── المسؤول ── */}
-      <div className="rounded-xl p-4 mt-5 flex flex-col gap-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-        <div className="flex items-center gap-2 text-xs font-bold" style={{color:B.text3}}><UserCheck size={13}/>الموظف المسؤول</div>
-        <AppSelect value={req.assignedTo??""} placeholder="غير معيَّن" onChange={v=>assign(v||null)} ariaLabel="الموظف المسؤول"
-          options={[{value:"",label:"— بلا مسؤول —"},...activeUsers.map(u=>({value:u.id,label:u.name}))]}/>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {currentUserId&&req.assignedTo!==currentUserId&&(
-            <button onClick={()=>assign(currentUserId)} className="text-xs font-bold cursor-pointer" style={{background:"none",border:"none",color:B.primary,padding:0}}>أسنده إليّ</button>
-          )}
-          {req.assignedTo&&(
-            <span className="text-xs" style={{color:B.muted}}>
-              مُسنَد إلى <b style={{color:B.text2}}>{assignee?.name??"موظف"}</b>
-              {req.assignedAt&&<> منذ <span style={{fontFamily:"var(--font-app)"}}>{fmtWhen(Date.parse(req.assignedAt))}</span></>}
-            </span>
+      <div className="grid md:grid-cols-2 gap-4 mt-5 pt-5" style={{borderTop:`1px solid ${B.border}`}}>
+        {/* ── المسؤول ── */}
+        <div>
+          <span className="ui-label">الموظف المسؤول</span>
+          <AppSelect value={req.assignedTo??""} placeholder="غير معيَّن" onChange={v=>assign(v||null)} ariaLabel="الموظف المسؤول"
+            options={[{value:"",label:"— بلا مسؤول —"},...activeUsers.map(u=>({value:u.id,label:u.name}))]}/>
+          <div className="flex items-center justify-between gap-2 flex-wrap mt-2">
+            {currentUserId&&req.assignedTo!==currentUserId&&(
+              <button type="button" onClick={()=>assign(currentUserId)} className="ui-btn ui-btn--link" style={{fontSize:13}}>أسنده إليّ</button>
+            )}
+            {req.assignedTo&&(
+              <span className="text-xs" style={{color:B.muted}}>
+                مُسنَد إلى <b style={{color:B.text2,fontWeight:600}}>{assignee?.name??"موظف"}</b>
+                {req.assignedAt&&<> منذ {fmtWhen(Date.parse(req.assignedAt))}</>}
+              </span>
+            )}
+          </div>
+          {activeUsers.length===0&&<div className="ui-hint" style={{color:TONE.warn.fg}}>لا حسابات موظفين نشطة مرتبطة بملفٍ — أنشئها من شاشة المستخدمين.</div>}
+        </div>
+
+        {/* ── الحالة والحلّ ── */}
+        <div>
+          <span className="ui-label">حالة الطلب</span>
+          <AppSelect value={pendingStatus??req.status} onChange={v=>changeStatus(v as SupportStatus)} ariaLabel="حالة الطلب"
+            options={SUP_STATUSES.map(s=>({value:s,label:supLabel(s)}))}/>
+          {!needsResolution&&(req.status==="resolved"||req.status==="closed")&&(
+            <div className="text-xs mt-2" style={{color:B.text2,lineHeight:1.7}}>
+              {req.resolution
+                ? <><b style={{color:B.text3,fontWeight:600}}>الحلّ:</b> <span className="whitespace-pre-line">{req.resolution}</span></>
+                : <span style={{color:TONE.warn.fg}}>طلبٌ قديم بلا نصّ حلّ — يُستكمل عند أوّل تعديل.</span>}
+              {req.resolvedAt&&<div className="mt-1" style={{color:B.muted}}>حُلّ: {fmtWhen(Date.parse(req.resolvedAt))}
+                {req.closedAt&&<> · أُغلق: {fmtWhen(Date.parse(req.closedAt))}</>}</div>}
+            </div>
           )}
         </div>
-        {activeUsers.length===0&&<div className="text-xs" style={{color:"#8A6A08"}}>لا حسابات موظفين نشطة مرتبطة بملفٍ — أنشئها من شاشة المستخدمين.</div>}
       </div>
-
-      {/* ── الحالة والحلّ ── */}
-      <div className="rounded-xl p-4 mt-4 flex flex-col gap-2" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-        <div className="text-xs font-bold" style={{color:B.text3}}>حالة الطلب</div>
-        <AppSelect value={pendingStatus??req.status} onChange={v=>changeStatus(v as SupportStatus)} ariaLabel="حالة الطلب"
-          options={SUP_STATUSES.map(s=>({value:s,label:SUP_STATUS_LABELS[s]}))}/>
-        {needsResolution&&(
-          <div className="rounded-xl p-3 mt-1 flex flex-col gap-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <Field label={pendingStatus==="closed"?"نصّ الحلّ قبل الإغلاق (إلزامي)":"نصّ الحلّ (إلزامي)"}
-              hint="يُحفظ في الطلب ويُسجَّل في المحادثة — من يفتح الطلب بعد شهر يعرف ما حُلّ وكيف.">
-              <textarea value={resolution} onChange={e=>setResolution(e.target.value)} rows={3} className={inp} style={ist}
-                placeholder="ما الذي كان سبب المشكلة، وما الذي فُعل لحلّها؟"/>
-            </Field>
-            <div className="flex gap-2">
-              <button onClick={confirmResolution} disabled={!resolution.trim()}
-                className="px-4 py-2 rounded-xl font-bold text-sm cursor-pointer"
-                style={{background:resolution.trim()?B.gold:"#D8D0C4",color:resolution.trim()?B.black:"#9a9186",border:"none"}}>
-                {pendingStatus==="closed"?"تأكيد الإغلاق":"تأكيد الحلّ"}
-              </button>
-              <button onClick={()=>{ setPendingStatus(null); setResolution(req.resolution??""); }}
-                className="px-4 py-2 rounded-xl font-bold text-sm cursor-pointer" style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text2}}>تراجع</button>
-            </div>
+      {needsResolution&&(
+        <div className="rounded-xl p-4 mt-4" style={{background:B.fill}}>
+          <Field label={<>{pendingStatus==="closed"?"نصّ الحلّ قبل الإغلاق":"نصّ الحلّ"}<span className="ui-req">*</span></>}
+            hint="يُحفظ في الطلب ويُسجَّل في المحادثة — من يفتح الطلب بعد شهر يعرف ما حُلّ وكيف.">
+            <Textarea value={resolution} onChange={e=>setResolution(e.target.value)} rows={3} style={{resize:"none"}}
+              placeholder="ما الذي كان سبب المشكلة، وما الذي فُعل لحلّها؟"/>
+          </Field>
+          <div className="flex gap-2 mt-3">
+            <Button variant="primary" onClick={confirmResolution} disabled={!resolution.trim()}>
+              {pendingStatus==="closed"?"تأكيد الإغلاق":"تأكيد الحلّ"}
+            </Button>
+            <Button variant="secondary" onClick={()=>{ setPendingStatus(null); setResolution(req.resolution??""); }}>تراجع</Button>
           </div>
-        )}
-        {!needsResolution&&(req.status==="resolved"||req.status==="closed")&&(
-          <div className="text-xs leading-relaxed" style={{color:B.text2}}>
-            {req.resolution
-              ? <><b style={{color:B.text3}}>الحلّ:</b> <span className="whitespace-pre-line">{req.resolution}</span></>
-              : <span style={{color:"#8A6A08"}}>طلبٌ قديم بلا نصّ حلّ — يُستكمل عند أوّل تعديل.</span>}
-            {req.resolvedAt&&<div className="mt-1" style={{color:B.muted}}>حُلّ: <span style={{fontFamily:"var(--font-app)"}}>{fmtWhen(Date.parse(req.resolvedAt))}</span>
-              {req.closedAt&&<> · أُغلق: <span style={{fontFamily:"var(--font-app)"}}>{fmtWhen(Date.parse(req.closedAt))}</span></>}</div>}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── المحادثة الداخلية ── */}
-      <div className="mt-5">
-        <div className="flex items-center gap-2 text-xs font-bold mb-2" style={{color:B.text3}}>
-          <MessageSquare size={13}/>المحادثة الداخلية
-          <span className="font-normal" style={{color:B.muted}}>— بين أفراد الفريق، وتُسجَّل باسم كاتبها ووقتها</span>
-        </div>
-        <div className="flex gap-2 items-start">
-          <textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} className={inp} style={ist}
+      <div className="mt-5 pt-5" style={{borderTop:`1px solid ${B.border}`}}>
+        <label className="ui-label flex items-center gap-1.5 flex-wrap" htmlFor={`sup-note-${req.id}`}>
+          <MessageSquare size={14}/>المحادثة الداخلية
+          <span style={{fontWeight:400,color:B.muted}}>— بين أفراد الفريق، وتُسجَّل باسم كاتبها ووقتها</span>
+        </label>
+        <div className="flex gap-2 items-end">
+          <Textarea id={`sup-note-${req.id}`} value={note} onChange={e=>setNote(e.target.value)} rows={2} style={{resize:"none",minHeight:64}}
             placeholder="ملاحظة للفريق: ما جُرّب، ما يُنتظر، من يُتابع…"
             onKeyDown={e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)) void addNote(); }}/>
-          <button onClick={addNote} disabled={!note.trim()||saving} aria-label="إضافة ملاحظة" title="إضافة ملاحظة (Ctrl+Enter)"
-            className="w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-            style={{background:note.trim()&&!saving?B.gold:"#D8D0C4",color:note.trim()&&!saving?B.black:"#9a9186",border:"none"}}>
-            <Send size={15}/>
-          </button>
+          {/* داكنٌ لا ذهبي: الذهبي في هذه اللوحة لتأكيد الحلّ وحده. */}
+          <Button variant="dark" onClick={addNote} disabled={!note.trim()} loading={saving} icon={<Send size={15}/>}
+            title="إضافة ملاحظة (Ctrl+Enter)">إضافة</Button>
         </div>
-        {!isSupabaseEnabled&&<div className="text-xs mt-1" style={{color:B.muted}}>في وضع التجربة لا تُحفظ المحادثة — تحتاج اتصالاً بالقاعدة.</div>}
+        {!isSupabaseEnabled&&<div className="ui-hint">في وضع التجربة لا تُحفظ المحادثة — تحتاج اتصالاً بالقاعدة.</div>}
       </div>
-      <div className="mt-4">
-        <EventTimeline docType={SUPPORT_DOC} docId={req.id} title="المحادثة وسجلّ الطلب" reloadKey={evKey}
+      <div className="mt-5">
+        <EventTimeline flat docType={SUPPORT_DOC} docId={req.id} title="المحادثة وسجلّ الطلب" reloadKey={evKey}
           emptyText="لا ملاحظات بعد — أوّل ملاحظة تبدأ المحادثة، والتعيين والانتقالات تُسجَّل هنا تلقائياً."/>
       </div>
-    </div>
+      </div>
+    </section>
   );
 }

@@ -7,7 +7,8 @@
 
    نصّ الرسالة عربيّ ثابت لا مترجَم: قد يقع الخطأ قبل جهوز طبقة الترجمة. */
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { B } from "@/lib/theme";
+import { RotateCw, TriangleAlert } from "lucide-react";
+import { B, ELEV, TONE } from "@/lib/theme";
 import { hideBootSplash } from "@/lib/bootSplash";
 
 interface Props { children: ReactNode }
@@ -34,42 +35,58 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
 
+    /* الرسالة التقنية (اسم ملف، سطر، نصّ إنجليزي) لا تعني العميل شيئاً
+       وتُقلقه؛ تبقى مطويّةً تحت «تفاصيل للدعم الفني» ليقرأها من يُرسَل
+       إليه لقطة الشاشة. */
     return (
-      <div dir="rtl" style={{
+      <div dir="rtl" lang="ar" style={{
         minHeight: "100vh", display: "grid", placeItems: "center",
-        padding: 24, background: B.bg, fontFamily: "var(--font-app)",
+        padding: "24px 20px", background: B.bg,
+        fontFamily: "'DG Shamael', var(--font-app)",
       }}>
-        <div style={{
-          maxWidth: 460, width: "100%", background: B.surface,
-          border: `1px solid ${B.border}`, borderRadius: 16, padding: "32px 28px",
-          textAlign: "center", boxShadow: "0 10px 40px -20px rgba(27,23,18,.25)",
+        <div role="alert" style={{
+          maxWidth: 440, width: "100%", background: B.surface,
+          border: `1px solid ${B.border}`, borderRadius: 20, padding: "36px 24px 24px",
+          textAlign: "center", boxShadow: ELEV[2],
         }}>
-          <div style={{ height: 3, background: `linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`,
-            borderRadius: 2, width: 56, margin: "0 auto 22px" }}/>
-          <h1 style={{ fontSize: 21, fontWeight: 600, color: B.primaryDeep, margin: "0 0 10px" }}>
+          <div aria-hidden style={{
+            width: 64, height: 64, margin: "0 auto 20px", borderRadius: "50%",
+            display: "grid", placeItems: "center",
+            background: TONE.warn.bg, color: TONE.warn.fg, boxShadow: `0 0 0 8px ${B.cream}`,
+          }}>
+            <TriangleAlert size={28} />
+          </div>
+          <h1 style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.3, color: B.black, margin: "0 0 10px" }}>
             حدث خطأ غير متوقّع
           </h1>
-          <p style={{ fontSize: 15, lineHeight: 1.7, color: B.text2, margin: "0 0 24px" }}>
+          <p style={{ fontSize: 15, lineHeight: 1.75, color: B.text2, margin: "0 0 24px" }}>
             لم تُفقد بياناتك المحفوظة. أعد تحميل الصفحة، وإن تكرّر الخطأ تواصل
             معنا وأخبرنا بما كنت تفعله.
           </p>
           <button
             onClick={() => window.location.reload()}
             style={{
-              width: "100%", padding: "13px 20px", borderRadius: 12, border: "none",
-              background: B.gold, color: B.black, fontSize: 15, fontWeight: 600,
+              width: "100%", height: 50, padding: "0 20px", borderRadius: 999, border: "none",
+              background: B.gold, color: B.black, fontSize: 16, fontWeight: 600,
               fontFamily: "inherit", cursor: "pointer",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}>
+            <RotateCw size={17} />
             إعادة تحميل الصفحة
           </button>
-          <details style={{ marginTop: 18, textAlign: "start" }}>
-            <summary style={{ fontSize: 12.5, color: B.muted, cursor: "pointer" }}>
-              التفاصيل التقنية
+          <details style={{ marginTop: 14, textAlign: "start" }}>
+            <summary style={{
+              fontSize: 13, color: B.muted, cursor: "pointer", textAlign: "center",
+              minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center",
+              listStyle: "none",
+            }}>
+              <span style={{ textDecoration: "underline", textUnderlineOffset: 4 }}>تفاصيل للدعم الفني</span>
             </summary>
             <pre style={{
-              marginTop: 10, fontSize: 11.5, lineHeight: 1.6, color: B.text2,
-              background: B.fill, border: `1px solid ${B.border}`, borderRadius: 8,
-              padding: 12, overflowX: "auto", direction: "ltr", whiteSpace: "pre-wrap",
+              margin: "6px 0 0", fontSize: 12, lineHeight: 1.6, color: B.text2,
+              background: B.fill, border: `1px solid ${B.border}`, borderRadius: 10,
+              padding: 12, overflowX: "auto", direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap",
+              wordBreak: "break-word", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
             }}>{error.message || String(error)}</pre>
           </details>
         </div>

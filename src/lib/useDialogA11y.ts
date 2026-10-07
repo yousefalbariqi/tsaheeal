@@ -46,7 +46,14 @@ export interface DialogA11y {
 }
 
 export function useDialogA11y(
-  { open, onClose, title }: { open: boolean; onClose: () => void; title?: string },
+  { open, onClose, title, focus = "first" }: {
+    open: boolean; onClose: () => void; title?: string;
+    /** أين يبدأ التركيز: "first" أول عنصرٍ قابل للتركيز (السلوك القائم)،
+        "field" أول حقل إدخال — وإن لم يوجد، أو كانت الشاشة لمسية، فالصندوق
+        نفسه: التركيز على زرّ × يرسم حوله إطاراً لا معنى له، والتركيز على
+        حقلٍ في الجوال يرفع لوحة المفاتيح فوق نافذةٍ لم تُقرأ بعد. */
+    focus?: "first" | "field";
+  },
 ): DialogA11y {
   const titleId = useId();
   const node = useRef<HTMLDivElement | null>(null);
@@ -65,6 +72,13 @@ export function useDialogA11y(
       if (!panel) return;
       /* أول عنصر قابل للتركيز، وإلا الصندوق نفسه (tabIndex=-1) — حتى
          يبدأ الـTab من داخل الحوار لا من أول الصفحة. */
+      if (focus === "field") {
+        const fine = window.matchMedia?.("(pointer: fine)").matches;
+        const field = fine ? panel.querySelector<HTMLElement>(
+          '[data-autofocus], input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea:not([disabled])') : null;
+        (field && visible(field) ? field : panel).focus({ preventScroll: true });
+        return;
+      }
       (focusables(panel)[0] ?? panel).focus();
     });
     return () => {
@@ -73,7 +87,7 @@ export function useDialogA11y(
       /* العنصر قد يكون أُزيل من الصفحة أثناء فتح الحوار. */
       if (back && document.contains(back)) back.focus();
     };
-  }, [open]);
+  }, [open, focus]);
 
   /* Escape + حصر الـTab. مرحلة الالتقاط: بعض الحقول توقف انتشار
      المفاتيح، فالإصغاء في مرحلة الفقاعات يفوّت Escape داخلها. */
@@ -83,6 +97,10 @@ export function useDialogA11y(
     stack.push(me);
     const onKey = (e: KeyboardEvent) => {
       if (stack[stack.length - 1] !== me) return;   // ليس الحوار الأعلى
+      /* حوارٌ مركَّبٌ لكنه غير معروض: شاشات التحرير تبقى مركّبةً في
+         الخلفية (hidden) عند التنقّل، ونافذتها المفتوحة معها. لو حُرس
+         Tab لحوارٍ لا يُرى لتعطّل التنقّل بلوحة المفاتيح في كل شاشة. */
+      if (node.current && !visible(node.current)) return;
       /* لا نغلق الحوار بـ Escape: النوافذ التي تعرض تفاصيل أو مسوّدة يجب
          أن تبقى مفتوحة حتى يختار المستخدم زر × أو «رجوع/إلغاء» صراحةً.
          هذا يطابق سلوك النقر خارج النافذة، ويمنع فقدان الإدخال بلا قصد. */

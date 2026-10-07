@@ -18,12 +18,11 @@
    المكوّن مكتفٍ بنفسه: لا يعتمد إلا على النسق والحوار — فلا يسقط إن
    تغيّرت مكوّناتٌ مشتركة أخرى تحت يد أحد. */
 import { useState } from "react";
-import { motion } from "motion/react";
 import { Pencil, Archive, Trash2, EyeOff, Eye, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { B } from "@/lib/theme";
 import { DeleteDialog } from "@/components/DeleteDialog";
-import { Spinner } from "@/components/Spinner";
+import { Button, IconButton, Modal, ModalIcon, Note, Textarea } from "@/components/ui";
 
 /* ═══ حوار الحذف النهائي ═══════════════════════════════════════════
    منفصلٌ عن حوار الأرشفة قصداً: لونه ونصّه وإقرارُه يجب أن يقولا «هذا
@@ -45,69 +44,45 @@ export function PermanentDeleteDialog({ name, label, blockers, busy, onConfirm, 
   const ready = !blocked && !!reason.trim() && understood && !busy;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(14,12,11,0.82)", backdropFilter: "blur(4px)" }}>
-      <motion.div initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }}
-        role="dialog" aria-modal="true" aria-label={`حذف ${label} نهائياً`}
-        className="rounded-2xl p-7 w-full" style={{ maxWidth: 400, background: "#fff" }} onClick={e => e.stopPropagation()}>
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: "#FBE6E6" }}>
-          <AlertTriangle size={20} style={{ color: "#BE2626" }} />
-        </div>
-        <h3 className="text-base font-bold mb-1" style={{ color: B.black }}>حذف {label} نهائياً</h3>
-        <p className="text-sm leading-relaxed mb-4" style={{ color: B.text2 }}>
-          <b style={{ color: B.black }}>{name}</b> سيُمحى من قاعدة البيانات ولا يمكن استرجاعه.
-          إن أردتَ إخفاءه مع الاحتفاظ به فاستخدم {safeAlternative}.
-        </p>
-
-        {blocked ? (
-          <div className="rounded-xl px-4 py-3 mb-5" style={{ background: "#FBF3D6", border: "1px solid #EBD9A0" }}>
-            <div className="text-xs font-bold mb-1.5" style={{ color: "#8A6A08" }}>لا يمكن الحذف — السجل مرتبط بغيره</div>
-            <ul className="text-xs leading-relaxed m-0 ps-4" style={{ color: "#6b5a2a" }}>
-              {blockers.map(b => <li key={b}>{b}</li>)}
-            </ul>
-            <div className="text-xs mt-2" style={{ color: "#8A6A08" }}>{safeAlternative} متاح دائماً بدلاً منه.</div>
-          </div>
-        ) : (
-          <>
-            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3 }}>
-              سبب الحذف النهائي <span style={{ color: "#BE2626" }}>*</span>
-            </label>
-            <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
-              placeholder="مثال: سجل تجريبي أُدخل بالخطأ"
-              className="w-full rounded-xl border px-3 py-2 text-sm mb-3 resize-none focus:outline-none"
-              style={{ borderColor: B.border, fontFamily: "inherit", color: B.black }} />
-            <button onClick={() => setUnderstood(v => !v)}
-              className="flex items-start gap-2.5 w-full text-start mb-5 cursor-pointer"
-              style={{ background: "none", border: "none", padding: 0 }} aria-pressed={understood}>
-              <span className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{ background: understood ? "#BE2626" : "#fff", border: `1.5px solid ${understood ? "#BE2626" : B.border}`, color: "#fff", fontSize: 12, fontWeight: 800 }}>
-                {understood ? "✓" : ""}
-              </span>
-              <span className="text-xs leading-relaxed" style={{ color: B.text2 }}>
-                أفهم أن الحذف نهائي ولا يمكن استرجاع السجل.
-              </span>
-            </button>
-          </>
+    <Modal open onClose={() => { if (!busy) onCancel(); }} width={460} zIndex={80}
+      title={`حذف ${label} نهائياً`}
+      icon={<ModalIcon tone="danger"><AlertTriangle size={19} /></ModalIcon>}
+      footer={<>
+        {!blocked && (
+          <Button variant="danger" disabled={!ready} loading={busy} onClick={() => ready && onConfirm(reason.trim())}>
+            {busy ? "جارٍ الحذف…" : "حذف نهائي"}
+          </Button>
         )}
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>{blocked ? "إغلاق" : "إلغاء"}</Button>
+      </>}>
+      <p className="text-sm" style={{ color: B.text2, lineHeight: 1.8, margin: "0 0 16px" }}>
+        <b style={{ color: B.black }}>{name}</b> سيُمحى من قاعدة البيانات ولا يمكن استرجاعه.
+        إن أردتَ إخفاءه مع الاحتفاظ به فاستخدم {safeAlternative}.
+      </p>
 
-        <div className="flex gap-2">
-          {!blocked && (
-            <button onClick={() => ready && onConfirm(reason.trim())} disabled={!ready}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold"
-              style={{ background: "#BE2626", color: "#fff", border: "none", opacity: ready ? 1 : 0.45, cursor: ready ? "pointer" : "not-allowed" }}>
-              {busy && <Spinner size={13} color="#fff" track="rgba(255,255,255,0.3)" />}
-              {busy ? "جارٍ الحذف…" : "حذف نهائي"}
-            </button>
-          )}
-          <button onClick={onCancel}
-            className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.fill, color: B.text2, border: "none" }}>
-            {blocked ? "إغلاق" : "إلغاء"}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+      {blocked ? (
+        <Note tone="warn">
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>لا يمكن الحذف — السجل مرتبط بغيره</div>
+          <ul className="m-0 ps-4" style={{ listStyle: "disc" }}>
+            {blockers.map(b => <li key={b}>{b}</li>)}
+          </ul>
+          <div style={{ marginTop: 6 }}>{safeAlternative} متاح دائماً بدلاً منه.</div>
+        </Note>
+      ) : (
+        <>
+          <label className="ui-label" htmlFor="perm-delete-reason">سبب الحذف النهائي<span className="ui-req">*</span></label>
+          <Textarea id="perm-delete-reason" value={reason} onChange={e => setReason(e.target.value)} rows={2}
+            placeholder="مثال: سجل تجريبي أُدخل بالخطأ" style={{ resize: "none" }} />
+          <label className="flex items-start gap-2.5 mt-4 cursor-pointer">
+            <input type="checkbox" checked={understood} onChange={e => setUnderstood(e.target.checked)}
+              className="mt-1 flex-shrink-0" style={{ width: 16, height: 16, accentColor: "#BE2626" }} />
+            <span className="text-sm" style={{ color: B.text2, lineHeight: 1.7 }}>
+              أفهم أن الحذف نهائي ولا يمكن استرجاع السجل.
+            </span>
+          </label>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -156,14 +131,6 @@ export function EntityActions({
      القاعدة جهدٌ ضائع ورسالةُ خطأ بدل زرٍّ لم يكن ينبغي أن يظهر. */
   if (!canWrite) return null;
 
-  const iconBtn = (tone: "neutral" | "gold" | "danger"): React.CSSProperties => ({
-    width: 38, height: 38, borderRadius: 12, display: "flex", alignItems: "center",
-    justifyContent: "center", cursor: "pointer", flexShrink: 0,
-    ...(tone === "neutral" ? { background: "#fff", border: `1px solid ${B.border}`, color: B.text3 }
-      : tone === "gold" ? { background: "#FBF3D6", border: "1px solid #EBD9A0", color: "#8A6A08" }
-      : { background: "#FBE6E6", border: "1px solid #F3C9C9", color: "#BE2626" }),
-  });
-
   const runDelete = async (reason: string) => {
     if (!onPermanentDelete) return;
     setBusy(true);
@@ -182,39 +149,34 @@ export function EntityActions({
     <>
       <div className="relative z-10 flex gap-2 items-center min-w-0" style={{ isolation: "isolate" }}>
         {onEdit && (
-          <button type="button" onClick={onEdit}
-            className={`${primaryEdit ? "flex-1" : ""} flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold cursor-pointer`}
-            style={{ background: B.gold, color: B.black, border: "none", height: 38 }}>
-            <Pencil size={13} />تعديل
-          </button>
+          <Button variant="secondary" onClick={onEdit} icon={<Pencil size={14} />}
+            className={primaryEdit ? "flex-1" : undefined}>تعديل</Button>
         )}
 
         {onToggleActive && !toggleAsLabel && (
-          <button type="button" onClick={() => onToggleActive(!active)} style={iconBtn(active ? "neutral" : "gold")}
-            title={active ? disableLabel : "تنشيط"} aria-label={active ? disableLabel : "تنشيط"}>
-            {active ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
+          <IconButton variant="outline" label={active ? disableLabel : "تنشيط"} onClick={() => onToggleActive(!active)}
+            style={active ? undefined : { background: "var(--k-warn-bg)", borderColor: "var(--k-warn-line)", color: "var(--k-warn)" }}>
+            {active ? <EyeOff size={16} /> : <Eye size={16} />}
+          </IconButton>
         )}
 
         {onToggleActive && toggleAsLabel && (
-          <button type="button" onClick={() => onToggleActive(!active)}
-            className="flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer"
-            style={{height:38,background:active?"#FBE6E6":"#E3F3E8",border:`1px solid ${active?"#F3C9C9":"#C4E4CE"}`,color:active?"#BE2626":"#1E7A44"}}>
+          <Button variant={active ? "secondary" : "dark"} onClick={() => onToggleActive(!active)}>
             {active ? "إيقاف" : "تفعيل"}
-          </button>
+          </Button>
         )}
 
-        {onArchive && <button type="button" onClick={() => setDialog("archive")} style={iconBtn("gold")}
-          title="أرشفة" aria-label={`أرشفة ${label}`}>
-          <Archive size={15} />
-        </button>}
+        {onArchive && (
+          <IconButton variant="outline" label={`أرشفة ${label}`} onClick={() => setDialog("archive")}>
+            <Archive size={16} />
+          </IconButton>
+        )}
 
         {onPermanentDelete && isAdmin && (
-          <button type="button" onClick={() => setDialog("delete")} style={iconBtn("danger")}
-            title={deleteBlockers.length ? "الحذف غير متاح — السجل مرتبط بغيره" : "حذف نهائي"}
-            aria-label={`حذف ${label} نهائياً`}>
-            <Trash2 size={15} />
-          </button>
+          <IconButton variant="outline" className="ui-iconbtn--danger" onClick={() => setDialog("delete")}
+            label={deleteBlockers.length ? "الحذف غير متاح — السجل مرتبط بغيره" : `حذف ${label} نهائياً`}>
+            <Trash2 size={16} />
+          </IconButton>
         )}
       </div>
 

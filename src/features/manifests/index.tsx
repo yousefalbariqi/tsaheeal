@@ -6,107 +6,78 @@
    كشف حافلة الأربعاء». خلطُهما كان يعني أن يمرّ مَن يريد ورقةً بجدولٍ
    فيه عمود «إلغاء الرحلة».
 
-   ── التجميع: الأسبوع ظرف، والباقة عنوان، والإطلاقات تحتهما ──
+   ── التجميع: الأسبوع ظرف، وإطلاقات الباقة الواحدة متجاورةٌ تحته ──
    «مكة ٤ أيام» تُطلق ثلاث مرّات في أسبوع — الدمام والخبر وخميسٌ آخر —
-   وقائمةٌ مسطّحة تكرّر اسم الباقة ثلاث مرّات متباعدة. ومَن جاء يطبع
-   كشوفات تلك الباقة يريد الثلاثة معاً في مكانٍ واحد.
+   وقائمةٌ مرتّبة بالتاريخ وحده تفرّق اسم الباقة ثلاث مرّات متباعدة. ومَن
+   جاء يطبع كشوفات تلك الباقة يريد الثلاثة معاً في مكانٍ واحد: فالجدول
+   يرتّب الأسبوع بالباقة ثم بالموعد، ومجموع الباقة سطرٌ تحت اسمها.
 
    ── القادم وحده ──
    الكشف ورقةٌ تُحمل إلى حافلةٍ لم تنطلق. وما انطلق يُراجَع ولا يُجهَّز،
    فله بابٌ ثانٍ لا مكانٌ في الصدارة. */
-import { useCallback, useState } from "react";
+import { useCallback, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router";
-import { ClipboardList, MapPin, Clock, Bus, Users, AlertTriangle, History, ArrowRight, X, ChevronLeft } from "lucide-react";
+import { ClipboardList, AlertTriangle, ChevronLeft, SearchX, X } from "lucide-react";
 import { B } from "@/lib/theme";
 import type { Booking, Trip } from "@/types";
 import { useStore } from "@/store/useStore";
 import { useDebounced } from "@/lib/useDebounced";
-import { EntityGate } from "@/components/States";
+import { EntityGate, EmptyState } from "@/components/States";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge, Button, Note, Segmented } from "@/components/ui";
+import { fmtDateShort, fmtDayDate, fmtTime } from "@/lib/dates";
 import {
   splitByHorizon, seatsOf, occupancy, dayName, shortDate, untilLabel,
-  tripBoardState, type Horizon,
+  tripBoardState, tripDeparture, weekStart, type Horizon,
 } from "@/lib/trip";
-import { AR, groupLaunches, nearestLaunch, unseatedByTrip, type HotelRef } from "@/lib/manifest";
+import { AR, groupLaunches, nearestLaunch, unseatedByTrip, type HotelRef, type LaunchWeek } from "@/lib/manifest";
 import { arCount } from "@/features/customer/plural";
 import { busCountOf, busesLabel } from "@/lib/buses";
 import { SeatManifest } from "./SeatManifest";
 
-/* ════════ بطاقة الإطلاقة ════════
-   خمسة أشياء لا أكثر: التاريخ والوقت والمدينة والباص والمقاعد. البطاقة
-   تُختار منها لا تُقرأ فيها التفاصيل — التفاصيل خلف ضغطةٍ واحدة. */
-function LaunchCard({ trip, bus, unseated, nearest, onOpen }: {
-  trip: Trip; bus: string; unseated: number; nearest?: boolean; onOpen: () => void;
-}) {
+/* ════════ مدى الأسبوع ════════
+   «الأسبوع القادم» يُقرأ مع تاريخيه: السبت إلى الجمعة كما يبدأ أسبوع
+   العمل. و«لاحقاً» ليس أسبوعاً واحداً، فمداه من أول إطلاقةٍ فيه لآخرها. */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function weekRange(w: LaunchWeek): string {
+  const days = w.packages.flatMap(p => p.trips).map(t => tripDeparture(t)).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime());
+  if (!days.length) return "";
+  if (w.key === "later") {
+    const from = ymd(days[0]), to = ymd(days[days.length - 1]);
+    return from === to ? fmtDateShort(from) : `${fmtDateShort(from)} – ${fmtDateShort(to)}`;
+  }
+  const start = weekStart(days[0]);
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  return `${fmtDateShort(ymd(start))} – ${fmtDateShort(ymd(end))}`;
+}
+
+/* ════════ الإشغال ════════
+   الرقم أسودُ والشريط أسود: حالة الإطلاقة تقولها شارتها، ولونٌ ثانٍ على
+   الشريط كان يكرّرها. */
+function Occupancy({ trip }: { trip: Trip }) {
   const { capacity, booked } = seatsOf(trip);
-  const pct = occupancy(trip);
-  const state = tripBoardState(trip);
-  const fg = state === "full" ? "#BE2626" : state === "few" ? "#B4530C" : state === "running" ? "#0E7CA8" : "#1E7A44";
   return (
-    <button onClick={onOpen}
-      className="group flex flex-col gap-3 rounded-2xl px-4 py-3.5 text-right cursor-pointer w-full"
-      style={{
-        background: "#fff",
-        /* الترتيب مقصود: المختصر أولاً ثم حافة الحالة فوقه — عكسه يدهسها. */
-        border: `1px solid ${nearest ? "rgba(192,134,44,0.55)" : B.border}`,
-        borderInlineStart: `3px solid ${fg}`,
-        boxShadow: nearest ? "0 8px 24px -14px rgba(192,134,44,0.6)" : undefined,
-      }}>
-      <div className="flex items-start justify-between gap-2 w-full">
-        <span className="min-w-0">
-          {/* «الأقرب» وسمٌ على البطاقة لا بطاقةٌ ثانية فوق القائمة:
-              الترتيب يضعها أوّلاً أصلاً، ونسخُها مرّتين يجعل الشاشة
-              تبدو كأن فيها إطلاقتين في اليوم نفسه. */}
-          {nearest && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-bold mb-1.5"
-              style={{ background: B.gold, color: B.black, fontSize: 10 }}>
-              <ClipboardList size={9} />الأقرب
-            </span>
-          )}
-          <span className="block font-extrabold" style={{ color: B.black, fontSize: 14, fontFamily: "var(--font-app)" }}>
-            {dayName(trip.departureDate)} {shortDate(trip.departureDate)}
-          </span>
-          <span className="inline-flex items-center gap-1.5 mt-1" style={{ fontSize: 11.5, color: B.muted, fontWeight: 600 }}>
-            <Clock size={11} style={{ color: B.gold }} />
-            <span style={{ direction: "ltr" }}>{trip.departureTime || "—"}</span>
-            <span>·</span>{untilLabel(trip) || "—"}
-          </span>
-        </span>
-        <StatusBadge status={state} entity="trip" />
+    <div className="flex items-center gap-3" style={{ minWidth: 150 }}>
+      <span className="nowrap" style={{ fontSize: 14, color: B.black, minWidth: 68 }}>
+        <b style={{ fontWeight: 600 }}>{booked}</b><span style={{ color: B.muted, fontSize: 13 }}> من {capacity}</span>
+      </span>
+      <div className="ui-meter flex-1" aria-hidden style={{ minWidth: 56 }}>
+        <span style={{ width: `${occupancy(trip)}%` }} />
       </div>
-
-      <div className="flex flex-col gap-1.5 w-full" style={{ fontSize: 11.5, color: B.text2, fontWeight: 600 }}>
-        <span className="inline-flex items-center gap-1.5 min-w-0">
-          <MapPin size={11} style={{ color: B.gold, flexShrink: 0 }} />
-          <span className="truncate">{trip.departureCity || "—"}</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 min-w-0">
-          <Bus size={11} style={{ color: B.gold, flexShrink: 0 }} />
-          <span className="truncate">{bus || "—"}</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2.5 w-full pt-2.5" style={{ borderTop: `1px solid ${B.border}` }}>
-        <span className="inline-flex items-baseline gap-1 font-extrabold tabular-nums" style={{ color: B.black, fontSize: 14, fontFamily: "var(--font-app)" }}>
-          {booked}<span style={{ color: B.muted, fontWeight: 600, fontSize: 11.5 }}>/ {capacity} مقعد</span>
-        </span>
-        <span className="rounded-full overflow-hidden flex-1" style={{ height: 5, background: "#EDE8DE", minWidth: 36 }}>
-          <span className="block" style={{ width: `${pct}%`, height: "100%", background: fg, borderRadius: 999 }} />
-        </span>
-        <ChevronLeft size={14} style={{ color: B.muted, flexShrink: 0 }} />
-      </div>
-
-      {unseated > 0 && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold self-start"
-          style={{ background: "#FEF6EF", border: "1px solid #F5D9BE", color: "#B4530C", fontSize: 10.5 }}>
-          <AlertTriangle size={10} />{unseated} بلا مقعد
-        </span>
-      )}
-    </button>
+    </div>
   );
+}
+
+/* ════════ جاهزية الكشف ════════
+   ما يمنع طباعته اليوم: حجزٌ قائم لم يُخصَّص مقعده. والسائق ليس شرطاً —
+   هو بالتعاقد ويُكتب حين يُعرف. */
+function Readiness({ booked, unseated }: { booked: number; unseated: number }) {
+  if (unseated > 0) return <Badge tone="warn"><AlertTriangle size={12} />{unseated} بلا مقعد</Badge>;
+  if (booked === 0) return <Badge tone="neutral">لا ركّاب بعد</Badge>;
+  return <Badge tone="success" dot>جاهز</Badge>;
 }
 
 /* ════════ الشاشة ════════ */
@@ -159,8 +130,9 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
   if (openTrip) {
     return (
       <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{ background: B.bg }}>
+        {/* البحث يرشّح القائمة لا الكشف المفتوح — فلا حقل له هنا. */}
         <PageHeader title="الكشوفات" crumb={`كشف ${pkgName(openTrip.packageId)}`} search={search} onSearch={setSearch}
-          searchPlaceholder="ابحث بالباقة أو المدينة أو التاريخ أو الباص" onMenuOpen={onMenuOpen} />
+          hideSearch onMenuOpen={onMenuOpen} />
         {/* المفتاح الإطلاقة: مسوّدة السائقين تُبنى منها، فالانتقال إلى
             كشفٍ آخر يبدأ بسائقيه لا بما كُتب للسابق. */}
         <SeatManifest key={openTrip.id} trip={openTrip} pkg={pkgOf(openTrip.packageId)} vehicle={vehicleOf(openTrip.transportId)}
@@ -198,6 +170,9 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
 
   const filtersOn = pkgFilter !== "all" || cityFilter !== "all" || !!query;
   const clear = () => { setPkgFilter("all"); setCityFilter("all"); setSearch(""); };
+  const onRowKey = (t: Trip) => (e: KeyboardEvent) => { if (e.key === "Enter" && e.target === e.currentTarget) open(t); };
+  const countLabel = filtered.length === period.length ? arCount(period.length, AR.launch) : `${filtered.length} من ${period.length}`;
+  const pastCount = past.filter(t => t.status !== "cancelled" && t.status !== "archived").length;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{ background: B.bg }}>
@@ -205,19 +180,7 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
         search={search} onSearch={setSearch} searchPlaceholder="ابحث بالباقة أو المدينة أو التاريخ أو الباص"
         onMenuOpen={onMenuOpen} />
 
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
-        {horizon === "past" && (
-          <div className="flex items-center gap-3 flex-wrap rounded-2xl px-4 py-3 mb-4" style={{ background: B.fill, border: `1px dashed ${B.border}` }}>
-            <button onClick={() => setHorizon("upcoming")} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold cursor-pointer"
-              style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.black, fontSize: 12.5 }}>
-              <ArrowRight size={13} />العودة إلى الإطلاقات القادمة
-            </button>
-            <span className="font-semibold" style={{ color: B.text2, fontSize: 12 }}>
-              كشوفات <b style={{ color: B.black }}>رحلاتٍ انطلقت</b> — للمراجعة لا للتجهيز.
-            </span>
-          </div>
-        )}
-
+      <div className="px-4 md:px-8 pt-1">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* الوصف يتبع الفترة: «أقربها» سؤالُ القادم، والماضي يُراجَع من
               أحدثه — و«لا إطلاقات» على خمسِ إطلاقاتٍ ماضية كذبٌ صريح. */}
@@ -227,87 +190,168 @@ export function ManifestsPage({ onMenuOpen }: { onMenuOpen?: () => void }) {
               : soon ? `أقربها ${shortDate(soon.departureDate)} · ${untilLabel(soon)}` : "لا إطلاقات قادمة"} accent />
           <StatCard label="ركّاب" value={totals.riders} sub="على كل إطلاقات الفترة" />
           <StatCard label="مقاعد شاغرة" value={totals.free} sub="لم تُبَع بعد" />
-          <StatCard label="بلا مقعد" value={totals.unseated} sub={totals.unseated ? "تنتظر تخصيصاً من الطلبات" : "كل الحجوزات مخصَّصة"} />
+          <StatCard label="بلا مقعد" value={totals.unseated} alert sub={totals.unseated ? "تنتظر تخصيصاً من الطلبات" : "كل الحجوزات مخصَّصة"} />
         </div>
 
-        <div className="flex items-end gap-2.5 mt-5 flex-wrap">
-          <div style={{ minWidth: 170, flex: "1 1 170px", maxWidth: 240 }}>
-            <label className="block mb-1 font-bold" style={{ fontSize: 11, color: B.muted }}>الباقة</label>
+        {/* الفترة مقطّعٌ لا زرّان: «إطلاقات ماضية» كان زرّاً هنا و«العودة إلى
+            القادمة» زرّاً في شريطٍ آخر — موضعان لمفتاحٍ واحد. */}
+        <div className="ts-toolbar">
+          <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
+            <Segmented label="الفترة" value={horizon} onChange={v => setHorizon(v)}
+              options={[
+                { value: "upcoming", label: "القادمة" },
+                { value: "past", label: <>الماضية{pastCount > 0 && <span style={{ color: B.muted, fontWeight: 500 }}>{pastCount}</span>}</> },
+              ]} />
+            <span className="sm:hidden ts-count">{countLabel}</span>
+          </div>
+          <div style={{ flex: "1 1 150px", maxWidth: 240, minWidth: 0 }}>
             <AppSelect value={pkgFilter} onChange={setPkgFilter} ariaLabel="تصفية بالباقة"
               options={[{ value: "all", label: "كل الباقات" }, ...packages.map(p => ({ value: p.id, label: p.name }))]} />
           </div>
-          <div style={{ minWidth: 150, flex: "1 1 150px", maxWidth: 200 }}>
-            <label className="block mb-1 font-bold" style={{ fontSize: 11, color: B.muted }}>مدينة الانطلاق</label>
+          <div style={{ flex: "1 1 130px", maxWidth: 200, minWidth: 0 }}>
             <AppSelect value={cityFilter} onChange={setCityFilter} ariaLabel="تصفية بمدينة الانطلاق"
               options={[{ value: "all", label: "كل المدن" }, ...cities.map(c => ({ value: c, label: c }))]} />
           </div>
-          {filtersOn && (
-            <button onClick={clear} className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold cursor-pointer"
-              style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2, fontSize: 12, height: 42 }}><X size={12} />تفريغ</button>
-          )}
-          <div className="flex items-center gap-2.5 ms-auto" style={{ paddingBottom: 1 }}>
-            <span style={{ fontSize: 12.5, color: B.muted }}>معروض <b style={{ color: B.black }}>{filtered.length}</b> من {period.length}</span>
-            {horizon === "upcoming" && (
-              <button onClick={() => setHorizon("past")} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold cursor-pointer"
-                style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2, fontSize: 12.5 }}>
-                <History size={13} />إطلاقات ماضية
-                {past.length > 0 && <span className="px-1.5 rounded-md" style={{ background: B.fill, color: B.muted, fontSize: 11 }}>{past.length}</span>}
-              </button>
-            )}
-          </div>
+          {filtersOn && <Button variant="ghost" icon={<X size={15} />} onClick={clear}>إزالة المرشّحات</Button>}
+          <span className="hidden sm:flex ts-toolbar-end ts-count" aria-live="polite">{countLabel}</span>
         </div>
-        <div className="mt-5" style={{ height: 1, background: B.border }} />
+
+        {horizon === "past" && (
+          <Note tone="neutral" className="mb-4">كشوفات <b style={{ color: B.black }}>رحلاتٍ انطلقت</b> — للمراجعة لا للتجهيز.</Note>
+        )}
       </div>
 
-      <main className="flex-1 px-4 md:px-8 pb-12 pt-5 flex flex-col gap-5">
-        <EntityGate entity="trips" label="الرحلات" skeleton="cards">
-          {weeks.map(w => (
-            <section key={w.key} className="flex flex-col gap-3">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="font-extrabold m-0" style={{ color: B.black, fontSize: 15, fontFamily: "var(--font-app)" }}>{w.label}</h2>
-                <span className="px-2 py-0.5 rounded-lg font-bold" style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2, fontSize: 11 }}>
-                  {arCount(w.count, AR.launch)}
-                </span>
-                <span className="flex-1" style={{ height: 1, background: B.border, minWidth: 20 }} />
+      <main className="flex-1 px-4 md:px-8 pb-8">
+        <EntityGate entity="trips" label="الرحلات" cols={6}>
+          {/* المكتب: جدولٌ واحد لكل الأسابيع — رأسٌ واحد وأعمدةٌ مصطفّة من
+              أسبوعٍ لآخر، والأسبوع صفُّ عنوانٍ بتاريخيه وعدّه. الصفّ كلّه
+              يفتح الكشف. */}
+          {weeks.length > 0 && (
+            <div className="hidden md:block ui-table-wrap">
+              <div className="ui-table-scroll">
+                <table className="ui-table" style={{ minWidth: 900 }}>
+                  <thead>
+                    <tr>
+                      <th>الموعد</th>
+                      <th>الباقة</th>
+                      <th>الانطلاق</th>
+                      <th>المقاعد</th>
+                      <th>الحالة</th>
+                      <th>الكشف</th>
+                      <th className="col-action"><span className="sr-only">فتح</span></th>
+                    </tr>
+                  </thead>
+                  {weeks.map(w => {
+                    const range = weekRange(w);
+                    return (
+                      <tbody key={w.key}>
+                        <tr>
+                          <th colSpan={7} scope="rowgroup" style={{ padding: "22px 16px 10px", textAlign: "start", background: B.surface, borderBottom: `1px solid ${B.border}` }}>
+                            <div className="flex items-baseline gap-3">
+                              <h2 className="ts-section-title">{w.label}</h2>
+                              {range && <span style={{ fontSize: 13, fontWeight: 400, color: B.muted }}>{range}</span>}
+                              <span className="ms-auto ts-count" style={{ fontWeight: 400 }}>{arCount(w.count, AR.launch)}</span>
+                            </div>
+                          </th>
+                        </tr>
+                        {w.packages.flatMap(p => {
+                          const many = p.trips.length > 1;
+                          return p.trips.map((t, i) => (
+                            <tr key={t.id} className="is-clickable" tabIndex={0} aria-label={`فتح كشف ${p.packageName} — ${fmtDayDate(t.departureDate)}`}
+                              onClick={() => open(t)} onKeyDown={onRowKey(t)}>
+                              <td className="nowrap">
+                                <div className="cell-main flex items-center gap-2">
+                                  {fmtDayDate(t.departureDate)}
+                                  {/* «الأقرب» وسمٌ على الصفّ لا بطاقةٌ ثانية فوق القائمة:
+                                      الترتيب يضعه أوّلاً أصلاً، ونسخُه مرّتين يجعل الشاشة
+                                      تبدو كأن فيها إطلاقتين في اليوم نفسه. */}
+                                  {t.id === soon?.id && <Badge tone="gold">الأقرب</Badge>}
+                                </div>
+                                <div className="cell-sub">{fmtTime(t.departureTime)}{untilLabel(t) && ` · ${untilLabel(t)}`}</div>
+                              </td>
+                              <td>
+                                <div className="nowrap" style={{ color: B.text3 }}>{p.packageName}</div>
+                                {/* مجموع الباقة مرّةً عند أول إطلاقاتها — لا في كل صفّ. */}
+                                {many && i === 0 && (
+                                  <div className="cell-sub nowrap">
+                                    {arCount(p.trips.length, AR.launch)} · {p.trips.reduce((a, x) => a + seatsOf(x).booked, 0)} من {p.trips.reduce((a, x) => a + seatsOf(x).capacity, 0)} مقعداً
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <div className="nowrap" style={{ color: B.text3 }}>{t.departureCity || "—"}</div>
+                                <div className="cell-sub nowrap" title={busOf(t) || undefined}>{busOf(t) || "—"}</div>
+                              </td>
+                              <td><Occupancy trip={t} /></td>
+                              <td><StatusBadge status={tripBoardState(t)} entity="trip" /></td>
+                              <td><Readiness booked={seatsOf(t).booked} unseated={unseated.get(t.id) ?? 0} /></td>
+                              <td className="col-action"><ChevronLeft size={16} aria-hidden style={{ color: B.muted, display: "inline-block" }} /></td>
+                            </tr>
+                          ));
+                        })}
+                      </tbody>
+                    );
+                  })}
+                </table>
               </div>
+            </div>
+          )}
 
-              {w.packages.map(p => (
-                <div key={p.packageId} className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 flex-wrap" style={{ background: B.fill, borderBottom: `1px solid ${B.border}` }}>
-                    <span className="font-extrabold" style={{ color: B.black, fontSize: 13 }}>{p.packageName}</span>
-                    <span className="px-2 py-0.5 rounded-lg font-bold" style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2, fontSize: 11 }}>
-                      {arCount(p.trips.length, AR.launch)}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 font-semibold" style={{ color: B.muted, fontSize: 11.5 }}>
-                      <Users size={11} />
-                      {p.trips.reduce((a, t) => a + seatsOf(t).booked, 0)} من {p.trips.reduce((a, t) => a + seatsOf(t).capacity, 0)} مقعداً
-                    </span>
+          {/* الجوال: الأسبوع عنوانٌ وتحته بطاقةٌ واحدة، وكل إطلاقةٍ زرّ. */}
+          <div className="md:hidden flex flex-col gap-6">
+            {weeks.map(w => {
+              const range = weekRange(w);
+              return (
+                <section key={w.key} className="flex flex-col gap-2.5" aria-label={w.label}>
+                  <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
+                    <h2 className="ts-section-title">{w.label}</h2>
+                    {range && <span style={{ fontSize: 13, color: B.muted }}>{range}</span>}
+                    <span className="ms-auto ts-count">{arCount(w.count, AR.launch)}</span>
                   </div>
-                  <div className="p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {p.trips.map(t => (
-                      <LaunchCard key={t.id} trip={t} bus={busOf(t)} unseated={unseated.get(t.id) ?? 0}
-                        nearest={t.id === soon?.id} onOpen={() => open(t)} />
-                    ))}
+                  <div className="ui-card overflow-hidden">
+                    {w.packages.flatMap(p => p.trips.map(t => (
+                      <button key={t.id} type="button" onClick={() => open(t)}
+                        className="ts-action-row" style={{ borderRadius: 0, padding: "14px 16px", alignItems: "stretch", borderTop: `1px solid ${B.border}`, marginTop: -1 }}>
+                        <span className="flex-1 min-w-0 flex flex-col gap-2">
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="min-w-0">
+                              <span className="flex items-center gap-2 flex-wrap" style={{ fontSize: 15, fontWeight: 600, color: B.black }}>
+                                {fmtDayDate(t.departureDate)}
+                                {t.id === soon?.id && <Badge tone="gold">الأقرب</Badge>}
+                              </span>
+                              <span className="block" style={{ fontSize: 12, color: B.muted, marginTop: 2 }}>
+                                {fmtTime(t.departureTime)}{untilLabel(t) && ` · ${untilLabel(t)}`}
+                              </span>
+                            </span>
+                            <StatusBadge status={tripBoardState(t)} entity="trip" />
+                          </span>
+                          <span className="block" style={{ fontSize: 14, color: B.text3 }}>
+                            {p.packageName}
+                            <span className="block truncate" style={{ fontSize: 12, color: B.muted, marginTop: 2 }}>
+                              {t.departureCity || "—"}{busOf(t) && ` · ${busOf(t)}`}
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-3 flex-wrap">
+                            <span className="flex-1" style={{ minWidth: 150 }}><Occupancy trip={t} /></span>
+                            <Readiness booked={seatsOf(t).booked} unseated={unseated.get(t.id) ?? 0} />
+                          </span>
+                        </span>
+                        <ChevronLeft size={18} aria-hidden style={{ color: B.muted, flexShrink: 0, alignSelf: "center" }} />
+                      </button>
+                    )))}
                   </div>
-                </div>
-              ))}
-            </section>
-          ))}
+                </section>
+              );
+            })}
+          </div>
 
           {weeks.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 rounded-2xl gap-2.5" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-              <ClipboardList size={40} style={{ opacity: 0.2, color: B.gold, marginBottom: 4 }} />
-              <p className="font-bold m-0" style={{ color: B.black }}>
-                {filtersOn ? "لا إطلاقات مطابقة للمرشّحات" : horizon === "past" ? "لا إطلاقات ماضية في السجل" : "لا إطلاقات قادمة"}
-              </p>
-              {!filtersOn && horizon === "upcoming" && (
-                <p className="text-xs m-0" style={{ color: B.muted }}>الكشف يُنشأ مع الإطلاقة — أطلق رحلةً من شاشة الرحلات.</p>
-              )}
-              {filtersOn && (
-                <button onClick={clear} className="px-4 py-2 rounded-xl font-bold cursor-pointer"
-                  style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2, fontSize: 12.5 }}>تفريغ المرشّحات</button>
-              )}
-            </div>
+            <EmptyState
+              icon={filtersOn ? <SearchX size={22} /> : <ClipboardList size={22} />}
+              title={filtersOn ? "لا إطلاقات تطابق المرشّحات" : horizon === "past" ? "لا إطلاقات ماضية في السجل" : "لا إطلاقات قادمة"}
+              note={filtersOn ? "جرّب كلمةً أخرى أو أزل المرشّحات."
+                : horizon === "upcoming" ? "الكشف يُنشأ مع الإطلاقة — أطلق رحلةً من شاشة الرحلات." : undefined}
+              action={filtersOn ? <Button variant="secondary" onClick={clear}>إزالة المرشّحات</Button> : undefined} />
           )}
         </EntityGate>
       </main>

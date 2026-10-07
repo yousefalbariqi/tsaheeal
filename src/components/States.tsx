@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { AlertTriangle, Inbox, RotateCw } from "lucide-react";
 import { B } from "@/lib/theme";
-import { Spinner } from "@/components/Spinner";
+import { Button } from "@/components/ui/Button";
 import { useStore } from "@/store/useStore";
 import { isSupabaseEnabled } from "@/supabase/client";
 
@@ -19,15 +19,15 @@ import { isSupabaseEnabled } from "@/supabase/client";
 export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {
   return (
     <div role="status" aria-label="جارٍ تحميل البيانات"
-      className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-      <div className="flex items-center gap-4 px-4 md:px-5 py-3.5" style={{ background: B.cream }}>
+      className="ui-table-wrap">
+      <div className="flex items-center gap-4 px-4 md:px-5 py-3.5" style={{ background: "#FAF8F3", borderBottom: `1px solid ${B.border}` }}>
         {Array.from({ length: cols }, (_, i) => (
           <span key={i} className="sk-bar" style={{ height: 10, flex: i === 1 ? 2 : 1, opacity: 0.5 }} />
         ))}
       </div>
       {Array.from({ length: rows }, (_, r) => (
         <div key={r} className="flex items-center gap-4 px-4 md:px-5 py-4"
-          style={{ borderTop: `1px solid ${B.border}` }}>
+          style={{ borderTop: r ? "1px solid #F1ECE2" : undefined }}>
           {Array.from({ length: cols }, (_, i) => (
             <span key={i} className="sk-bar" style={{ height: 12, flex: i === 1 ? 2 : 1 }} />
           ))}
@@ -75,28 +75,30 @@ export function ErrorState({ title = "تعذّر جلب البيانات", messa
           {message || "تحقّق من الاتصال ثم أعد المحاولة. لم يُفقد شيء من البيانات."}
         </span>
       </span>
-      <button onClick={retry} disabled={busy}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-        style={{ background: B.gold, color: B.black, border: "none", opacity: busy ? 0.7 : 1 }}>
-        {busy ? <Spinner size={14} color={B.black} /> : <RotateCw size={14} />}
+      <Button variant="primary" loading={busy} icon={<RotateCw size={15} />} onClick={retry}>
         {busy ? "جارٍ إعادة المحاولة…" : "إعادة المحاولة"}
-      </button>
+      </Button>
     </div>
   );
 }
 
-/** لا سجلات — ويُفرَّق بين «لا شيء بعد» و«لا شيء يطابق البحث». */
-export function EmptyState({ title, note, action }: { title: string; note?: string; action?: React.ReactNode }) {
+/** لا سجلات — ويُفرَّق بين «لا شيء بعد» و«لا شيء يطابق البحث».
+    `icon` أيقونة الكيان (حقيبة للطلبات، طائرة للرحلات)؛ و`action` الزرّ
+    الذي يُخرج من الفراغ: «إضافة» للأول و«إزالة المرشّحات» للثاني. */
+export function EmptyState({ title, note, action, icon, compact = false }: {
+  title: string; note?: string; action?: React.ReactNode; icon?: React.ReactNode;
+  /** داخل بطاقةٍ قائمة — بلا إطارٍ ثانٍ وبحشوةٍ أقلّ. */
+  compact?: boolean;
+}) {
   return (
-    <div className="rounded-2xl px-6 py-12 flex flex-col items-center text-center gap-3"
-      style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-      <span className="w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{ background: B.fill, border: `1px solid ${B.border}` }}>
-        <Inbox size={24} style={{ color: B.muted }} />
+    <div className={`flex flex-col items-center text-center ${compact ? "px-4 py-8" : "ui-card ui-card--flat px-6 py-14"}`}>
+      <span aria-hidden className="flex items-center justify-center"
+        style={{ width: 48, height: 48, borderRadius: 14, background: B.fill, color: B.muted, marginBottom: 14 }}>
+        {icon ?? <Inbox size={22} />}
       </span>
-      <strong className="text-sm font-bold" style={{ color: B.text3 }}>{title}</strong>
-      {note && <span className="text-xs leading-relaxed" style={{ color: B.muted, maxWidth: 380 }}>{note}</span>}
-      {action}
+      <strong style={{ fontSize: 15, fontWeight: 600, color: B.black, lineHeight: 1.5 }}>{title}</strong>
+      {note && <span style={{ fontSize: 13, color: B.muted, lineHeight: 1.7, maxWidth: 380, marginTop: 4 }}>{note}</span>}
+      {action && <div className="flex items-center gap-2 flex-wrap justify-center" style={{ marginTop: 18 }}>{action}</div>}
     </div>
   );
 }

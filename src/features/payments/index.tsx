@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CreditCard, Phone, Printer } from "lucide-react";
-import { B } from "@/lib/theme";
+import { CreditCard, Eye, SearchX } from "lucide-react";
+import { B, ELEV, SCRIM, type ToneName } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
-import type { Payment } from "@/types";
-import { openWhatsApp, invVerifyUrl } from "@/lib/utils";
+import { useDialogA11y } from "@/lib/useDialogA11y";
+import type { Payment, InvoicePhase } from "@/types";
+import { invVerifyUrl } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
+import { StatCard } from "@/components/StatCard";
 import { QRBlock } from "@/components/QRBlock";
 import { useStore } from "@/store/useStore";
 import { Pager, usePaged, type Paged } from "@/components/Pager";
 import { useServerPagedSearch } from "@/lib/useServerSearch";
-import { EntityGate } from "@/components/States";
+import { EntityGate, EmptyState } from "@/components/States";
 import { OrgCr, OrgVat, OrgAddressLine } from "@/components/OrgLine";
 import { zatcaQrPayload, issuedAtIso } from "@/lib/zatca";
 import { sar } from "@/lib/money";
+import { fmtDateShort } from "@/lib/dates";
 import { useRole } from "@/lib/useRole";
 import { usePublicSettings } from "@/data/useSettings";
 import { DocActions } from "@/features/docs/DocActions";
@@ -23,17 +26,38 @@ import {
   vatOf, netOf, docFileName,
 } from "@/lib/docPhase";
 import { DocReasonDialog } from "@/features/docs/DocReasonDialog";
-import { payStatusChips, payStatusLabel, payStatusTone } from "@/lib/status";
+import { payStatusChips, payStatusLabel } from "@/lib/status";
+import { Badge, Button, FilterChips, IconButton, SortTh, useSort, type ChipOption } from "@/components/ui";
 
-/* الصياغة واللون من معجم الحالات — كانت مكتوبةً هنا وحدها فتقول
-   الشريحة «لم يُدفع» والبطاقة «لم تُدفع» عن الفاتورة نفسها. */
-const payChip = (k:string) => ({ label: payStatusLabel(k), ...payStatusTone(k) });
+/* الصياغة من معجم الحالات — كانت مكتوبةً هنا وحدها فتقول الشريحة
+   «لم يُدفع» والبطاقة «لم تُدفع» عن الفاتورة نفسها. واللون من ألوان
+   المعنى في اللوحة (TONE) عبر <Badge>، لا أرقاماً تُكتب عند العرض. */
+type PayStatus = Payment["payStatus"];
+const PAY_TONE: Record<PayStatus, ToneName> = { verified:"success", sent:"info", failed:"danger", none:"neutral" };
+const PayBadge = ({status}:{status:PayStatus}) => <Badge dot tone={PAY_TONE[status]}>{payStatusLabel(status)}</Badge>;
+
+/* الطور المشتقّ الذي لا تقوله حالة الدفع: فاتورةٌ «لم تُدفع» قد تكون ملغاةً
+   أو مضت رحلتها. يُكتب سطراً ثانياً تحت الشارة — المرشّح يبقى على حالة
+   الدفع، والقائمة لا تُخفي أن المستند خرج من الخدمة. */
+const DERIVED: ReadonlySet<InvoicePhase> = new Set<InvoicePhase>(["cancelled","refunded","expired","overdue"]);
+const derivedPhase = (p:Payment):string|null => {
+  const ph = invoicePhase(p);
+  return DERIVED.has(ph) ? INVOICE_PHASE_LABEL[ph] : null;
+};
+
+/* مفاتيح الفرز — للقائمة المحلية وحدها؛ بحث القاعدة يرتّب صفحته بنفسه. */
+type SortKey = "id"|"client"|"pkg"|"total"|"method"|"status"|"issuer";
 
 /** اسم مصدر ثابت من لقطة الإصدار، لا من المستخدم الحالي ولا من صاحب الطلب. */
 const invoiceIssuer = (pay: Payment): string => {
   if (!pay.issuedByName) return "سجل سابق — غير موثّق";
   const role = pay.issuedByRole === "موظف" ? "موظف الاستقبال" : (pay.issuedByRole || "الحساب");
   return `${role} – ${pay.issuedByName}`;
+};
+
+const SORT_GET: Record<SortKey,(p:Payment)=>string|number|null|undefined> = {
+  id: p=>p.id, client: p=>p.clientName, pkg: p=>p.packageName, total: p=>p.total,
+  method: p=>p.payMethod, status: p=>payStatusLabel(p.payStatus), issuer: p=>p.issuedByName,
 };
 
 /* ─── Payment/invoice shared data + helpers ─── */
@@ -68,11 +92,23 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
     ? zatcaQrPayload({ sellerName: settings.orgName, vatNumber: settings.vatNumber, issuedAt: issuedAtIso(pay.createdAt), grossTotal: pay.total })
     : undefined;
 
+  /* ── لماذا ليست <Modal> المشتركة ──
+     قاعدة الطباعة أدناه تُخفي كل شيء وتُثبّت الورقة `position:absolute;
+     inset:0` — أي على أقرب سلفٍ متموضع. هنا هو هذه الخلفية الثابتة بعرض
+     الصفحة، فتُطبع الورقة بعرضها الكامل. داخل `.ui-modal` (متموضعة،
+     `overflow:hidden`، أقصى عرضٍ وارتفاع) كانت ستُحشر في صندوق النافذة
+     وتُقصّ عند ارتفاع الشاشة. فالبنية باقية: خلفية ← حاوية ← ورقة، ويُوحَّد
+     مظهرها مع النوافذ (لون الخلفية، الظلّ، الزوايا) والحارس نفسه للوحة
+     المفاتيح. وبلا `backdrop-filter`: هو يجعل الخلفية مرجعاً لكل `fixed`
+     تحتها، وحوار السبب يُركَّب داخلها. */
+  const a11y = useDialogA11y({ open:true, onClose });
+
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.65)"}}>
-      <div className="w-full max-w-2xl flex flex-col gap-3 my-4" onClick={e=>e.stopPropagation()}>
+      className="ts-admin fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 overflow-auto" dir="rtl"
+      style={{background:SCRIM}}>
+      <div ref={a11y.ref} {...a11y.panelProps} aria-label={`فاتورة ${pay.id}`}
+        className="w-full max-w-2xl flex flex-col gap-3 my-2 sm:my-4" style={{outline:"none"}} onClick={e=>e.stopPropagation()}>
         <style>{`@media print{ body *{visibility:hidden !important;} #invoice-sheet, #invoice-sheet *{visibility:visible !important;} #invoice-sheet{position:absolute !important;inset:0 !important;margin:0 !important;max-width:none !important;box-shadow:none !important;border-radius:0 !important;} }`}</style>
         {/* شريط الإجراءات — مشترك مع التذكرة (features/docs/DocActions) */}
         <DocActions
@@ -89,7 +125,7 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
           onClose={onClose}
         />
         {/* Invoice document */}
-        <div id="invoice-sheet" className="relative rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(21,76,72,.45)"}}>
+        <div id="invoice-sheet" className="relative overflow-hidden" style={{background:"#fff",borderRadius:20,boxShadow:ELEV[4]}}>
           {/* الختم يتبع الطور: «ملغاة» و«مُستردّة» أولى بالإعلان من
               «أولية»، وفاتورةٌ ملغاة تُطبع بلا ختمٍ يقول إنها قيد السداد. */}
           {phase!=="paid"&&(
@@ -110,29 +146,29 @@ export function InvoiceModal({pay,autoPrint,onClose}:{pay:Payment;autoPrint?:boo
               <div>
                 <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff",lineHeight:1.2}}>تساهيل العمرة</div>
                 <div style={{fontSize:11,color:B.gold,letterSpacing:3,marginTop:4}}>TASAHEEL AL-UMRAH</div>
-                <div className="mt-3 text-xs" style={{color:"#9DBAB6"}}><OrgCr/></div>
+                <div className="mt-3 text-xs" style={{color:"#B3A998"}}><OrgCr/></div>
                 {settings.vatNumber && (
-                  <div className="text-xs" style={{color:"#9DBAB6"}}><OrgVat/></div>
+                  <div className="text-xs" style={{color:"#B3A998"}}><OrgVat/></div>
                 )}
-                <div className="text-xs" style={{color:"#9DBAB6"}}><OrgAddressLine/></div>
+                <div className="text-xs" style={{color:"#B3A998"}}><OrgAddressLine/></div>
                 <div className="text-xs mt-1.5 font-bold" style={{color:B.gold}}>
                   {isTaxInvoice ? "فاتورة ضريبية مبسّطة" : "فاتورة أولية — غير ضريبية"}
                 </div>
               </div>
               <div className="text-left">
-                <div className="text-xs font-bold mb-1" style={{color:"#9DBAB6"}}>فاتورة رقم</div>
+                <div className="text-xs font-bold mb-1" style={{color:"#B3A998"}}>فاتورة رقم</div>
                 <div style={{fontFamily:"var(--font-app)",fontSize:20,fontWeight:700,color:B.gold}}>{pay.id}</div>
                 {/* الرقم التسلسلي المتّصل — شرطٌ في الفاتورة الضريبية. يُعطى في
                     القاعدة عند الإصدار (20260916) ولا يُحسب عند العرض. */}
                 {isTaxInvoice&&(
-                  <div className="text-xs mt-0.5" style={{color:"#9DBAB6"}}>
+                  <div className="text-xs mt-0.5" style={{color:"#B3A998"}}>
                     الرقم التسلسلي: <span style={{fontFamily:"var(--font-app)",color:"#fff"}}>{pay.serialNo!=null?String(pay.serialNo).padStart(6,"0"):"—"}</span>
                   </div>
                 )}
-                <div className="text-xs mt-2" style={{color:"#9DBAB6"}}>تاريخ الإصدار: {pay.createdAt}</div>
+                <div className="text-xs mt-2" style={{color:"#B3A998"}}>تاريخ الإصدار: {pay.createdAt}</div>
                 {/* الاستحقاق: «أضف تاريخ ووقت انتهاء رابط الدفع». */}
                 {pay.dueAt && phase!=="paid" && (
-                  <div className="text-xs mt-0.5" style={{color: phase==="overdue"?"#F0C674":"#9DBAB6"}}>
+                  <div className="text-xs mt-0.5" style={{color: phase==="overdue"?"#F0C674":"#B3A998"}}>
                     {phase==="overdue" ? "انتهى الاستحقاق: " : "يستحق حتى: "}
                     {new Date(pay.dueAt).toISOString().slice(0,16).replace("T"," · ")}
                   </div>
@@ -339,10 +375,14 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     (!query||(p.id+p.bookingId+p.clientName+p.clientPhone).toLowerCase().includes(query.toLowerCase()))
   );
 
+  /* الفرز قبل القصّ على صفحات: «أعلى مبلغ» يُبحث عنه في القائمة كلّها لا
+     في صفحتها الأولى. */
+  const sorter = useSort<Payment,SortKey>(filtered, SORT_GET);
+
   /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
      للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
      ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
-  const pg = usePaged(filtered, `${query}|${statusFilter}`);
+  const pg = usePaged(sorter.rows, `${query}|${statusFilter}`);
 
   /* في Supabase لا نبحث في العناصر المحمّلة: admin_search_payments تفلتر
      وتُرقّم في PostgreSQL — الاسم والجوال ورقم الفاتورة/الطلب والباقة —
@@ -357,128 +397,148 @@ export function PaymentsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const serverSearching = srv.searching;
   const activePg: Paged<Payment> = srv.supported ? srv.paged : pg;
 
-  /* البطاقات بيضاء كلّها. كانت أربعةُ أسطحٍ ملوّنة — خضراء وبنفسجية
-     وحمراء وخضراء متدرّجة — في صفٍّ واحد، فيبدو الصفّ أربعَ لوحاتٍ لا
-     لوحةً واحدة. ودلالةُ الحالة لم تُفقد: انتقلت من خلفيةِ البطاقة كلّها
-     إلى نقطةٍ صغيرة قبل العنوان، فبقي المعنى وذهب التشتيت.
-     `accent` هي البطاقة المميّزة — تُبرَز بحافةٍ ذهبية لا بلونِ سطحٍ ثانٍ. */
-  const kpis = [
-    {label:"إجمالي الفواتير",        value:payments.length,          sub:"كل الطلبات",        dot:null},
-    {label:"مدفوعة",                  value:payments.filter(p=>p.payStatus==="verified").length, sub:"تم التحصيل",  dot:"#1E7A44"},
-    {label:"رابط أُرسل",             value:payments.filter(p=>p.payStatus==="sent").length,     sub:"بانتظار الدفع",dot:"#7226BE"},
-    {label:"فشل الدفع",              value:payments.filter(p=>p.payStatus==="failed").length,   sub:"يحتاج متابعة",dot:"#BE2626"},
-    {label:"الإيرادات المُحصّلة",    value:sar(payments.filter(p=>p.payStatus==="verified").reduce((a,p)=>a+p.total,0)), sub:"تم استلامها",dot:null,accent:true},
-  ];
+  /* أربع بطاقاتٍ بشكلٍ واحد (StatCard) لا خمسٌ مبنيّة باليد: كانت الأرقام
+     ذهبيةً كلّها وبطاقة الإيراد بهالةٍ وحافّة، فلا يبرز منها شيء. عدّ «رابط
+     أُرسل» انتقل إلى شريحته تحت — الرقم نفسه لا يُكتب مرّتين — وكل بطاقة
+     عدٍّ تُرشِّح القائمة بما تعدّه. */
+  const countOf = (k:PayStatus) => payments.filter(p=>p.payStatus===k).length;
+  const stats = {
+    total: payments.length,
+    verified: countOf("verified"),
+    failed: countOf("failed"),
+    revenue: payments.filter(p=>p.payStatus==="verified").reduce((a,p)=>a+p.total,0),
+  };
 
-  const statusChips = payStatusChips(["verified","sent","failed","none"]);
-  const chipStyle=(v:string)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${statusFilter===v?B.gold:B.border}`,background:statusFilter===v?B.gold:"#fff",color:statusFilter===v?B.black:B.text2,whiteSpace:"nowrap" as const});
+  const statusChips: ChipOption<typeof statusFilter>[] = payStatusChips(["verified","sent","failed","none"]).map(([v,l])=>({
+    value: v as typeof statusFilter, label: l,
+    count: v==="all" ? payments.length : countOf(v as PayStatus),
+  }));
+
+  const open = (id:string) => setInvoiceId(id);
+  const filteredOut = payments.length>0;
+  /* رأس العمود يُفرِز القائمة المحلية وحدها: صفحةٌ آتية من القاعدة مرتّبةٌ
+     هناك، وفرزُ خمسةٍ وعشرين صفّاً منها يوهم بأنه فرزُ السجلّ كلّه. */
+  const Th = ({k,children}:{k:SortKey;children:React.ReactNode}) =>
+    srv.supported ? <th>{children}</th> : <SortTh k={k} sorter={sorter}>{children}</SortTh>;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="الفواتير" crumb="إدارة الفواتير" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      {/* Stats */}
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {kpis.map(k=>(
-            <div key={k.label} className="relative overflow-hidden rounded-2xl px-4 py-4 flex flex-col gap-1"
-              style={{background:B.surface,border:`1px solid ${k.accent?"rgba(192,134,44,0.45)":B.border}`,
-                boxShadow:k.accent?"0 8px 24px -12px rgba(192,134,44,0.45)":"0 1px 4px rgba(27,23,18,0.05)"}}>
-              {k.accent&&<span aria-hidden className="absolute top-0 inset-x-0"
-                style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>}
-              <div className="flex items-center gap-1.5 text-xs font-semibold" style={{color:B.muted}}>
-                {k.dot&&<span aria-hidden className="rounded-full flex-shrink-0" style={{width:7,height:7,background:k.dot}}/>}
-                {k.label}
-              </div>
-              <div className="font-extrabold text-2xl leading-tight" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{k.value}</div>
-              <div className="text-xs" style={{color:B.muted}}>{k.sub}</div>
-            </div>
-          ))}
+      <div className="px-4 md:px-8 pt-1">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="كل الفواتير" value={stats.total} sub="فاتورةٌ لكل طلب" accent onClick={()=>setStatusFilter("all")}/>
+          <StatCard label="مدفوعة" value={stats.verified} sub="تم التحصيل" onClick={()=>setStatusFilter("verified")}/>
+          <StatCard label="الإيرادات المحصّلة" value={sar(stats.revenue)} sub="من الفواتير المدفوعة"/>
+          <StatCard label="فشل الدفع" value={stats.failed} alert sub={stats.failed?"يحتاج متابعة":"لا شيء متعثّر"} onClick={()=>setStatusFilter("failed")}/>
         </div>
-        {/* Filter chips */}
-        <div className="flex items-center gap-2 mt-5 flex-wrap">
-          {statusChips.map(([v,l])=>(
-            <button key={v} style={chipStyle(v)} onClick={()=>setStatusFilter(v as typeof statusFilter)}>{l}</button>
-          ))}
-          <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{serverSearching?"جارِ البحث…":`${activePg.total} / ${payments.length}`}</span>
+        <div className="ts-toolbar">
+          <FilterChips label="حالة الدفع" options={statusChips} value={statusFilter} onChange={v=>setStatusFilter(v)}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">
+            {serverSearching?"جارٍ البحث…":activePg.total===payments.length?`${payments.length} فاتورة`:`${activePg.total} من ${payments.length}`}
+          </span>
         </div>
-        <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
-      {/* Desktop table */}
-      <main className="flex-1 px-4 md:px-8 py-6">
-        <EntityGate entity="payments" label="الفواتير" cols={9}>
-        <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="tbl-scroll tbl-wide">
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+      <main className="flex-1 px-4 md:px-8 pb-8">
+        <EntityGate entity="payments" label="الفواتير" cols={8}>
+        {!serverSearching&&activePg.total===0 ? (
+          <EmptyState
+            icon={filteredOut?<SearchX size={22}/>:<CreditCard size={22}/>}
+            title={filteredOut?"لا فواتير تطابق البحث":"لا فواتير بعد"}
+            note={filteredOut?"جرّب كلمةً أخرى أو أزل المرشّح.":"تصدر الفاتورة مع الطلب وتظهر هنا."}
+            action={filteredOut&&<Button variant="secondary" onClick={()=>{setSearch("");setStatusFilter("all");}}>إزالة المرشّحات</Button>}/>
+        ) : <>
+        {/* Desktop table */}
+        <div className="hidden md:block ui-table-wrap" style={{opacity:serverSearching?0.55:1,transition:"opacity .15s"}}>
+          <div className="ui-table-scroll">
+            <table className="ui-table" style={{minWidth:900}}>
               <thead>
-                <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                  {["الفاتورة","العميل","الطلب","الباقة","المبلغ","طريقة الدفع","حالة الدفع","أصدرها","إجراء"].map(h=>(
-                    <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
-                  ))}
+                <tr>
+                  {/* «الطلب» صار سطراً ثانياً تحت الباقة، و«طريقة الدفع» تحت
+                      المبلغ: المعلومة باقية، والجدول سبعة أعمدة لا تسعة. */}
+                  <Th k="id">الفاتورة</Th>
+                  <Th k="client">العميل</Th>
+                  <Th k="pkg">الباقة والطلب</Th>
+                  <Th k="total">المبلغ</Th>
+                  <Th k="status">حالة الدفع</Th>
+                  <Th k="issuer">أصدرها</Th>
+                  <th className="col-action"><span className="sr-only">إجراء</span></th>
                 </tr>
               </thead>
               <tbody>
-                {activePg.rows.map((p,i)=>{
-                  const ps=payChip(p.payStatus);
+                {activePg.rows.map(p=>{
+                  const derived=derivedPhase(p);
                   return (
-                    <tr key={p.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                      <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.gold,fontSize:13}}>{p.id}</td>
-                      <td style={{padding:"14px 16px"}}>
-                        <div className="font-bold text-sm" style={{color:B.black}}>{p.clientName}</div>
-                        <div className="text-xs font-mono" style={{color:B.muted,direction:"ltr"}}>{p.clientPhone}</div>
+                    <tr key={p.id} className="is-clickable" tabIndex={0} aria-label={`عرض الفاتورة ${p.id}`}
+                      onClick={()=>open(p.id)}
+                      onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) open(p.id); }}>
+                      <td className="nowrap">
+                        <div className="cell-main num">{p.id}</div>
+                        <div className="cell-sub">{fmtDateShort(p.createdAt)}</div>
                       </td>
-                      <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{p.bookingId}</td>
-                      <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>{p.packageName}</td>
-                      <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{sar(p.total)}</td>
-                      <td style={{padding:"14px 16px",color:B.text3}}>{p.payMethod||"—"}</td>
-                      <td style={{padding:"14px 16px"}}>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:ps.bg,color:ps.fg}}>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{background:ps.fg}}/>
-                          {ps.label}
-                        </span>
+                      <td>
+                        <div className="cell-main nowrap">{p.clientName}</div>
+                        <div className="cell-sub num">{p.clientPhone}</div>
                       </td>
-                      <td style={{padding:"14px 16px",color:B.text2,fontSize:12}}>{invoiceIssuer(p)}</td>
-                      <td className="col-action" style={{padding:"14px 16px"}}>
-                        <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                          style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>
+                      <td>
+                        <div className="nowrap" style={{color:B.text3}}>{p.packageName}</div>
+                        <div className="cell-sub nowrap">الطلب <span className="num">{p.bookingId}</span></div>
+                      </td>
+                      <td className="nowrap">
+                        <div className="cell-main">{sar(p.total)}</div>
+                        <div className="cell-sub">{p.payMethod||"—"}</div>
+                      </td>
+                      <td className="nowrap">
+                        <PayBadge status={p.payStatus}/>
+                        {derived&&<div className="cell-sub">{derived}</div>}
+                      </td>
+                      <td className="nowrap" style={{color:B.text2,fontSize:13}}>{invoiceIssuer(p)}</td>
+                      <td className="col-action" onClick={e=>e.stopPropagation()}>
+                        <div className="row-actions">
+                          <IconButton size="sm" label={`عرض الفاتورة ${p.id}`} onClick={()=>open(p.id)}><Eye size={15}/></IconButton>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
-                {serverSearching&&<tr><td colSpan={9} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>جارِ البحث في السجل…</td></tr>}
-                {!serverSearching&&activePg.total===0&&<tr><td colSpan={9} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد فواتير مطابقة</td></tr>}
+                {serverSearching&&activePg.rows.length===0&&<tr><td colSpan={7} style={{padding:"48px 16px",textAlign:"center",color:B.muted}}>جارٍ البحث في السجلّ…</td></tr>}
               </tbody>
             </table>
           </div>
         </div>
         {/* Mobile cards */}
-        <div className="md:hidden flex flex-col gap-3">
+        <div className="md:hidden flex flex-col gap-2.5" style={{opacity:serverSearching?0.55:1}}>
           {activePg.rows.map(p=>{
-            const ps=payChip(p.payStatus);
+            const derived=derivedPhase(p);
             return (
-              <motion.div key={p.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
-                className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <div className="font-extrabold text-sm" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{p.id}</div>
-                    <div className="text-xs" style={{color:B.muted,fontFamily:"var(--font-app)"}}>{p.bookingId}</div>
+              <div key={p.id} role="button" tabIndex={0} aria-label={`عرض الفاتورة ${p.id}`} onClick={()=>open(p.id)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) open(p.id); }}
+                className="ui-card ui-card--hover p-4" style={{cursor:"pointer"}}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-bold truncate" style={{color:B.black,fontSize:15}}>{p.clientName}</div>
+                    <div className="text-xs mt-0.5" style={{color:B.muted}}>{p.id} · {fmtDateShort(p.createdAt)}</div>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:ps.bg,color:ps.fg}}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{background:ps.fg}}/>{ps.label}
+                  <PayBadge status={p.payStatus}/>
+                </div>
+                <div className="text-sm mt-3" style={{color:B.text2}}>{p.packageName} · الطلب {p.bookingId}</div>
+                <div className="text-xs mt-0.5" style={{color:B.muted}}>
+                  أصدرها: {invoiceIssuer(p)}{derived&&` · ${derived}`}
+                </div>
+                <div className="flex items-center justify-between mt-3 pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+                  <div>
+                    <span className="font-bold" style={{color:B.black}}>{sar(p.total)}</span>
+                    {p.payMethod&&<span className="text-xs ms-2" style={{color:B.muted}}>{p.payMethod}</span>}
+                  </div>
+                  <span onClick={e=>e.stopPropagation()}>
+                    <IconButton size="sm" variant="outline" label={`عرض الفاتورة ${p.id}`} onClick={()=>open(p.id)}><Eye size={15}/></IconButton>
                   </span>
                 </div>
-                <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{p.clientName}</div>
-                <div className="text-xs mb-3" style={{color:B.muted}}>{p.packageName} · {p.payMethod||"—"}</div>
-                <div className="text-xs mb-3" style={{color:B.text2}}>أصدرها: {invoiceIssuer(p)}</div>
-                <div className="flex items-center justify-between">
-                  <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(p.total)}</div>
-                  <button onClick={()=>setInvoiceId(p.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>عرض الفاتورة</button>
-                </div>
-              </motion.div>
+              </div>
             );
           })}
-          {serverSearching&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><span className="text-sm font-medium">جارِ البحث في السجل…</span></div>}
-          {!serverSearching&&activePg.total===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><CreditCard size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد فواتير مطابقة</p></div>}
+          {serverSearching&&activePg.rows.length===0&&<div className="ui-card ui-card--flat text-sm text-center py-12" style={{color:B.muted}}>جارٍ البحث في السجلّ…</div>}
         </div>
+        </>}
         </EntityGate>
         <Pager p={activePg} unit="فاتورة"/>
       </main>

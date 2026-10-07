@@ -83,6 +83,10 @@ const LEX: Record<string, Entry> = {
   contacted:        { text: "تم التواصل",              ...G.cyan },
   quoted:           { text: "أُرسل عرض السعر",         ...G.violet },
   converted:        { text: ["محوّل إلى طلب", "محوّلة إلى طلب"], ...G.green },
+  /* طورا الطلب المخصّص بعد تحويله: المجموعة في رحلتها، ثم اكتملت. كانا في
+     خريطةٍ محلية بشاشة الطلبات المخصّصة وحدها. */
+  executing:        { text: ["قيد التنفيذ", "قيد التنفيذ"], ...G.orange },
+  completed:        { text: ["منجز", "منجزة"],            ...G.green },
   none:             { text: "لا يوجد",                 ...G.grey },
 };
 

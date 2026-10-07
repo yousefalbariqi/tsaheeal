@@ -14,10 +14,11 @@
    القراءة للمدير وحده — سياسة audit_logs في القاعدة تقول ذلك، والواجهة
    تقوله كذلك فلا يظهر قسمٌ يعود فارغاً بلا سبب مفهوم. */
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, History, RotateCw, ShieldCheck } from "lucide-react";
-import { B } from "@/lib/theme";
-import { Spinner } from "@/components/Spinner";
-import { ErrorState, TableSkeleton } from "@/components/States";
+import { ArrowLeft, ChevronDown, History, RotateCw, ShieldCheck } from "lucide-react";
+import { B, type ToneName } from "@/lib/theme";
+import { fmtDateTime } from "@/lib/dates";
+import { Badge, Button, Note } from "@/components/ui";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/States";
 import { isSupabaseEnabled, supabase } from "@/supabase/client";
 import { useRole } from "@/lib/useRole";
 
@@ -42,10 +43,10 @@ const ENTITY_AR: Record<string, string> = {
   support: "طلب دعم", users: "مستخدم",
 };
 
-const OP_AR: Record<AuditRow["operation"], { text: string; bg: string; fg: string }> = {
-  create: { text: "إنشاء", bg: "#E3F3E8", fg: "#1E7A44" },
-  update: { text: "تعديل", bg: "#FBF3D6", fg: "#8A6A08" },
-  delete: { text: "حذف",  bg: "#FBE6E6", fg: "#BE2626" },
+const OP_AR: Record<AuditRow["operation"], { text: string; tone: ToneName }> = {
+  create: { text: "إنشاء", tone: "success" },
+  update: { text: "تعديل", tone: "warn" },
+  delete: { text: "حذف",  tone: "danger" },
 };
 
 /* أسماء الحقول التي يسأل عنها الموظف؛ ما عداها يظهر باسمه البرمجي. */
@@ -80,12 +81,6 @@ function changes(before: Record<string, unknown> | null, after: Record<string, u
     .map(k => ({ key: k, from: before[k], to: after[k] }));
 }
 
-function when(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} · ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
 function Entry({ row, actorName }: { row: AuditRow; actorName: string }) {
   const [open, setOpen] = useState(false);
   const op = OP_AR[row.operation];
@@ -95,36 +90,35 @@ function Entry({ row, actorName }: { row: AuditRow; actorName: string }) {
     : row.operation === "create" ? "سجل جديد" : "حُذف السجل";
 
   return (
-    <div style={{ borderTop: `1px solid ${B.border}` }}>
-      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+    <div style={{ borderTop: "1px solid #F1ECE2" }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
         aria-label={`تفاصيل ${op.text} ${ENTITY_AR[row.entity_type] ?? row.entity_type} ${row.entity_id}`}
-        className="w-full flex items-center gap-3 px-4 md:px-5 py-3.5 text-start cursor-pointer"
-        style={{ background: "transparent", border: "none" }}>
-        <span className="px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0"
-          style={{ background: op.bg, color: op.fg }}>{op.text}</span>
+        className="ts-action-row" style={{ borderRadius: 0, padding: "12px 20px" }}>
+        <span className="flex-shrink-0" style={{ minWidth: 62 }}><Badge tone={op.tone} size="sm">{op.text}</Badge></span>
         <span className="flex-1 min-w-0">
-          <span className="block truncate text-sm font-bold" style={{ color: B.black }}>
+          <span className="block truncate" style={{ fontSize: 14, fontWeight: 600, color: B.black }}>
             {ENTITY_AR[row.entity_type] ?? row.entity_type}
-            <span className="mr-1.5 font-normal" style={{ color: B.muted, fontFamily: "var(--font-app)" }}>{row.entity_id}</span>
+            <bdi className="ms-1.5" style={{ fontWeight: 400, color: B.muted }}>{row.entity_id}</bdi>
           </span>
-          <span className="block truncate text-xs mt-0.5" style={{ color: B.muted }}>
+          <span className="block truncate" style={{ fontSize: 12, color: B.muted, marginTop: 1 }}>
             {actorName} · {summary}
           </span>
         </span>
-        <span className="text-xs flex-shrink-0" style={{ color: B.muted, fontFamily: "var(--font-app)" }}>{when(row.occurred_at)}</span>
-        <ChevronDown size={14} aria-hidden style={{ color: B.muted, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+        <span className="hidden sm:block flex-shrink-0" style={{ fontSize: 12, color: B.muted }}>{fmtDateTime(row.occurred_at)}</span>
+        <ChevronDown size={15} aria-hidden style={{ color: B.placeholder, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
       </button>
       {open && (
-        <div className="px-4 md:px-5 pb-4 flex flex-col gap-1.5">
+        <div className="px-5 pb-4 flex flex-col gap-1.5">
+          <span className="sm:hidden" style={{ fontSize: 12, color: B.muted }}>{fmtDateTime(row.occurred_at)}</span>
           {diff.length === 0
-            ? <p className="text-xs" style={{ color: B.muted }}>لا تفاصيل حقول لهذه العملية.</p>
+            ? <p style={{ fontSize: 13, color: B.muted, margin: 0 }}>لا تفاصيل حقول لهذه العملية.</p>
             : diff.map(c => (
-              <div key={c.key} className="flex items-center gap-2 flex-wrap text-xs rounded-xl px-3 py-2"
-                style={{ background: B.fill, border: `1px solid ${B.border}` }}>
-                <strong style={{ color: B.text3 }}>{fieldName(c.key)}</strong>
-                <span style={{ color: "#BE2626", textDecoration: "line-through" }}>{show(c.from)}</span>
-                <span aria-hidden style={{ color: B.muted }}>←</span>
-                <span style={{ color: "#1E7A44", fontWeight: 700 }}>{show(c.to)}</span>
+              <div key={c.key} className="flex items-center gap-2 flex-wrap px-3 py-2"
+                style={{ fontSize: 13, borderRadius: 10, background: B.fill }}>
+                <strong style={{ color: B.text3, fontWeight: 600, minWidth: 110 }}>{fieldName(c.key)}</strong>
+                <span style={{ color: B.muted, textDecoration: "line-through" }}>{show(c.from)}</span>
+                <ArrowLeft size={13} aria-hidden style={{ color: B.placeholder }} />
+                <span style={{ color: B.black, fontWeight: 600 }}>{show(c.to)}</span>
               </div>
             ))}
         </div>
@@ -166,39 +160,26 @@ export function AuditLog() {
 
   useEffect(() => { void load(0); }, [load]);
 
-  if (!isAdmin) return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-      style={{ background: "#FBF3D6", border: "1px solid #E8D9A8", color: "#6b5306" }}>
-      <ShieldCheck size={16} style={{ flexShrink: 0, color: "#8A6A08" }} />
-      <span className="text-sm">سجلّ التدقيق يُقرأ من حساب مدير النظام.</span>
-    </div>
-  );
+  if (!isAdmin) return <Note tone="warn" icon={<ShieldCheck size={16} />}>سجلّ التدقيق يُقرأ من حساب مدير النظام.</Note>;
 
   if (state === "error") return <ErrorState title="تعذّر جلب سجلّ التدقيق" onRetry={() => load(0)} />;
   if (state === "loading" && rows.length === 0) return <TableSkeleton rows={5} cols={4} />;
 
   return (
-    <section className="rounded-2xl overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.border}` }}>
-      <header className="flex items-center gap-2 px-4 md:px-5 py-4">
-        <History size={16} style={{ color: B.gold }} />
-        <h3 className="font-extrabold text-base flex-1" style={{ color: B.black, margin: 0 }}>سجلّ التدقيق</h3>
-        <button onClick={() => { setPage(0); void load(0); }} aria-label="تحديث سجلّ التدقيق" title="تحديث"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-          style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2 }}>
-          <RotateCw size={12} />تحديث
-        </button>
+    <section className="ui-card overflow-hidden">
+      <header className="ui-card-head" style={{ borderBottom: rows.length ? "none" : undefined }}>
+        <h3 className="ui-card-title flex items-center gap-2" style={{ fontSize: 16 }}><History size={16} style={{ color: B.muted }} />سجلّ التدقيق</h3>
+        <Button size="sm" variant="secondary" icon={<RotateCw size={13} />} onClick={() => { setPage(0); void load(0); }}
+          aria-label="تحديث سجلّ التدقيق">تحديث</Button>
       </header>
       {rows.length === 0
-        ? <p className="px-5 pb-6 text-sm" style={{ color: B.muted }}>لا عمليات مسجّلة بعد. يبدأ السجلّ من تشغيل ترحيل التدقيق.</p>
+        ? <EmptyState compact icon={<History size={20} />} title="لا عمليات مسجّلة بعد" note="يبدأ السجلّ من تشغيل ترحيل التدقيق." />
         : rows.map(r => <Entry key={r.id} row={r} actorName={r.actor_id ? (actors[r.actor_id] ?? "مستخدم محذوف") : "النظام"} />)}
       {more && (
-        <div className="px-4 md:px-5 py-3" style={{ borderTop: `1px solid ${B.border}` }}>
-          <button onClick={() => { const n = page + 1; setPage(n); void load(n); }} disabled={state === "loading"}
-            className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-            style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
-            {state === "loading" ? <Spinner size={13} /> : null}
+        <div className="px-5 py-3" style={{ borderTop: "1px solid #F1ECE2" }}>
+          <Button variant="secondary" block loading={state === "loading"} onClick={() => { const n = page + 1; setPage(n); void load(n); }}>
             {state === "loading" ? "جارٍ الجلب…" : "عرض عمليات أقدم"}
-          </button>
+          </Button>
         </div>
       )}
     </section>

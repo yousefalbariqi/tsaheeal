@@ -1,5 +1,5 @@
-import { Search, ChevronRight, Menu } from "lucide-react";
-import { B } from "@/lib/theme";
+import type { ReactNode } from "react";
+import { Search, Menu, X } from "lucide-react";
 import { NotificationsMenu } from "@/components/NotificationsMenu";
 
 const SEARCH_HINTS: Record<string, string> = {
@@ -14,34 +14,39 @@ const SEARCH_HINTS: Record<string, string> = {
   "الفروع": "ابحث باسم الفرع أو المدينة أو الجوال",
 };
 
-export function PageHeader({title,crumb,search,onSearch,searchPlaceholder,onMenuOpen}:{title:string;crumb:string;search:string;onSearch:(v:string)=>void;searchPlaceholder?:string;onMenuOpen?:()=>void}) {
+/* رأس الصفحة — العنوان، البحث، والفعل الأساسي في سطرٍ واحد.
+
+   `actions` موضع الزرّ الأساسي للشاشة («إضافة طلب»): كان ينزل تحت بطاقات
+   الأرقام فيختفي عند أول تمرير، والرأس اللاصق فوقه فارغٌ إلا من الجرس.
+   `hideSearch` للشاشات التي لا قائمة فيها تُبحث (الرئيسية، الإعدادات) —
+   كان حقلها يظهر ولا يفعل شيئاً. والبحث ينزل سطراً على الجوال بدل أن
+   يُخفى: الجوال أحوج الشاشات إليه. */
+export function PageHeader({title,crumb,search,onSearch,searchPlaceholder,onMenuOpen,actions,hideSearch}:{title:string;crumb:string;search:string;onSearch:(v:string)=>void;searchPlaceholder?:string;onMenuOpen?:()=>void;actions?:ReactNode;hideSearch?:boolean}) {
   const placeholder = searchPlaceholder ?? SEARCH_HINTS[title] ?? `ابحث في ${title}`;
+  const field = (
+    <div className="ts-search">
+      <Search size={16}/>
+      <input type="search" value={search} onChange={e=>onSearch(e.target.value)} placeholder={placeholder} aria-label={placeholder}
+        className="ui-input" style={{height:40}} enterKeyHint="search"/>
+      {search&&<button type="button" onClick={()=>onSearch("")} aria-label="مسح البحث" title="مسح البحث"
+        className="ui-iconbtn ui-iconbtn--sm absolute top-1/2 -translate-y-1/2" style={{insetInlineEnd:5}}><X size={14}/></button>}
+    </div>
+  );
   return (
-    <div className="sticky top-0 z-20 px-4 md:px-8 pt-4 md:pt-6 pb-0" style={{background:B.bg}}>
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {onMenuOpen&&<button onClick={onMenuOpen} aria-label="فتح القائمة" title="فتح القائمة" className="md:hidden p-2 rounded-xl cursor-pointer flex-shrink-0" style={{background:"#fff",border:`1px solid ${B.border}`}}><Menu size={16} style={{color:B.black}}/></button>}
-          <div>
-            <div className="flex items-center gap-2 text-xs mb-1" style={{color:B.muted}}>
-              <span className="hidden sm:inline">تساهيل العمرة</span>
-              <ChevronRight size={12} className="hidden sm:inline"/>
-              <span style={{color:B.text2,fontWeight:600}}>{crumb}</span>
-            </div>
-            <h1 style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color: B.primaryDeep,margin:0}}>{title}</h1>
-          </div>
+    <div className="ts-page-head px-4 md:px-8 pt-4 md:pt-5 pb-3 md:pb-4">
+      <div className="flex items-center gap-3 md:gap-4">
+        {onMenuOpen&&<button onClick={onMenuOpen} aria-label="فتح القائمة" title="فتح القائمة" className="ui-iconbtn ui-iconbtn--outline md:hidden"><Menu size={18}/></button>}
+        <div className="min-w-0 flex-shrink-0">
+          <div className="hidden sm:block truncate" style={{fontSize:12,color:"var(--k-muted)",lineHeight:1.4,marginBottom:1}}>{crumb}</div>
+          <h1 className="ts-page-title truncate">{title}</h1>
         </div>
-        <div className="hidden sm:flex flex-1 justify-center px-2">
-          <div className="relative w-full" style={{maxWidth:480}}>
-            <Search size={15} className="absolute top-1/2 right-3.5 -translate-y-1/2 pointer-events-none" style={{color:B.muted}}/>
-            <input value={search} onChange={e=>onSearch(e.target.value)} placeholder={placeholder} aria-label={placeholder}
-              className="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm border focus:outline-none"
-              style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}/>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+        <div className="flex-1 min-w-0 flex items-center justify-end gap-2 md:gap-3">
+          {!hideSearch&&<div className="hidden sm:block flex-1" style={{maxWidth:380}}>{field}</div>}
+          {actions}
           <NotificationsMenu />
         </div>
       </div>
+      {!hideSearch&&<div className="sm:hidden mt-3">{field}</div>}
     </div>
   );
 }

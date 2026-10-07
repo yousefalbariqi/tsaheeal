@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as RS from "@radix-ui/react-select";
 import { ChevronDown, Check } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, ELEV } from "@/lib/theme";
 
 /* قائمة اختيار موحّدة (Radix) — RTL، سهم واضح، Portal لا يُحجب خلف الـSidebar.
    للاستخدام في كل حقول الاختيار أحادية القيمة (الحالة/الباقة/الرحلة/الفرع/المسؤول/طريقة الدفع…). */
@@ -47,7 +47,7 @@ export function AppSelect({
         aria-invalid={invalid || undefined}
         className={`w-full flex items-center justify-between gap-2 border rounded-xl px-3.5 py-2.5 text-sm text-right focus:outline-none ${className ?? ""}`}
         style={{
-          borderColor: invalid ? "#E1A3A3" : B.border,
+          borderColor: invalid ? "#D98A8A" : B.borderStrong,
           background: disabled ? B.fill : "#fff",
           color: inner ? B.black : B.placeholder,
           fontFamily: "inherit",
@@ -64,11 +64,11 @@ export function AppSelect({
           position="popper"
           sideOffset={4}
           dir="rtl"
-          className="z-50 overflow-hidden rounded-xl"
+          className="z-[200] overflow-hidden rounded-xl"
           style={{
             background: "#fff",
             border: `1px solid ${B.border}`,
-            boxShadow: "0 16px 40px -12px rgba(21,76,72,.35)",
+            boxShadow: ELEV[3],
             minWidth: "var(--radix-select-trigger-width)",
             maxHeight: "min(320px, var(--radix-select-content-available-height))",
             fontFamily: "var(--font-app)",

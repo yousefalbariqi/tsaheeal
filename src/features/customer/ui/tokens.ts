@@ -4,42 +4,47 @@
 
 import { B } from "@/lib/theme";
 
-/* اللوحة الخضراء الداكنة — شريط الرأس وشاشات المسار (flow). سبقت `C`
-   ولم تُدمج فيها: `C.green` أفتح ولا يقرأ عليه النص الأبيض في الشريط.
-   كانت مكرّرة حرفياً في CustomerApp.tsx وscreens/CustomRequest.tsx،
-   فتغييرُ الأخضر في أحدهما كان يُبقي الآخر على القديم. */
+/* لوحة «الكسوة» في تجربة العميل (قرار 2026-10-05): ألوان الشعار نفسه —
+   أسود دافئ للنصّ والبنية، ذهبي للفعل، عاجي للأسطح. القيم من lib/theme
+   حتى لا يختلف ذهبي العميل عن ذهبي الإدارة كما كان (#B7893F و#C0862C).
+
+   المفاتيح القديمة باقية بأسمائها لأن مئات المواضع تقرؤها: `green*`
+   اسمٌ موروث قيمته ذهبية، و`G.deep` كان بنّياً ذهبياً وصار سطح البنية. */
 export const G = {
-  // لا سطح أسود في تجربة العميل؛ العمق هنا ذهبي الهوية لا أسود محايد.
-  deep:  "#8C6423",
-  dark:  "#6E4D1B",
-  green: "#B7893F",
-  gold:  "#B7893F",
+  deep:  B.ink,
+  dark:  B.ink2,
+  green: B.gold,
+  gold:  B.gold,
   bg:    "#FBF9F5",
 } as const;
 
 export const C = {
-  ink:    "#5C421B",  // بني ذهبي مقروء — لا أسود في الواجهة
-  ink2:   "#625B4D",  // النص الثانوي والوصف
-  ink3:   "#A69D8E",  // المعطّل
-  line:   "#E6DFCF",  // فواصل الهوية
-  border: "#E6DFCF",  // حدود الحقول والـ chips
+  ink:    B.black,    // النصّ الأساسي — أسود دافئ
+  ink2:   B.text2,    // النص الثانوي والوصف
+  ink3:   "#A39A8B",  // المعطّل
+  line:   B.border,   // الفواصل
+  border: B.borderStrong, // حدود الحقول والشرائح
   fill:   "#FBF9F5",  // العاجي الهادئ
   white:  "#FFFFFF",
   // أشرطة الأقسام تتناوب بهدوء؛ الذهبي لا يستعمل كخلفية كاملة للنص.
   band:       "#FBF9F5",
-  bandAction: "#F8F1E4",
-  green:      "#B7893F",  // اسمٌ متوافق مع المكوّنات القديمة، اللون ذهبي الهوية
-  greenLite:  "#C89B52",
-  greenDeep:  "#8C6423",
-  greenTint:  "#F7EEDC",
-  gold:       "#B7893F",
-  goldTint:   "#F8F1E4",
-  danger:     "#C13515",
-  dangerTint: "#FBE6E6",
+  bandAction: B.goldTint,
+  green:      B.gold,      // اسمٌ متوافق مع المكوّنات القديمة، اللون ذهبي الهوية
+  greenLite:  B.gold,
+  greenDeep:  B.goldDeep,  // نصّ ذهبي على سطح فاتح (٥٫٨:١)
+  greenTint:  B.goldTint,
+  gold:       B.gold,
+  goldTint:   B.goldTint,
+  danger:     "#BE2626",
+  dangerTint: "#FBE9E7",
 } as const;
 
 /** تدرّج لطيف للزر الرئيسي؛ الخلفية العميقة تحافظ على تباين النص الأبيض. */
-export const CTA_GRADIENT = `linear-gradient(120deg, ${C.greenLite} 0%, ${C.greenDeep} 100%)`;
+/* الزرّ الرئيسي ذهبيٌّ مصمت ونصُّه أسود (٥٫٧:١)؛ الأبيض على الذهبي ٣٫١:١.
+   الاسم باقٍ لمن يستورده، والقيمة لم تعد تدرّجاً. */
+export const CTA_GRADIENT = C.gold;
+/** لون نصّ الزرّ الرئيسي. */
+export const CTA_TEXT = C.ink;
 
 /* خطّ واحد للتطبيق كلّه — معرّف في src/styles/fonts.css.
    `mono` باقٍ مفتاحاً وإن ساوى `sans`: مواضعه (الأرقام، المعرّفات، الآيبان)
@@ -77,9 +82,9 @@ export const R = {
 } as const;
 
 export const SHADOW = {
-  float: "0 2px 8px rgba(0,0,0,.14)",         // الأزرار العائمة فوق المعرض
-  card:  "0 6px 20px -6px rgba(0,0,0,.12)",
-  sheet: "0 -2px 16px -4px rgba(0,0,0,.10)",  // الشريط الثابت السفلي
+  float: "0 2px 8px rgba(20,17,14,.14)",         // الأزرار العائمة فوق المعرض
+  card:  "0 1px 2px rgba(27,23,18,.04), 0 8px 24px -8px rgba(27,23,18,.12)",
+  sheet: "0 -2px 16px -4px rgba(20,17,14,.10)",  // الشريط الثابت السفلي
 } as const;
 
 /** ارتفاع الشريط الثابت — تُستخدم كـ padding سفلي للمحتوى حتى لا يختبئ خلفه. */

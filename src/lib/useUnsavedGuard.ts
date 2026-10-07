@@ -13,6 +13,7 @@
    الموحَّد وتتجاهل ما يُعاد. المطلوب منها استدعاء `preventDefault` فقط —
    ووجود `returnValue` لأجل متصفّحات أقدم. */
 import { useCallback, useEffect, useRef } from "react";
+import { confirmDiscard } from "@/components/ui/confirm";
 
 /* رايات على مستوى الوحدة لا في سياق React: من يسأل عنها هو `nav()` في
    AdminApp — وهو خارج شجرة الشاشة التي تحمل المسوّدة، فلا يصله سياقها.
@@ -51,10 +52,11 @@ export function useUnsavedGuard(dirty: boolean): void {
 /** نصّ التأكيد عند التنقّل داخل التطبيق. موحَّد كي لا تتفرّق الصياغة. */
 export const LEAVE_PROMPT = "لديك تغييرات لم تُحفظ. المغادرة الآن تفقدها — هل تريد المتابعة؟";
 
-/** يسأل قبل إجراءٍ يُغادر الشاشة. يعيد true إن جاز المضيّ.
-    دالّة لا خطّاف: تُنادى داخل معالج الضغط لا أثناء الرسم. */
-export function confirmLeave(dirty: boolean): boolean {
-  return !dirty || window.confirm(LEAVE_PROMPT);
+/** يسأل قبل إجراءٍ يُغادر الشاشة. يعيد وعداً بـtrue إن جاز المضيّ.
+    دالّة لا خطّاف: تُنادى داخل معالج الضغط لا أثناء الرسم. والسؤال حوارٌ
+    من اللوحة لا نافذة المتصفّح — انظر components/ui/confirm. */
+export function confirmLeave(dirty: boolean): Promise<boolean> {
+  return dirty ? confirmDiscard() : Promise.resolve(true);
 }
 
 /** يحرس إغلاق نموذج منبثق: لا يسأل إن لم تتغير المسودة، ويحذر قبل فقدها. */
@@ -62,6 +64,7 @@ export function useConfirmDiscard<T>(draft: T, onClose: () => void): () => void 
   const initial = useRef(JSON.stringify(draft));
   useUnsavedGuard(initial.current !== JSON.stringify(draft));
   return useCallback(() => {
-    if (initial.current === JSON.stringify(draft) || window.confirm(LEAVE_PROMPT)) onClose();
+    if (initial.current === JSON.stringify(draft)) { onClose(); return; }
+    void confirmDiscard().then(ok => { if (ok) onClose(); });
   }, [draft, onClose]);
 }

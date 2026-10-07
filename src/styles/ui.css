@@ -1,0 +1,343 @@
+/* مكوّنات الواجهة — الزرّ والحقل والبطاقة والجدول والشريحة والنافذة.
+
+   كانت كلٌّ منها تُكتب حيث تُستعمل: ٤٩٢ زرّاً بتنسيقٍ مضمَّن، وسلسلة الحقل
+   `inp` معرَّفةٌ ستّ عشرة مرّة، وسبعٌ وعشرون نافذةً باثني عشر لون خلفية.
+   والتنسيق المضمَّن لا يعرف المرور ولا الضغط ولا التركيز — فلم يكن لزرٍّ
+   في اللوحة ردٌّ بصريّ، ولا لحقلٍ إطارُ تركيز.
+
+   هنا تُعرَّف مرّة، بأصنافٍ تقرأ متغيّرات اللوحة في theme.css. المكوّنات
+   في src/components/ui تلفّها لمن يكتب React؛ والأصناف نفسها صالحةٌ
+   مباشرةً على عنصرٍ قائم. */
+
+/* ═══════════════════ الزرّ ═══════════════════ */
+.ui-btn {
+  --btn-h: 40px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--btn-h); padding: 0 16px;
+  border-radius: 12px; border: 1px solid transparent;
+  font-family: var(--font-app); font-size: 14px; font-weight: 600; line-height: 1;
+  white-space: nowrap; cursor: pointer; user-select: none;
+  text-decoration: none;
+  transition: background-color var(--k-fast) ease, border-color var(--k-fast) ease,
+              color var(--k-fast) ease, box-shadow var(--k-fast) ease, transform var(--k-fast) ease;
+  filter: none !important;
+}
+.ui-btn > svg { flex-shrink: 0; }
+.ui-btn:active:not(:disabled) { transform: translateY(.5px) scale(.985); }
+.ui-btn:disabled, .ui-btn[aria-disabled="true"] { cursor: not-allowed; opacity: .5; }
+.ui-btn:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+
+.ui-btn--sm { --btn-h: 32px; padding: 0 12px; font-size: 13px; border-radius: 10px; gap: 6px; }
+.ui-btn--lg { --btn-h: 46px; padding: 0 20px; font-size: 15px; border-radius: 14px; }
+.ui-btn--block { width: 100%; }
+
+/* الأساسي — ذهبي الشعار ونصُّه أسود. واحدٌ في المشهد. */
+.ui-btn--primary {
+  background: var(--k-gold); color: var(--k-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 1px 2px rgba(138,92,22,.28);
+}
+.ui-btn--primary:hover:not(:disabled) { background: var(--k-gold-hover); }
+.ui-btn--primary:active:not(:disabled) { background: var(--k-gold-press); }
+
+/* الثانوي — أبيضُ بحدّ. هو زرّ الصفوف والإجراءات المتكرّرة. */
+.ui-btn--secondary { background: var(--k-surface); color: var(--k-text); border-color: var(--k-border-strong); box-shadow: var(--k-elev-1); }
+.ui-btn--secondary:hover:not(:disabled) { background: var(--k-fill); border-color: #C9BFAC; }
+
+.ui-btn--ghost { background: transparent; color: var(--k-text-2); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--k-fill); color: var(--k-text); }
+
+.ui-btn--dark { background: var(--k-ink); color: var(--k-on-ink); }
+.ui-btn--dark:hover:not(:disabled) { background: #2A241E; }
+
+.ui-btn--danger { background: var(--k-danger); color: #fff; }
+.ui-btn--danger:hover:not(:disabled) { background: #A91F1F; }
+
+.ui-btn--danger-soft { background: var(--k-danger-bg); color: var(--k-danger); border-color: var(--k-danger-line); }
+.ui-btn--danger-soft:hover:not(:disabled) { background: #F7DAD7; }
+
+.ui-btn--link { height: auto; padding: 0; background: none; color: var(--k-gold-deep); border-radius: 4px; }
+.ui-btn--link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+
+/* زرّ الأيقونة — مربّعٌ بحجم الزرّ. */
+.ui-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 12px;
+  border: 1px solid transparent; background: transparent; color: var(--k-text-2);
+  cursor: pointer;
+  transition: background-color var(--k-fast) ease, border-color var(--k-fast) ease, color var(--k-fast) ease;
+  filter: none !important;
+}
+.ui-iconbtn:hover:not(:disabled) { background: var(--k-fill); color: var(--k-text); }
+.ui-iconbtn:active:not(:disabled) { background: var(--k-fill-hover); }
+.ui-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.ui-iconbtn:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+.ui-iconbtn--sm { width: 30px; height: 30px; border-radius: 10px; }
+.ui-iconbtn--outline { background: var(--k-surface); border-color: var(--k-border); }
+.ui-iconbtn--outline:hover:not(:disabled) { border-color: var(--k-border-strong); }
+.ui-iconbtn--on-ink { color: var(--k-on-ink-2); }
+.ui-iconbtn--on-ink:hover:not(:disabled) { background: rgba(244,239,228,.08); color: var(--k-on-ink); }
+.ui-iconbtn--danger:hover:not(:disabled) { background: var(--k-danger-bg); color: var(--k-danger); }
+
+/* ═══════════════════ الحقل ═══════════════════ */
+.ui-input {
+  width: 100%; height: 42px; padding: 0 14px;
+  border-radius: 12px; border: 1px solid var(--k-border-strong);
+  background: var(--k-surface); color: var(--k-text);
+  font-family: var(--font-app); font-size: 14px; line-height: 1.5;
+  transition: border-color var(--k-fast) ease, box-shadow var(--k-fast) ease, background-color var(--k-fast) ease;
+  outline: none;
+}
+textarea.ui-input { height: auto; min-height: 84px; padding: 10px 14px; resize: vertical; line-height: 1.7; }
+.ui-input:hover:not(:disabled):not(:focus) { border-color: #C2B7A3; }
+.ui-input:focus { border-color: var(--k-gold); box-shadow: 0 0 0 3px var(--k-ring); }
+.ui-input:disabled { background: var(--k-fill); color: var(--k-muted); cursor: not-allowed; }
+.ui-input[aria-invalid="true"], .ui-input.is-invalid { border-color: #D98A8A; }
+.ui-input[aria-invalid="true"]:focus, .ui-input.is-invalid:focus { border-color: var(--k-danger); box-shadow: 0 0 0 3px rgba(190,38,38,.16); }
+.ui-input--sm { height: 34px; font-size: 13px; padding: 0 10px; border-radius: 10px; }
+
+.ui-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--k-text-3); }
+.ui-req { color: var(--k-danger); margin-inline-start: 2px; }
+.ui-hint { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--k-muted); }
+.ui-error { margin-top: 6px; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--k-danger); }
+
+/* ═══════════════════ البطاقة ═══════════════════ */
+.ui-card { background: var(--k-surface); border: 1px solid var(--k-border); border-radius: 16px; box-shadow: var(--k-elev-1); }
+.ui-card--flat { box-shadow: none; }
+.ui-card--hover { transition: box-shadow var(--k-base) ease, border-color var(--k-base) ease, transform var(--k-base) var(--k-ease); }
+.ui-card--hover:hover { box-shadow: var(--k-elev-2); border-color: var(--k-border-strong); }
+.ui-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--k-border); }
+.ui-card-title { font-size: 15px; font-weight: 700; color: var(--k-text); line-height: 1.4; margin: 0; }
+.ui-card-sub { font-size: 12px; color: var(--k-muted); line-height: 1.5; }
+
+/* ═══════════════════ الجدول ═══════════════════
+   صنفٌ على <table> داخل .ui-table-wrap. الرأس هادئ (حشوة الغائر لا البيج)،
+   الصفوف بلا تخطيطٍ متناوب — فاصلٌ شعريّ ومرورٌ يكفيان — والأرقام بعرضٍ
+   ثابت فتصطفّ الأعمدة. */
+.ui-table-wrap { background: var(--k-surface); border: 1px solid var(--k-border); border-radius: 16px; box-shadow: var(--k-elev-1); overflow: hidden; }
+.ui-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-color: #D8CFBF transparent; }
+table.ui-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ui-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  padding: 11px 16px; text-align: start; white-space: nowrap;
+  font-size: 12px; font-weight: 600; color: var(--k-muted);
+  background: #FAF8F3; border-bottom: 1px solid var(--k-border);
+}
+.ui-table tbody td { padding: 14px 16px; vertical-align: middle; color: var(--k-text); border-bottom: 1px solid #F1ECE2; }
+.ui-table tbody tr:last-child td { border-bottom: 0; }
+.ui-table tbody tr { background: var(--k-surface); transition: background-color var(--k-fast) ease; }
+.ui-table tbody tr:hover { background: #FCFAF6; }
+.ui-table tbody tr.is-clickable { cursor: pointer; }
+.ui-table tbody tr.is-clickable:hover { background: var(--k-cream); }
+.ui-table tbody tr.is-clickable:focus-visible { outline: 2px solid var(--k-gold); outline-offset: -2px; }
+/* رقمٌ يُقرأ يساراً-يميناً (جوال، معرّف) ويبقى محاذياً لبداية الخلية العربية:
+   inline-block فيأخذ موضعه من اتجاه الخلية لا من اتجاهه هو. */
+.ui-table .num { display: inline-block; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+.ui-table .cell-sub.num { display: block; width: fit-content; }
+.ui-table .nowrap { white-space: nowrap; }
+.ui-table .cell-main { font-weight: 600; color: var(--k-text); }
+.ui-table .cell-sub { font-size: 12px; color: var(--k-muted); margin-top: 2px; }
+.ui-table .col-end { text-align: end; }
+/* عمود الإجراء المثبّت عند حافة النهاية على الشاشات الضيقة. */
+.ui-table th.col-action, .ui-table td.col-action { position: sticky; inset-inline-end: 0; background: inherit; text-align: end; white-space: nowrap; }
+.ui-table thead th.col-action { background: #FAF8F3; z-index: 2; }
+/* أزرار الصفّ تظهر كاملةً عند المرور وتهدأ في السكون — الجدول يُقرأ بلا
+   عمودٍ من الأزرار الصاخبة. */
+.ui-table .row-actions { display: inline-flex; align-items: center; gap: 6px; }
+
+/* رأس عمودٍ قابلٍ للفرز. */
+.ui-th-sort { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; filter: none !important; }
+.ui-th-sort:hover { color: var(--k-text); }
+.ui-th-sort svg { opacity: .45; }
+.ui-th-sort[data-active="true"] { color: var(--k-text); }
+.ui-th-sort[data-active="true"] svg { opacity: 1; color: var(--k-gold-deep); }
+
+/* ═══════════════════ الشريحة والمقطّع ═══════════════════
+   المحدَّد أسودُ لا ذهبي: الشريحة ترشّح ولا تفعل — والذهبي للفعل. */
+.ui-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--k-border-strong); background: var(--k-surface); color: var(--k-text-2);
+  font-family: var(--font-app); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--k-fast) ease, border-color var(--k-fast) ease, color var(--k-fast) ease;
+  filter: none !important;
+}
+.ui-chip:hover { background: var(--k-fill); color: var(--k-text); }
+.ui-chip[aria-pressed="true"], .ui-chip.is-on { background: var(--k-ink); border-color: var(--k-ink); color: var(--k-on-ink); }
+.ui-chip:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+.ui-chip-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--k-fill); color: var(--k-text-2); font-variant-numeric: tabular-nums; }
+.ui-chip[aria-pressed="true"] .ui-chip-count, .ui-chip.is-on .ui-chip-count { background: rgba(244,239,228,.16); color: var(--k-on-ink); }
+.ui-chip--alert .ui-chip-count { background: var(--k-danger-bg); color: var(--k-danger); }
+
+.ui-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 767px) {
+  /* على الجوال صفٌّ واحد يُمرَّر أفقياً — سبع شرائح ملتفّة تأكل نصف الشاشة. */
+  .ui-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; scroll-snap-type: x proximity; }
+  .ui-chips::-webkit-scrollbar { display: none; }
+  .ui-chips > * { flex-shrink: 0; scroll-snap-align: start; }
+}
+
+.ui-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; background: var(--k-fill); border: 1px solid var(--k-border); }
+.ui-seg-item {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 9px; border: 0;
+  background: transparent; color: var(--k-text-2);
+  font-family: var(--font-app); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background-color var(--k-fast) ease, color var(--k-fast) ease, box-shadow var(--k-fast) ease;
+  filter: none !important;
+}
+.ui-seg-item:hover { color: var(--k-text); }
+.ui-seg-item[aria-pressed="true"], .ui-seg-item.is-on { background: var(--k-surface); color: var(--k-text); box-shadow: var(--k-elev-1), 0 0 0 1px var(--k-border); }
+.ui-seg-item:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 1px; }
+
+/* ═══════════════════ الشارة ═══════════════════ */
+.ui-badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.ui-badge-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; flex-shrink: 0; }
+.ui-badge--sm { height: 20px; padding: 0 8px; font-size: 11px; }
+
+/* ═══════════════════ النافذة ═══════════════════ */
+.ui-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(20,17,14,.56); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); overflow-y: auto; }
+.ui-modal { position: relative; width: 100%; max-height: calc(100dvh - 48px); display: flex; flex-direction: column; background: var(--k-surface); border-radius: 20px; box-shadow: var(--k-elev-4); overflow: hidden; outline: none; }
+.ui-modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px 16px; border-bottom: 1px solid var(--k-border); flex-shrink: 0; }
+.ui-modal-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.4; color: var(--k-text); }
+.ui-modal-sub { margin-top: 2px; font-size: 13px; line-height: 1.6; color: var(--k-muted); }
+.ui-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.ui-modal-foot { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--k-border); background: #FCFBF8; flex-shrink: 0; }
+@media (max-width: 639px) {
+  /* على الجوال النافذة ورقةٌ سفلية بعرض الشاشة. */
+  .ui-scrim { align-items: flex-end; padding: 0; }
+  .ui-modal { max-height: 94dvh; border-radius: 20px 20px 0 0; }
+  .ui-modal-head { padding: 18px 18px 14px; }
+  .ui-modal-body { padding: 16px 18px; }
+  .ui-modal-foot { padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .ui-modal-foot > .ui-btn { flex: 1; }
+}
+
+/* ═══════════════════ التنبيه المضمَّن ═══════════════════ */
+.ui-note { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid; font-size: 13px; line-height: 1.7; }
+.ui-note > svg { flex-shrink: 0; margin-top: 3px; }
+.ui-note--warn { background: var(--k-warn-bg); border-color: var(--k-warn-line); color: var(--k-warn); }
+.ui-note--danger { background: var(--k-danger-bg); border-color: var(--k-danger-line); color: var(--k-danger); }
+.ui-note--success { background: var(--k-success-bg); border-color: var(--k-success-line); color: var(--k-success); }
+.ui-note--info { background: var(--k-info-bg); border-color: var(--k-info-line); color: var(--k-info); }
+.ui-note--neutral { background: var(--k-fill); border-color: var(--k-border); color: var(--k-text-2); }
+
+/* ═══════════════════ شريط التقدّم ═══════════════════ */
+.ui-meter { height: 6px; border-radius: 999px; background: var(--k-fill-hover); overflow: hidden; }
+.ui-meter > span { display: block; height: 100%; border-radius: 999px; background: var(--k-ink); transition: width var(--k-base) var(--k-ease); }
+
+/* ═══════════════════ طبقة اللوحة العامّة ═══════════════════
+   ما يصيب كل شاشات الإدارة بلا تعديلها واحدةً واحدة: أرقامٌ بعرضٍ ثابت،
+   إطارُ تركيزٍ لكل ما يُضغط ويُكتب فيه، وردٌّ بصريّ لكل زرّ. الأزرار هنا
+   مئاتٌ بتنسيقٍ مضمَّن لا يعرف :hover — فيُعطى الردّ من هنا مرّة، ومكوّنات
+   .ui-* تُلغيه (filter:none) لأن لها ردَّها. */
+.ts-admin { font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+.ts-admin ::selection { background: rgba(192,134,44,.26); }
+
+.ts-admin :is(button, a, [role="tab"], [role="button"], summary):focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+.ts-admin :is(input, textarea, select).border:focus {
+  border-color: var(--k-gold) !important;
+  box-shadow: 0 0 0 3px var(--k-ring);
+}
+.ts-admin :is(input, textarea, select).border:not(:focus):not(:disabled):hover { border-color: #C2B7A3 !important; }
+.ts-admin :is(input, textarea, select).border { transition: border-color var(--k-fast) ease, box-shadow var(--k-fast) ease; }
+
+.ts-admin button { transition: background-color var(--k-fast) ease, border-color var(--k-fast) ease, color var(--k-fast) ease, box-shadow var(--k-fast) ease, filter var(--k-fast) ease, opacity var(--k-fast) ease; }
+.ts-admin button:not(:disabled):hover { filter: brightness(.965); }
+.ts-admin button:not(:disabled):active { filter: brightness(.92); }
+.ts-admin button:disabled { cursor: not-allowed; }
+
+.ts-admin * { scrollbar-width: thin; scrollbar-color: #D8CFBF transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-btn, .ui-iconbtn, .ui-input, .ui-chip, .ui-seg-item, .ui-card--hover, .ts-admin button { transition: none !important; }
+  .ui-btn:active:not(:disabled) { transform: none; }
+}
+
+/* ═══════════════════ القائمة الجانبية ═══════════════════ */
+.ts-side-item {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  width: 100%; height: 40px; padding: 0 12px; margin-bottom: 2px;
+  border: 0; border-radius: 10px; background: transparent;
+  color: var(--k-on-ink-2); font-family: var(--font-app); font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: background-color var(--k-fast) ease, color var(--k-fast) ease;
+  filter: none !important;
+}
+.ts-side-item:hover { background: rgba(244,239,228,.06); color: var(--k-on-ink); }
+.ts-side-item.is-on { background: var(--k-ink-2); color: var(--k-on-ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--k-ink-line); }
+.ts-side-item.is-on > svg { color: var(--k-gold); }
+/* علامة «أنت هنا» — خيطٌ ذهبيّ عند حافة البداية. */
+.ts-side-item.is-on::before { content: ""; position: absolute; inset-inline-start: 0; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--k-gold); }
+.ts-side-item:focus-visible { outline: 2px solid var(--k-gold); outline-offset: -2px; }
+.ts-side-badge { min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--k-gold); color: var(--k-ink); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════ رأس الصفحة ═══════════════════ */
+.ts-page-head { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid transparent; transition: border-color var(--k-base) ease; }
+.ts-page-title { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.35; color: var(--k-text); letter-spacing: 0; }
+.ts-search { position: relative; width: 100%; }
+.ts-search > svg { position: absolute; top: 50%; inset-inline-start: 13px; transform: translateY(-50%); color: var(--k-muted); pointer-events: none; }
+.ts-search > input { padding-inline-start: 38px; background: var(--k-surface); }
+.ts-search > input::placeholder { color: var(--k-placeholder); }
+
+/* ═══════════════════ بطاقة الرقم ═══════════════════ */
+.ts-stat { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 18px; text-align: start; background: var(--k-surface); border: 1px solid var(--k-border); border-radius: 14px; box-shadow: var(--k-elev-1); font-family: var(--font-app); }
+button.ts-stat { cursor: pointer; filter: none !important; transition: border-color var(--k-fast) ease, box-shadow var(--k-base) ease, transform var(--k-base) var(--k-ease); }
+button.ts-stat:hover { border-color: var(--k-border-strong); box-shadow: var(--k-elev-2); transform: translateY(-1px); }
+.ts-stat-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--k-muted); line-height: 1.4; }
+.ts-stat-value { font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--k-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ts-stat-unit { font-size: 14px; font-weight: 600; color: var(--k-muted); margin-inline-start: 4px; }
+.ts-stat-sub { font-size: 12px; color: var(--k-muted); line-height: 1.5; }
+/* المميَّزة: خيطٌ ذهبيّ عند حافة البداية — لا خلفية ثانية ولا هالة. */
+.ts-stat.is-accent::before { content: ""; position: absolute; inset-inline-start: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: var(--k-gold); }
+.ts-stat.is-alert .ts-stat-value { color: var(--k-danger); }
+
+/* ═══════════════════ المفتاح وخانة الاختيار ═══════════════════ */
+.ts-admin input[type="checkbox"], .ts-admin input[type="radio"] { accent-color: var(--k-ink); width: 16px; height: 16px; cursor: pointer; }
+.ui-switch { position: relative; display: inline-flex; flex-shrink: 0; width: 40px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: #CFC6B5; cursor: pointer; transition: background-color var(--k-base) ease; filter: none !important; }
+.ui-switch::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 18px; height: 18px; border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(20,17,14,.3); transition: inset-inline-start var(--k-base) var(--k-ease); }
+.ui-switch[aria-checked="true"] { background: var(--k-ink); }
+.ui-switch[aria-checked="true"]::after { inset-inline-start: 19px; }
+.ui-switch:disabled { opacity: .5; cursor: not-allowed; }
+.ui-switch:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+
+/* ═══════════════════ بنية الصفحة ═══════════════════ */
+.ts-page { flex: 1 1 0%; display: flex; flex-direction: column; min-width: 0; min-height: 100vh; min-height: 100dvh; background: var(--k-bg); }
+.ts-page-body { flex: 1 1 auto; padding: 4px 16px 40px; }
+@media (min-width: 768px) { .ts-page-body { padding: 4px 32px 48px; } }
+/* شريط الأدوات فوق القائمة: المرشّحات في البداية، العدّ والأفعال في النهاية. */
+.ts-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 20px 0 16px; }
+.ts-toolbar-end { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
+.ts-count { font-size: 13px; color: var(--k-muted); white-space: nowrap; }
+/* عنوان قسمٍ داخل الصفحة. */
+.ts-section-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--k-text); line-height: 1.4; }
+/* صفّ «معلومة: قيمة» في بطاقات التفاصيل. */
+.ts-kv { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ts-kv-k { font-size: 12px; color: var(--k-muted); line-height: 1.4; }
+.ts-kv-v { font-size: 14px; font-weight: 600; color: var(--k-text); line-height: 1.5; overflow-wrap: anywhere; }
+
+/* ═══════════════════ الرئيسية: محطة الاستقبال ═══════════════════ */
+.ts-day { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border-radius: 12px; border: 1px solid transparent; background: transparent; color: var(--k-placeholder); font-family: var(--font-app); cursor: pointer; filter: none !important; transition: background-color var(--k-fast) ease, border-color var(--k-fast) ease, color var(--k-fast) ease; }
+.ts-day:hover { background: var(--k-fill); }
+.ts-day.has-trips { background: var(--k-surface); border-color: var(--k-border-strong); color: var(--k-text); box-shadow: var(--k-elev-1); }
+.ts-day.has-trips:hover { border-color: #C2B7A3; }
+.ts-day-sub { font-size: 12px; color: var(--k-muted); }
+.ts-day.has-trips .ts-day-sub { color: var(--k-gold-deep); font-weight: 600; }
+.ts-day.is-on, .ts-day.is-on:hover { background: var(--k-ink); border-color: var(--k-ink); color: var(--k-on-ink); }
+.ts-day.is-on .ts-day-sub { color: var(--k-gold-2); }
+.ts-day:focus-visible { outline: 2px solid var(--k-gold); outline-offset: 2px; }
+
+.ts-pane { border-bottom: 1px solid var(--k-border); }
+@media (min-width: 1280px) { .ts-pane { border-bottom: 0; border-inline-end: 1px solid var(--k-border); } }
+
+/* صفٌّ يُختار من قائمة (رحلة اليوم، تذكرة دعم): المحدَّد بخيطٍ أسود وحشوة غائرة. */
+.ts-pick { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; text-align: start; font-family: var(--font-app); cursor: pointer; filter: none !important; transition: background-color var(--k-fast) ease; }
+.ts-pick:hover { background: var(--k-fill); }
+.ts-pick.is-on { background: var(--k-fill); }
+.ts-pick.is-on::before { content: ""; position: absolute; inset-inline-start: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--k-ink); }
+.ts-pick:focus-visible { outline: 2px solid var(--k-gold); outline-offset: -2px; }
+
+/* صفٌّ ينقل إلى شاشة أخرى: أيقونة، نصّان، قيمة، سهم. */
+.ts-action-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; text-align: start; font-family: var(--font-app); cursor: pointer; filter: none !important; transition: background-color var(--k-fast) ease; }
+.ts-action-row:hover { background: #FAF8F3; }
+.ts-action-row:focus-visible { outline: 2px solid var(--k-gold); outline-offset: -2px; }
+
+/* حقل البحث له زرّ مسحٍ خاص؛ زرّ المتصفّح الأصلي يظهر فوقه. */
+.ts-search > input::-webkit-search-cancel-button { appearance: none; -webkit-appearance: none; display: none; }

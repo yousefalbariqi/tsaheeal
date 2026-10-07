@@ -1,9 +1,16 @@
+import { useEffect, useState } from "react";
 import { openWhatsApp } from "@/lib/utils";
 import { DEFAULT_SETTINGS } from "@/data/settings";
 import { usePublicSettings } from "@/data/useSettings";
 
-/* زر واتساب عائم — ثابت أسفل يمين الشاشة في كل صفحات المستفيد.
-   النبض يتوقف مع تفضيل «تقليل الحركة» في النظام.
+/* زر واتساب عائم — ثابت أسفل يمين الشاشة في صفحات المستفيد التي لا شريط
+   إجراء فيها.
+
+   على الجوال دائرةٌ بالأيقونة وحدها دائماً: الحبّة العريضة كانت تقف على
+   النص وبطاقات الآراء فتحجبها. وعلى الشاشة الواسعة يبدأ حبّةً باسمها
+   «تواصل معنا» ثم ينكمش دائرةً عند أول تمرير، أو حيث يوجد شريطٌ ثابت. وبلا نبضٍ دائم — هالةٌ خضراء تنبض بلا
+   توقف تسحب العين عن الزرّ الذهبي الذي نريدها عليه. والسطح أبيض
+   والأخضر في شعار واتساب وحده، كزرّه داخل شريط الإجراء.
 
    الرقم من الإعدادات لا ثابتاً في الشفرة: تغييره كان يستلزم تعديل
    هذا السطر وإعادة نشر الموقع. الافتراضي هو الرقم القائم نفسه، فمن
@@ -14,14 +21,23 @@ export const SUPPORT_PHONE = DEFAULT_SETTINGS.pub.supportPhone;
 
 const STYLE_ID = "ts-wa-fab-style";
 const CSS = `
-@keyframes ts-wa-pulse{
-  0%   { box-shadow: 0 0 0 0 rgba(37,211,102,.45); }
-  70%  { box-shadow: 0 0 0 14px rgba(37,211,102,0); }
-  100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
+.ts-wa-fab{
+  position:fixed; inset-inline-end:16px; z-index:60;
+  display:flex; align-items:center; justify-content:center;
+  height:56px; min-width:56px; padding:0 13px;
+  color:#1FAF54; border:1px solid #E8E2D6; border-radius:999px; background:#fff; cursor:pointer;
+  box-shadow:0 8px 22px -8px rgba(20,17,14,.4), 0 1px 2px rgba(20,17,14,.08);
+  transition:transform .12s ease-out;
 }
-.ts-wa-fab{ animation: ts-wa-pulse 2.4s ease-out infinite; }
-.ts-wa-fab:active{ transform: scale(.94); }
-@media (prefers-reduced-motion: reduce){ .ts-wa-fab{ animation: none; } }
+.ts-wa-fab:active{ transform:scale(.94); }
+.ts-wa-fab-label{
+  overflow:hidden; max-width:110px; padding-inline:8px 4px;
+  color:#1B1712; font-family:var(--font-app); font-size:15px; font-weight:600; white-space:nowrap;
+  transition:max-width .2s ease-out, padding .2s ease-out, opacity .15s ease-out;
+}
+.ts-wa-fab.is-compact .ts-wa-fab-label{ max-width:0; padding-inline:0; opacity:0; }
+@media (max-width: 639px){ .ts-wa-fab-label{ display:none; } }
+@media (prefers-reduced-motion: reduce){ .ts-wa-fab,.ts-wa-fab-label{ transition:none; } }
 `;
 
 function ensureStyle() {
@@ -31,6 +47,11 @@ function ensureStyle() {
   el.textContent = CSS;
   document.head.appendChild(el);
 }
+
+/** أشرطة الإجراء الثابتة في تطبيق العميل؛ بوجود أحدها يبقى الزرّ دائرة. */
+const STICKY_BARS = ".ts-sticky-bar, .ts-flow-footer, .ts-focus-configure-cta";
+/** بعد هذا القدر من التمرير تنكمش الحبّة. */
+const COMPACT_AFTER = 24;
 
 /* أيقونة واتساب الرسمية — مضمّنة كـSVG فلا طلب شبكة ولا اعتماد على خط. */
 export function WhatsAppGlyph({ size = 30 }: { size?: number }) {
@@ -57,23 +78,25 @@ export function WhatsAppFab({
   ensureStyle();
   const cfg = usePublicSettings();
   const to = phone || cfg.supportPhone || SUPPORT_PHONE;
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    /* القراءة عند التمرير فقط: لا مراقب دائم ولا حساب في كل رسم. */
+    const update = () => setCompact(window.scrollY > COMPACT_AFTER || !!document.querySelector(STICKY_BARS));
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
   return (
     <button
+      type="button"
       onClick={() => openWhatsApp(to, message)}
       aria-label={label}
       title={label}
-      className="ts-wa-fab flex items-center justify-center gap-2"
-      style={{
-        position: "fixed",
-        right: 16,   // يمين الشاشة فعلياً في كل الاتجاهات — لا يتبع RTL
-        bottom: `calc(${bottom}px + env(safe-area-inset-bottom, 0px))`,
-        minWidth: 126, height: 54, borderRadius: 999,
-        background: "#25D366", border: "none", cursor: "pointer",
-        zIndex: 60, padding: "0 15px 0 12px", transition: "transform .12s ease", color: "#fff",
-      }}
+      className={`ts-wa-fab${compact ? " is-compact" : ""}`}
+      style={{ bottom: `calc(${bottom}px + env(safe-area-inset-bottom, 0px))` }}  // عند نهاية السطر (يسار الشاشة في العربية) — قرار يوسف 2026-10-07: على اليمين كان يغطّي السعر في بطاقة الرحلة
     >
       <WhatsAppGlyph/>
-      <span style={{ color: "#fff", fontFamily: "var(--font-app)", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>تواصل معنا</span>
+      <span className="ts-wa-fab-label" aria-hidden="true">{label}</span>
     </button>
   );
 }

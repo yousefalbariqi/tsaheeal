@@ -5,16 +5,37 @@
 
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-      <!-- يوحّد لون شريط الحالة/الأطراف مع رأس الصفحة الأبيض بدل بيج الخلفية العامة -->
-      <meta name="theme-color" content="#ffffff" />
+      <!-- لون شريط الحالة قبل تحميل التطبيق: عاجيّ صفحة البداية. التطبيق
+           يبدّله بعد ذلك حسب الشاشة (CustomerApp). -->
+      <meta name="theme-color" content="#FBF9F5" />
       <link rel="icon" type="image/png" href="/favicon.png" />
       <link rel="apple-touch-icon" href="/favicon.png" />
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <meta name="mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      <meta name="apple-mobile-web-app-title" content="تساهيل العمرة" />
       <!-- الخطّ يُطلب قبل تنفيذ حزمة JS: تعريفه في fonts.css داخل الحزمة،
            فبلا هذا السطر لا يبدأ تحميله إلا بعد تحليل الحزمة كلها ويُرسم
            أول نصّ بخطّ النظام ثم يقفز. -->
       <link rel="preload" href="/DGShamael-Regular.ttf" as="font" type="font/ttf" crossorigin />
       <title>تساهيل العمرة</title>
       <meta name="description" content="تساهيل العمرة — احجز عمرتك بسهولة وطمأنينة." />
+      <!-- بطاقة المشاركة. الصورة مسارٌ نسبيّ لأن النطاق النهائي غير مثبَّت
+           في الشفرة؛ بعض المنصّات تطلب رابطاً مطلقاً — يُستبدل عند النشر. -->
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content="تساهيل العمرة" />
+      <meta property="og:locale" content="ar_SA" />
+      <meta property="og:title" content="تساهيل العمرة" />
+      <meta property="og:description" content="احجز عمرتك بسهولة وطمأنينة: رحلات إلى مكة المكرمة والمدينة المنورة بمواعيد وأسعار واضحة." />
+      <meta property="og:image" content="/thisone.jpg" />
+      <meta property="og:image:width" content="1040" />
+      <meta property="og:image:height" content="1280" />
+      <meta property="og:image:alt" content="الكعبة المشرفة وبرج الساعة في مكة المكرمة" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="تساهيل العمرة" />
+      <meta name="twitter:description" content="احجز عمرتك بسهولة وطمأنينة: رحلات إلى مكة المكرمة والمدينة المنورة بمواعيد وأسعار واضحة." />
+      <meta name="twitter:image" content="/thisone.jpg" />
       <style>
         html, body { height: 100%; margin: 0; }
         #root { height: 100%; }

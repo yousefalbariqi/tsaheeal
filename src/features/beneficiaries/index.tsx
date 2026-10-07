@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Plus, X, Users, CreditCard, Ticket, ArrowRight, Link2, ShieldAlert, Copy as CopyIcon, Check } from "lucide-react";
-import { B } from "@/lib/theme";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useSearchParams } from "react-router";
+import { AnimatePresence } from "motion/react";
+import { Plus, Users, CreditCard, Ticket, ArrowRight, Link2, ShieldAlert, Copy as CopyIcon, Star, Award, Pencil, ChevronLeft, SearchX, Ban, FileX, CirclePause, CirclePlay, AlertCircle, BookOpen } from "lucide-react";
+import { B, TONE } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { useServerPagedSearch } from "@/lib/useServerSearch";
 import type { Beneficiary, Payment, Booking, TicketEntry } from "@/types";
@@ -9,6 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { NationalitySelect } from "@/components/NationalitySelect";
+import { ArabicDatePicker } from "@/components/ArabicDatePicker";
 import { useStore } from "@/store/useStore";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
@@ -19,14 +21,16 @@ import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTy
 import { phoneError, formatPhone } from "@/lib/phone";
 import { AppSelect } from "@/components/AppSelect";
 import { sar } from "@/lib/money";
+import { fmtDate, fmtDateShort } from "@/lib/dates";
 import { isSupabaseEnabled } from "@/supabase/client";
 import { toast } from "sonner";
 import { useRole } from "@/lib/useRole";
 import { Field } from "@/components/Field";
 import { Pager, usePaged } from "@/components/Pager";
-import { EntityGate } from "@/components/States";
+import { EntityGate, EmptyState } from "@/components/States";
 import { OrgLine } from "@/components/OrgLine";
 import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
+import { Badge, Button, FilterChips, IconButton, Modal, ModalIcon, Note, Segmented, SortTh, Textarea, useSort, type ChipOption } from "@/components/ui";
 
 const EMPTY_BEN: Omit<Beneficiary,"id"|"bookingIds"> = { name:"", phone:"", idNumber:"", nationality:"", gender:"male", birthDate:"", rating:0, notes:"", suspended:false, contactPhone:"" };
 
@@ -53,21 +57,45 @@ function validateBen(f: Partial<Beneficiary>): BenErrors {
   if (f.docExpiry && f.docExpiry < new Date().toISOString().slice(0, 10)) e.docExpiry = "الوثيقة منتهية — لا تصلح للسفر";
   return e;
 }
-const docLabel = (t?: string) => t ? `${docTypeDef(t).icon} ${docTypeDef(t).label.ar}` : "";
+/* اسم الوثيقة نصّاً وحده: رمزها التعبيري في بيانات الأنواع لا يُرسم في اللوحة. */
+const docLabel = (t?: string) => t ? docTypeDef(t).label.ar : "";
 const isExpired = (d?: string) => !!d && d < new Date().toISOString().slice(0, 10);
+const genderText = (g: Beneficiary["gender"]) => g === "female" ? "أنثى" : "ذكر";
 
+/** الحرف الأول في دائرةٍ هادئة — كانت كتلةً سوداء للذكر وبنفسجية للأنثى
+    في كل صفّ؛ الجنس يُقرأ نصّاً في عموده لا من لون الدائرة. */
+function Avatar({name,size=36}:{name:string;size?:number}) {
+  return (
+    <span aria-hidden className="flex items-center justify-center flex-shrink-0"
+      style={{width:size,height:size,borderRadius:999,background:B.fill,color:B.text3,fontSize:size*0.4,fontWeight:600,border:`1px solid ${B.border}`}}>
+      {name.trim().charAt(0)||"؟"}
+    </span>
+  );
+}
+
+const starStyle=(on:boolean):CSSProperties=>({color:on?B.gold:B.borderStrong,fill:on?B.gold:"transparent"});
+
+/** التقييم للقراءة — خمس نجماتٍ بنصٍّ بديل واحد لا خمسة رموز. */
+function Stars({value,size=15}:{value:number;size?:number}) {
+  return (
+    <span role="img" aria-label={value?`التقييم ${value} من 5`:"بلا تقييم"} className="inline-flex items-center gap-0.5" style={{verticalAlign:"middle"}}>
+      {[1,2,3,4,5].map(n=><Star key={n} aria-hidden size={size} strokeWidth={1.75} style={starStyle(n<=value)}/>)}
+    </span>
+  );
+}
+
+/** التقييم للتعديل — أزرارٌ حقيقية تُبلَغ بـTab وتُضغط بـEnter/المسافة. */
 function StarRating({value,onChange}:{value:number;onChange?:(v:number)=>void}) {
   const [hover,setHover]=useState(0);
   return (
-    <div className="flex gap-1">
+    <div role="group" aria-label="تقييم المستفيد" className="inline-flex items-center gap-0.5" style={{marginInlineStart:-6}}>
       {[1,2,3,4,5].map(n=>(
-        <button key={n} type="button"
+        <button key={n} type="button" aria-label={`${n} من 5`} title={`${n} من 5`} aria-pressed={value===n}
           onClick={()=>onChange?.(n)}
           onMouseEnter={()=>onChange&&setHover(n)}
           onMouseLeave={()=>onChange&&setHover(0)}
-          className="text-2xl leading-none p-0 cursor-pointer"
-          style={{background:"none",border:"none",color:(hover||value)>=n?B.gold:"#D8D0C4"}}>
-          ★
+          className="ui-iconbtn">
+          <Star size={22} strokeWidth={1.75} style={starStyle((hover||value)>=n)}/>
         </button>
       ))}
     </div>
@@ -79,9 +107,9 @@ function StarRating({value,onChange}:{value:number;onChange?:(v:number)=>void}) 
 function BenTag({b,count}:{b:Beneficiary;count?:number}) {
   const n=count??b.bookingIds.length;
   if(b.suspended) return <StatusBadge status="suspended" entity="beneficiary"/>;
-  if(n>=3) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08"}}>⭐ وفيّ</span>;
-  if(n>=2) return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#E3F3E8",color:"#1E7A44"}}>متكرر</span>;
-  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold" style={{background:"#EAF1FE",color:"#1E52C7"}}>جديد</span>;
+  if(n>=3) return <Badge tone="gold"><Award size={13} aria-hidden/>وفيّ</Badge>;
+  if(n>=2) return <Badge tone="success" dot>متكرر</Badge>;
+  return <Badge tone="neutral" dot>جديد</Badge>;
 }
 
 function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Partial<Beneficiary>)=>void;onClose:()=>void}) {
@@ -94,114 +122,87 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
   const errors=validateBen(form);
   const invalid=Object.keys(errors).length>0;
   const def=docTypeDef(form.docType);
-  const inp="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none";
-  const ist=(k:keyof BenErrors)=>({borderColor:tried&&errors[k]?"#BE2626":B.border,fontFamily:"inherit"} as const);
-  const Err=({k}:{k:keyof BenErrors})=> tried&&errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
-  const req=<span style={{color:"#BE2626"}}> *</span>;
+  const err=(k:keyof BenErrors)=>tried?errors[k]:undefined;
+  const bad=(k:keyof BenErrors)=>tried&&!!errors[k];
+  const req=<span className="ui-req">*</span>;
   function submit(){
     setTried(true);
     if(invalid) return;
     onSave({...form, name:form.name.trim(), phone:form.phone.trim(), idNumber:(form.idNumber??"").replace(/\s/g,""),
       contactPhone:form.contactPhone?.trim()||undefined, docExpiry:form.docExpiry||undefined});
   }
+  const missing=Object.keys(errors).length;
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.55)"}}>
-      <motion.div initial={{scale:.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.95,opacity:0}}
-        className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
-          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0}}>{ben.id?"تعديل بيانات المستفيد":"إضافة مستفيد جديد"}</h3>
-          <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>الحقول المعلَّمة بـ<span style={{color:"#F3A3A3"}}> * </span>إلزامية — لا يُحفظ ملفٌ ناقص</div>
-          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={requestClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+    <Modal open onClose={requestClose} width={560}
+      title={ben.id?"تعديل بيانات المستفيد":"إضافة مستفيد جديد"}
+      sub={<>الحقول المعلَّمة بـ{req} إلزامية — لا يُحفظ ملفٌ ناقص.</>}
+      footer={<>
+        <Button variant="primary" onClick={submit}>حفظ المستفيد</Button>
+        <Button variant="secondary" onClick={requestClose}>إلغاء</Button>
+      </>}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <Field label={<>الاسم الكامل{req}</>} error={err("name")}>
+            <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="كما في الوثيقة" className="ui-input" aria-invalid={bad("name")} autoComplete="off"/>
+          </Field>
         </div>
-        <div className="p-6 grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <Field label={<>الاسم الكامل{req}</>}>
-              <input value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="كما في الوثيقة" className={inp} style={ist("name")} aria-invalid={tried&&!!errors.name}/>
-            </Field>
-            <Err k="name"/>
-          </div>
-          <div>
-            <Field label={<>نوع الوثيقة{req}</>}>
-              <AppSelect value={form.docType??""} placeholder="اختر النوع" onChange={v=>f("docType")((v||undefined) as Beneficiary["docType"])}
-                options={DOC_TYPES.map(d=>({value:d.value,label:`${d.icon} ${d.label.ar}`}))}/>
-            </Field>
-            <Err k="docType"/>
-          </div>
-          <div>
-            <Field label={<>{numberLabelOf(form.docType,form.idNumber)}{req}</>}>
-              <input value={form.idNumber} onChange={e=>f("idNumber")(e.target.value)} placeholder={form.docType?def.placeholder:"اختر النوع أولاً"}
-                inputMode={form.docType&&def.numeric?"numeric":"text"} maxLength={form.docType?def.maxLength:15}
-                className={inp} style={{...ist("idNumber"),direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}} aria-invalid={tried&&!!errors.idNumber}/>
-            </Field>
-            {form.docType&&!(tried&&errors.idNumber)&&<div className="text-xs mt-1" style={{color:B.muted}}>{def.hint.ar}</div>}
-            <Err k="idNumber"/>
-          </div>
-          <div>
-            <Field label="انتهاء الوثيقة">
-              <input type="date" value={form.docExpiry??""} onChange={e=>f("docExpiry")(e.target.value||undefined)}
-                className={inp} style={{...ist("docExpiry"),direction:"ltr"}}/>
-            </Field>
-            <Err k="docExpiry"/>
-          </div>
-          <div>
-            <Field label={<>الجنسية{req}</>}>
-              <NationalitySelect value={form.nationality} onChange={f("nationality")} subInTrigger={false}/>
-            </Field>
-            <Err k="nationality"/>
-          </div>
-          <div>
-            <Field label={<>تاريخ الميلاد{req}</>}>
-              <input type="date" value={form.birthDate} onChange={e=>f("birthDate")(e.target.value)}
-                className={inp} style={{...ist("birthDate"),direction:"ltr"}} aria-invalid={tried&&!!errors.birthDate}/>
-            </Field>
-            <Err k="birthDate"/>
-          </div>
-          <div>
-            <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>الجنس{req}</label>
-            <div className="flex gap-3">
-              {(["male","female"] as const).map(g=>(
-                <button key={g} type="button" onClick={()=>f("gender")(g)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                  style={{border:`1px solid ${form.gender===g?B.gold:B.border}`,background:form.gender===g?B.gold:"#fff",color:form.gender===g?B.black:B.text2}}>
-                  {g==="male"?"ذكر":"أنثى"}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* جوالان لا واحد: «ليس كل معتمر لديه جوال مستقل؛ فرّق بين جوال
-              المستفيد وجوال مسؤول الحجز». */}
-          <div>
-            <Field label="جوال المستفيد">
-              <input value={form.phone} onChange={e=>f("phone")(e.target.value)} placeholder="05xxxxxxxx — إن وُجد"
-                className={inp} style={{...ist("phone"),direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/>
-            </Field>
-            <Err k="phone"/>
-          </div>
-          <div>
-            <Field label="جوال مسؤول الحجز">
-              <input value={form.contactPhone??""} onChange={e=>f("contactPhone")(e.target.value)} placeholder="إن اختلف عن جوال المستفيد"
-                className={inp} style={{...ist("contactPhone"),direction:"ltr",textAlign:"left",fontFamily:"var(--font-app)"}}/>
-            </Field>
-            <Err k="contactPhone"/>
-          </div>
-          <div className="col-span-2 rounded-xl px-3.5 py-2.5 text-xs" style={{background:B.fill,border:`1px dashed ${B.border}`,color:B.muted}}>
-            صورة الوثيقة: تُفعَّل مع دلو التخزين الخاص (روابط موقّتة، حفظ حتى انتهاء الرحلة + ٩٠ يوماً). صورة جوازٍ في الدلو العام أسوأ من غيابها.
-          </div>
+        <div>
+          <Field label={<>نوع الوثيقة{req}</>} error={err("docType")}>
+            <AppSelect value={form.docType??""} placeholder="اختر النوع" invalid={bad("docType")} onChange={v=>f("docType")((v||undefined) as Beneficiary["docType"])}
+              options={DOC_TYPES.map(d=>({value:d.value,label:d.label.ar}))}/>
+          </Field>
         </div>
-        <div className="px-6 pb-6 flex flex-col gap-3">
-          {tried&&invalid&&<div className="text-xs font-bold rounded-lg px-3 py-2" style={{background:"#FBE6E6",color:"#BE2626",border:"1px solid #F3C9C9"}}>أكمل الحقول المعلَّمة — {Object.keys(errors).length} {Object.keys(errors).length===1?"حقل ناقص":"حقول ناقصة"}</div>}
-          <div className="flex gap-3">
-            <button onClick={submit} className="px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none",opacity:tried&&invalid?0.6:1}}>حفظ المستفيد</button>
-            <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-              style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
-          </div>
+        <div>
+          <Field label={<>{numberLabelOf(form.docType,form.idNumber)}{req}</>} error={err("idNumber")} hint={form.docType?def.hint.ar:undefined}>
+            <input value={form.idNumber} onChange={e=>f("idNumber")(e.target.value)} placeholder={form.docType?def.placeholder:"اختر النوع أولاً"}
+              inputMode={form.docType&&def.numeric?"numeric":"text"} maxLength={form.docType?def.maxLength:15}
+              className="ui-input" dir="ltr" style={{textAlign:"end"}} aria-invalid={bad("idNumber")} autoComplete="off"/>
+          </Field>
         </div>
-      </motion.div>
-    </motion.div>
+        <div>
+          <Field label="انتهاء الوثيقة" error={err("docExpiry")}>
+            <ArabicDatePicker value={form.docExpiry??""} onChange={v=>f("docExpiry")(v||undefined)} invalid={bad("docExpiry")} placeholder="يوم/شهر/سنة"/>
+          </Field>
+        </div>
+        <div>
+          <Field label={<>الجنسية{req}</>} error={err("nationality")}>
+            <NationalitySelect value={form.nationality} onChange={f("nationality")} subInTrigger={false} invalid={bad("nationality")}/>
+          </Field>
+        </div>
+        <div>
+          <Field label={<>تاريخ الميلاد{req}</>} error={err("birthDate")}>
+            <ArabicDatePicker value={form.birthDate} onChange={f("birthDate")} invalid={bad("birthDate")} placeholder="يوم/شهر/سنة"/>
+          </Field>
+        </div>
+        <div>
+          <span className="ui-label">الجنس{req}</span>
+          <Segmented label="الجنس" value={form.gender} onChange={g=>f("gender")(g)}
+            options={[{value:"male",label:"ذكر"},{value:"female",label:"أنثى"}]}/>
+        </div>
+        {/* جوالان لا واحد: «ليس كل معتمر لديه جوال مستقل؛ فرّق بين جوال
+            المستفيد وجوال مسؤول الحجز». */}
+        <div>
+          <Field label="جوال المستفيد" error={err("phone")}>
+            <input value={form.phone} onChange={e=>f("phone")(e.target.value)} placeholder="05xxxxxxxx — إن وُجد" inputMode="tel"
+              className="ui-input" dir="ltr" style={{textAlign:"end"}} aria-invalid={bad("phone")} autoComplete="off"/>
+          </Field>
+        </div>
+        <div>
+          <Field label="جوال مسؤول الحجز" error={err("contactPhone")}>
+            <input value={form.contactPhone??""} onChange={e=>f("contactPhone")(e.target.value)} placeholder="إن اختلف عن جوال المستفيد" inputMode="tel"
+              className="ui-input" dir="ltr" style={{textAlign:"end"}} aria-invalid={bad("contactPhone")} autoComplete="off"/>
+          </Field>
+        </div>
+        <Note tone="neutral" className="sm:col-span-2">
+          صورة الوثيقة: تُفعَّل مع دلو التخزين الخاص (روابط موقّتة، حفظ حتى انتهاء الرحلة + ٩٠ يوماً). صورة جوازٍ في الدلو العام أسوأ من غيابها.
+        </Note>
+        {tried&&invalid&&(
+          <Note tone="danger" icon={<AlertCircle size={15}/>} className="sm:col-span-2">
+            أكمل الحقول المعلَّمة — {missing} {missing===1?"حقل ناقص":"حقول ناقصة"}
+          </Note>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -211,64 +212,63 @@ function BenModal({ben,onSave,onClose}:{ben:Partial<Beneficiary>;onSave:(b:Parti
 function LinkPreviewModal({plan,bens,bookings,onConfirm,onClose}:{plan:LinkPlan;bens:Beneficiary[];bookings:Booking[];onConfirm:()=>void;onClose:()=>void}) {
   const benById=new Map(bens.map(b=>[b.id,b]));
   const bkById=new Map(bookings.map(b=>[b.id,b]));
+  const rowStyle=(i:number):CSSProperties=>({borderTop:i?`1px solid ${B.border}`:"none"});
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
-      <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
-        role="dialog" aria-modal="true" aria-label="معاينة الربط"
-        className="w-full rounded-2xl overflow-hidden my-6" style={{maxWidth:620,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="px-6 pt-6 pb-4">
-          <h3 className="text-base font-bold" style={{color:B.black,margin:0}}>ما سيحدث عند الربط</h3>
-          <p className="text-xs mt-1" style={{color:B.muted,margin:0}}>
-            المطابقة برقم الوثيقة ثم الجوال — لا بالاسم. {plan.bookings} طلب سيصل إلى ملف.
-          </p>
-        </div>
-        <div className="px-6 pb-4 flex flex-col gap-4" style={{maxHeight:"56vh",overflowY:"auto"}}>
-          {plan.create.length>0&&(
-            <div>
-              <div className="text-xs font-bold mb-2" style={{color:"#1E7A44"}}>ملفات جديدة ({plan.create.length})</div>
-              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-                {plan.create.map((c,i)=>(
-                  <div key={c.id} className="flex items-center gap-3 px-3.5 py-2.5 text-xs" style={{borderTop:i?`1px solid ${B.border}`:"none"}}>
-                    <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{c.name}</span>
-                    <span style={{color:B.muted,direction:"ltr",fontFamily:"var(--font-app)"}}>{formatPhone(c.phone)}</span>
-                    <span style={{color:B.muted}}>{c.idNumber?`${docLabel(c.docType)||"وثيقة"} ${c.idNumber}`:"بلا وثيقة"}</span>
-                    <span className="px-2 py-0.5 rounded-full font-bold" style={{background:"#E3F3E8",color:"#1E7A44"}}>{c.bookingIds.length} طلب</span>
-                  </div>
-                ))}
-              </div>
+    <Modal open onClose={onClose} width={560}
+      title="ما سيحدث عند الربط"
+      sub={<>المطابقة برقم الوثيقة ثم الجوال — لا بالاسم. {plan.bookings} طلب سيصل إلى ملف.</>}
+      icon={<ModalIcon tone="gold"><Link2 size={19}/></ModalIcon>}
+      footer={<>
+        <Button variant="primary" onClick={onConfirm}>تنفيذ الربط</Button>
+        <Button variant="secondary" onClick={onClose}>تراجع</Button>
+      </>}>
+      <div className="flex flex-col gap-5">
+        {plan.create.length>0&&(
+          <section>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="ts-section-title">ملفات جديدة</h3>
+              <Badge tone="success">{plan.create.length}</Badge>
             </div>
-          )}
-          {plan.attach.length>0&&(
-            <div>
-              <div className="text-xs font-bold mb-2" style={{color:"#1E52C7"}}>ربطٌ بملفات قائمة ({plan.attach.length})</div>
-              <div className="rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-                {plan.attach.map((a,i)=>{ const b=benById.get(a.id); return (
-                  <div key={a.id} className="px-3.5 py-2.5 text-xs" style={{borderTop:i?`1px solid ${B.border}`:"none"}}>
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{b?.name??a.id}</span>
-                      <span style={{color:B.muted,direction:"ltr",fontFamily:"var(--font-app)"}}>{b?formatPhone(b.phone):""}</span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {a.add.map(id=>{ const bk=bkById.get(id); return (
-                        <span key={id} className="px-2 py-0.5 rounded-md" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)"}}>
-                          {id}{bk?` · ${bk.createdAt?.slice(0,10)}`:""}
-                        </span>
-                      );})}
+            <div className="ui-card ui-card--flat overflow-hidden">
+              {plan.create.map((c,i)=>(
+                <div key={c.id} className="flex items-center gap-3 px-4 py-3" style={rowStyle(i)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate" style={{color:B.black}}>{c.name}</div>
+                    <div className="text-xs mt-0.5" style={{color:B.muted}}>
+                      <bdi dir="ltr">{formatPhone(c.phone)}</bdi> · {c.idNumber?<>{docLabel(c.docType)||"وثيقة"} <bdi dir="ltr">{c.idNumber}</bdi></>:"بلا وثيقة"}
                     </div>
                   </div>
-                );})}
-              </div>
+                  <Badge tone="neutral">{c.bookingIds.length} طلب</Badge>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-        <div className="flex gap-3 px-6 py-5" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={onConfirm} className="flex-1 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>تنفيذ الربط</button>
-          <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>تراجع</button>
-        </div>
-      </motion.div>
-    </motion.div>
+          </section>
+        )}
+        {plan.attach.length>0&&(
+          <section>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="ts-section-title">ربطٌ بملفات قائمة</h3>
+              <Badge tone="info">{plan.attach.length}</Badge>
+            </div>
+            <div className="ui-card ui-card--flat overflow-hidden">
+              {plan.attach.map((a,i)=>{ const b=benById.get(a.id); return (
+                <div key={a.id} className="px-4 py-3" style={rowStyle(i)}>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{b?.name??a.id}</span>
+                    <bdi dir="ltr" className="text-xs" style={{color:B.muted}}>{b?formatPhone(b.phone):""}</bdi>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {a.add.map(id=>{ const bk=bkById.get(id); return (
+                      <Badge key={id} tone="neutral"><bdi dir="ltr">{id}</bdi>{bk?` · ${fmtDateShort(bk.createdAt)}`:""}</Badge>
+                    );})}
+                  </div>
+                </div>
+              );})}
+            </div>
+          </section>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -280,6 +280,7 @@ const CMP_FIELDS:{k:keyof Beneficiary;l:string}[]=[
   {k:"name",l:"الاسم"},{k:"phone",l:"الجوال"},{k:"contactPhone",l:"جوال المسؤول"},{k:"idNumber",l:"رقم الوثيقة"},
   {k:"docType",l:"نوع الوثيقة"},{k:"nationality",l:"الجنسية"},{k:"birthDate",l:"الميلاد"},{k:"gender",l:"الجنس"},{k:"notes",l:"ملاحظات"},
 ];
+const CMP_LTR:ReadonlySet<keyof Beneficiary>=new Set<keyof Beneficiary>(["phone","contactPhone","idNumber"]);
 function DuplicatesModal({pairs,countOf,onMerge,onClose}:{pairs:DupPair[];countOf:(b:Beneficiary)=>number;onMerge:(keep:Beneficiary,drop:Beneficiary)=>Promise<void>;onClose:()=>void}) {
   const [idx,setIdx]=useState(0);
   const [busy,setBusy]=useState(false);
@@ -290,50 +291,51 @@ function DuplicatesModal({pairs,countOf,onMerge,onClose}:{pairs:DupPair[];countO
     if(k==="docType") return docLabel(v as string)||"—";
     if(k==="gender") return v==="female"?"أنثى":"ذكر";
     if(k==="phone"||k==="contactPhone") return v?formatPhone(String(v)):"—";
+    if(k==="birthDate") return v?fmtDate(String(v)):"—";
     return v?String(v):"—";
   };
   const merge=async(keep:Beneficiary,drop:Beneficiary)=>{ setBusy(true); await onMerge(keep,drop); setBusy(false); if(idx>=pairs.length-1) onClose(); };
+  const last=idx>=pairs.length-1;
+  const cell=(k:keyof Beneficiary,v:string,diff:boolean)=>(
+    <td style={diff&&v!=="—"?{background:TONE.warn.bg,fontWeight:600}:undefined}>
+      {CMP_LTR.has(k)&&v!=="—"?<bdi dir="ltr">{v}</bdi>:v}
+    </td>
+  );
+  /* الزرّان متماثلان فلا ذهبيّ بينهما: أيُّ الملفَّين يبقى قرارُ المدير،
+     ولا يُرجَّح له أحدهما بلون. */
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
-      <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
-        role="dialog" aria-modal="true" aria-label="تكرار محتمل"
-        className="w-full rounded-2xl overflow-hidden my-6" style={{maxWidth:680,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="px-6 pt-6 pb-3 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold" style={{color:B.black,margin:0}}>تكرار محتمل {idx+1} من {pairs.length}</h3>
-            <p className="text-xs mt-1" style={{color:B.muted,margin:0}}>
-              تطابق {pair.reason==="doc"?"رقم الوثيقة":"الجوال"}. الدمج يُبقي ملفاً وينقل إليه حجوزات الآخر ويُكمل حقوله الفارغة، ويؤرشف الآخر بسببٍ يسمّي الباقي.
-            </p>
-          </div>
-          <button aria-label="إغلاق" onClick={onClose} className="p-1 cursor-pointer" style={{background:"none",border:"none",color:B.muted}}><X size={16}/></button>
+    <Modal open onClose={onClose} width={760}
+      title={`تكرار محتمل ${idx+1} من ${pairs.length}`}
+      sub={<>تطابق {pair.reason==="doc"?"رقم الوثيقة":"الجوال"}. الدمج يُبقي ملفاً وينقل إليه حجوزات الآخر ويُكمل حقوله الفارغة، ويؤرشف الآخر بسببٍ يسمّي الباقي.</>}
+      icon={<ModalIcon tone="warn"><CopyIcon size={19}/></ModalIcon>}
+      footer={
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
+          <Button variant="dark" disabled={busy} onClick={()=>merge(pair.a,pair.b)}>أبقِ {pair.a.id} وادمج الآخر فيه</Button>
+          <Button variant="dark" disabled={busy} onClick={()=>merge(pair.b,pair.a)}>أبقِ {pair.b.id} وادمج الآخر فيه</Button>
+          <Button variant="secondary" disabled={busy} className="sm:ms-auto" onClick={()=>last?onClose():setIdx(i=>i+1)}>{last?"إغلاق":"ليسا الشخص نفسه — التالي"}</Button>
         </div>
-        <div className="px-6 pb-4 overflow-x-auto">
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{background:B.cream,color:"#7a7168",fontSize:12}}>
-              <th style={{padding:"9px 12px",textAlign:"right"}}>الحقل</th>
-              <th style={{padding:"9px 12px",textAlign:"right"}}>{pair.a.id} · {countOf(pair.a)} طلب</th>
-              <th style={{padding:"9px 12px",textAlign:"right"}}>{pair.b.id} · {countOf(pair.b)} طلب</th>
+      }>
+      <div className="ui-table-wrap" style={{boxShadow:"none"}}>
+        <div className="ui-table-scroll">
+          <table className="ui-table" style={{minWidth:460}}>
+            <thead><tr>
+              <th>الحقل</th>
+              <th><bdi dir="ltr">{pair.a.id}</bdi> · {countOf(pair.a)} طلب</th>
+              <th><bdi dir="ltr">{pair.b.id}</bdi> · {countOf(pair.b)} طلب</th>
             </tr></thead>
             <tbody>
               {CMP_FIELDS.map(({k,l})=>{ const va=show(pair.a,k), vb=show(pair.b,k); const diff=va!==vb; return (
-                <tr key={k} style={{borderTop:`1px solid ${B.border}`}}>
-                  <td style={{padding:"9px 12px",color:B.muted,fontSize:12}}>{l}</td>
-                  <td style={{padding:"9px 12px",color:B.black,fontWeight:diff?700:400,background:diff&&va!=="—"?"#FBF3D6":"transparent"}}>{va}</td>
-                  <td style={{padding:"9px 12px",color:B.black,fontWeight:diff?700:400,background:diff&&vb!=="—"?"#FBF3D6":"transparent"}}>{vb}</td>
+                <tr key={k}>
+                  <td className="nowrap" style={{color:B.muted,fontSize:13}}>{l}</td>
+                  {cell(k,va,diff)}
+                  {cell(k,vb,diff)}
                 </tr>
               );})}
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap gap-3 px-6 py-5" style={{borderTop:`1px solid ${B.border}`}}>
-          <button disabled={busy} onClick={()=>merge(pair.a,pair.b)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.a.id} وادمج الآخر فيه</button>
-          <button disabled={busy} onClick={()=>merge(pair.b,pair.a)} className="flex-1 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.6:1}}>أبقِ {pair.b.id} وادمج الآخر فيه</button>
-          <button disabled={busy} onClick={()=>idx<pairs.length-1?setIdx(i=>i+1):onClose()} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>{idx<pairs.length-1?"ليسا الشخص نفسه — التالي":"إغلاق"}</button>
-        </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </Modal>
   );
 }
 
@@ -359,63 +361,59 @@ function PrivateNeeds({benId}:{benId:string}) {
     setSaved({m:mobility,h:health}); toast.success("حُفظت الاحتياجات الخاصة"); }
   if(!isSupabaseEnabled||state==="forbidden") return null;
   return (
-    <div className="rounded-2xl p-5 mb-5" style={{background:"#fff",border:"1px solid #EBD9A0"}}>
-      <div className="font-bold mb-1 flex items-center gap-2" style={{color:B.black,fontSize:15}}><ShieldAlert size={15} style={{color:"#8A6A08"}}/>احتياجات خاصة <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{background:"#FBF3D6",color:"#8A6A08"}}>يراها المدير وحده</span></div>
-      <div className="text-xs mb-3" style={{color:B.muted}}>ما تحتاجه الرحلة تشغيلياً فقط — كرسي متحرك، مرافق، دواء لازم. لا تشخيصات.</div>
-      {state==="unsupported"?(
-        <div className="text-xs" style={{color:"#B4530C"}}>يُفعَّل بعد تشغيل ترحيل 20260914 على قاعدة البيانات.</div>
-      ):(
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><Field label="احتياجات الحركة"><textarea value={mobility} onChange={e=>setMobility(e.target.value)} rows={2} placeholder="كرسي متحرك · يحتاج مرافقاً · مقعد قريب من الباب" disabled={state==="loading"}
-              className="w-full rounded-xl border px-3.5 py-2.5 text-sm resize-none focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit",color:B.black}}/></Field></div>
-            <div><Field label="الحالة الصحية اللازمة للرحلة"><textarea value={health} onChange={e=>setHealth(e.target.value)} rows={2} placeholder="سكّري يحتاج تبريد الدواء · حساسية غذائية" disabled={state==="loading"}
-              className="w-full rounded-xl border px-3.5 py-2.5 text-sm resize-none focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit",color:B.black}}/></Field></div>
-          </div>
-          <div className="flex justify-end mt-3">
-            <button onClick={save} disabled={!dirty||busy} className="px-5 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:dirty?B.gold:B.fill,color:dirty?B.black:B.muted,border:"none"}}>{busy?"جارٍ الحفظ…":dirty?"حفظ":"محفوظ"}</button>
-          </div>
-        </>
-      )}
-    </div>
+    <section className="ui-card mt-4">
+      <div className="ui-card-head">
+        <h3 className="ui-card-title flex items-center gap-2"><ShieldAlert size={16} aria-hidden style={{color:TONE.warn.fg}}/>احتياجات خاصة</h3>
+        <Badge tone="warn">يراها المدير وحده</Badge>
+      </div>
+      <div className="p-5">
+        <p className="ui-card-sub" style={{margin:"0 0 16px"}}>ما تحتاجه الرحلة تشغيلياً فقط — كرسي متحرك، مرافق، دواء لازم. لا تشخيصات.</p>
+        {state==="unsupported"?(
+          <Note tone="warn">يُفعَّل بعد تشغيل ترحيل 20260914 على قاعدة البيانات.</Note>
+        ):(
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Field label="احتياجات الحركة"><Textarea value={mobility} onChange={e=>setMobility(e.target.value)} rows={2} placeholder="كرسي متحرك · يحتاج مرافقاً · مقعد قريب من الباب" disabled={state==="loading"}
+                style={{resize:"none"}}/></Field></div>
+              <div><Field label="الحالة الصحية اللازمة للرحلة"><Textarea value={health} onChange={e=>setHealth(e.target.value)} rows={2} placeholder="سكّري يحتاج تبريد الدواء · حساسية غذائية" disabled={state==="loading"}
+                style={{resize:"none"}}/></Field></div>
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button size="sm" variant={dirty?"dark":"secondary"} onClick={save} disabled={!dirty} loading={busy}>{busy?"جارٍ الحفظ…":dirty?"حفظ":"محفوظ"}</Button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
+/* إشعارٌ يُقرأ ولا يُحرَّر — لا مسوّدة فيه تُفقد، فيُغلق بـEscape وبالنقر خارجه. */
 function CancellationModal({booking,onClose}:{booking:Booking;onClose:()=>void}) {
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.65)"}}>
-      <div className="w-full max-w-md my-6 rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(21,76,72,.45)"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-          <div className="flex items-center justify-between">
-            <div>
-              <div style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#fff"}}>إشعار إلغاء</div>
-              <div className="text-xs mt-1" style={{color:"#9DBAB6"}}>رقم الطلب: <span style={{fontFamily:"var(--font-app)"}}>{booking.id}</span></div>
-            </div>
-            <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer" style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.15)",color:"#CDE7E4"}}><X size={14}/></button>
-          </div>
+    <Modal open onClose={onClose} width={440} dismissible
+      title="إشعار إلغاء"
+      sub={<>رقم الطلب: <bdi dir="ltr">{booking.id}</bdi></>}
+      icon={<ModalIcon tone="danger"><Ban size={19}/></ModalIcon>}>
+      <div className="flex flex-col gap-4">
+        <div className="ts-kv">
+          <span className="ts-kv-k">العميل</span>
+          <span className="ts-kv-v" style={{fontSize:15}}>{booking.clientName}</span>
+          <span style={{fontSize:13,color:B.muted}}><bdi dir="ltr">{booking.clientPhone}</bdi></span>
         </div>
-        <div className="px-6 py-5 flex flex-col gap-4">
-          <div>
-            <div className="text-xs font-extrabold mb-1" style={{color:B.primary}}>العميل</div>
-            <div className="font-extrabold text-base" style={{color:"#000"}}>{booking.clientName}</div>
-            <div className="text-sm font-mono" style={{color:B.muted,direction:"ltr"}}>{booking.clientPhone}</div>
-          </div>
-          <div className="rounded-xl px-4 py-3 text-sm font-bold flex items-center gap-2" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>
-            <X size={14}/>تم إلغاء هذا الطلب.
-          </div>
-          <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-            <span className="font-bold text-sm" style={{color:"#000"}}>المبلغ المسترد</span>
-            <span style={{fontFamily:"var(--font-app)",fontSize:18,fontWeight:800,color:"#000"}}>{sar(booking.total)}</span>
-          </div>
-          <div className="text-center text-xs font-bold pt-2" style={{color:B.text2,borderTop:`1px solid ${B.border}`}}><OrgLine/></div>
+        <Note tone="danger" icon={<Ban size={15}/>}>تم إلغاء هذا الطلب.</Note>
+        <div className="flex items-center justify-between gap-3 rounded-xl px-4 py-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+          <span className="text-sm" style={{color:B.text2}}>المبلغ المسترد</span>
+          <span style={{fontSize:17,fontWeight:700,color:B.black}}>{sar(booking.total)}</span>
         </div>
+        <div className="text-center text-xs pt-3" style={{color:B.muted,borderTop:`1px solid ${B.border}`,lineHeight:1.7}}><OrgLine/></div>
       </div>
-    </motion.div>
+    </Modal>
   );
 }
+
+type GenderFilter = "all"|"male"|"female";
+type SortKey = "name"|"count"|"rating";
 
 export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMenuOpen?:()=>void}) {
   /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
@@ -436,8 +434,12 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
   const [search,setSearch]=useState("");
   /* التصفية على القيمة الساكنة لا على كل ضغطة مفتاح. */
   const query = useDebounced(search);
-  const [genderFilter,setGenderFilter]=useState<"all"|"male"|"female">("all");
-  const [detailId,setDetailId]=useState<string|null>(null);
+  const [genderFilter,setGenderFilter]=useState<GenderFilter>("all");
+  /* يمكن أن يأتي الموظف من تفاصيل طلبٍ برابط مباشر إلى الملف. نفتح الملف
+     نفسه، لا ننسخ طلبه أو مستنداته إلى صفحة أخرى. */
+  const [searchParams,setSearchParams]=useSearchParams();
+  const requestedDetailId=searchParams.get("beneficiary");
+  const [detailId,setDetailId]=useState<string|null>(()=>requestedDetailId);
   const [showModal,setShowModal]=useState(false);
   const [editTarget,setEditTarget]=useState<Beneficiary|null>(null);
   const [invoiceView,setInvoiceView]=useState<Payment|null>(null);
@@ -464,15 +466,51 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
 
   const detail = detailId ? bens.find(b=>b.id===detailId) : null;
 
+  useEffect(()=>{
+    if(requestedDetailId && bens.some(b=>b.id===requestedDetailId)) setDetailId(requestedDetailId);
+  },[requestedDetailId,bens]);
+  const openDetail=(id:string)=>{
+    setDetailId(id);
+    const next=new URLSearchParams(searchParams);
+    next.set("beneficiary",id);
+    setSearchParams(next);
+  };
+  const closeDetail=()=>{
+    setDetailId(null);
+    const next=new URLSearchParams(searchParams);
+    next.delete("beneficiary");
+    setSearchParams(next,{replace:true});
+  };
+
+  /* ── ربط الحجوزات بالملفّات ──
+     ما يُعرض مشتقٌّ لحظةَ العرض (bookingsOf): يصحّ فوراً بلا كتابة،
+     فيراه كل موظف لا المدير وحده. وما يُنشأ يُطلَب صراحةً بالزرّ. */
+  const plan = useMemo(()=>planLink(bens,bookings),[bens,bookings]);
+  const benBookings = useMemo(()=>{
+    const m=new Map<string,Booking[]>();
+    for(const b of bens) m.set(b.id,bookingsOf(b,bookings));
+    return m;
+  },[bens,bookings]);
+  const countOf=(b:Beneficiary)=>benBookings.get(b.id)?.length??b.bookingIds.length;
+
   const filtered = bens.filter(b=>
     (genderFilter==="all"||b.gender===genderFilter)&&
     (!query||(b.name+b.phone+b.idNumber).includes(query))
   );
 
+  /* الفرز على المسار المحلي وحده، وقبل القصّ على صفحات: فرزُ صفحةٍ واحدة
+     يُري «أعلى تقييم» في خمسةٍ وعشرين صفّاً لا في السجل. وحين يبحث الخادم
+     يأتي الترتيب منه، فتُرسم رؤوس الأعمدة بلا أزرار فرز (sortTh أدناه). */
+  const sorter = useSort<Beneficiary,SortKey>(filtered,{
+    name:b=>b.name,
+    count:b=>countOf(b),
+    rating:b=>b.rating,
+  });
+
   /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
-     للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
-     ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
-  const localPg = usePaged(filtered, `${query}|${genderFilter}`);
+     للصفحة الأولى عند تغيّر البحث أو المرشّح أو الفرز: من كان في الصفحة
+     الخامسة ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
+  const localPg = usePaged(sorter.rows, `${query}|${genderFilter}|${sorter.sort.key??""}|${sorter.sort.dir}`);
 
   /* البحث الحقيقي في القاعدة: الاسم والجوال ورقم الهوية ورقم الملفّ،
      مُرقَّماً هناك. التصفية المحلية أعلاه تبقى لوضع التجربة بلا قاعدة،
@@ -485,16 +523,6 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
   });
   const pg = srv.supported ? srv.paged : localPg;
 
-  /* ── ربط الحجوزات بالملفّات ──
-     ما يُعرض مشتقٌّ لحظةَ العرض (bookingsOf): يصحّ فوراً بلا كتابة،
-     فيراه كل موظف لا المدير وحده. وما يُنشأ يُطلَب صراحةً بالزرّ. */
-  const plan = useMemo(()=>planLink(bens,bookings),[bens,bookings]);
-  const benBookings = useMemo(()=>{
-    const m=new Map<string,Booking[]>();
-    for(const b of bens) m.set(b.id,bookingsOf(b,bookings));
-    return m;
-  },[bens,bookings]);
-  const countOf=(b:Beneficiary)=>benBookings.get(b.id)?.length??b.bookingIds.length;
   function runLink(){
     setLinkPreview(false);
     setBens(p=>applyLink(p,plan));
@@ -516,7 +544,7 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     } else {
       setBens(p=>p.map(b=>b.id===keep.id?mergeLocally(keep,drop):b).filter(b=>b.id!==drop.id));
     }
-    if(detailId===drop.id) setDetailId(keep.id);
+    if(detailId===drop.id) openDetail(keep.id);
     toast.success(`دُمج ${drop.id} في ${keep.id}`,{description:"انتقلت الحجوزات وأُكملت الحقول الفارغة، وأُرشف الملف الآخر."});
   }
   /* حجزٌ مؤكَّد بلا ملف على قاعدةٍ شُغِّل عليها الترحيل بعد تأكيده — تعبئةٌ بضغطة. */
@@ -550,141 +578,160 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
     /* على العدد المشتقّ: على bookingIds وحده كان الرقم يبقى ثابتاً على
        بيانات البذرة مهما بلغت الحجوزات الحقيقية. */
     repeat:bens.filter(b=>countOf(b)>1).length,
+    suspended:bens.filter(b=>b.suspended).length,
+    expired:bens.filter(b=>isExpired(b.docExpiry)).length,
   };
-
-  const gBtn=(v:"all"|"male"|"female",l:string)=>({
-    padding:"7px 18px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,
-    border:`1px solid ${genderFilter===v?B.gold:B.border}`,
-    background:genderFilter===v?B.gold:"#fff",
-    color:genderFilter===v?B.black:B.text2,
-  });
 
   /* سجلّ الملف مشتقٌّ لا مقروءٌ من bookingIds وحده: حجزٌ وصل من التطبيق
      ولم يُربط بعد كان يجعل ملفّ عميلٍ حجز ثلاث مرّات يقول «لا توجد
      طلبات مسجّلة». */
   const detailBookings = detail ? (benBookings.get(detail.id) ?? []) : [];
-  if(detail) return (
+  if(detail) {
+    const docBtn=(label:string,on:()=>void,icon:React.ReactNode)=>(
+      <Button size="sm" variant="secondary" icon={icon} onClick={on}>{label}</Button>
+    );
+    const docsOf=(bk:Booking)=>{
+      const cancelled=bk.status==="cancelled"||bk.status==="rejected";
+      const confirmed=bk.status==="confirmed";
+      return cancelled
+        ? docBtn("إشعار الإلغاء",()=>setCancelView(bk),<FileX size={14}/>)
+        : confirmed
+          ? <>{docBtn("الفاتورة",()=>openInvoice(bk),<CreditCard size={14}/>)}{docBtn("التذكرة",()=>openTicket(bk),<Ticket size={14}/>)}</>
+          : docBtn("الفاتورة المبدئية",()=>openInvoice(bk),<CreditCard size={14}/>);
+    };
+    const ltr=(v:string)=><bdi dir="ltr">{v}</bdi>;
+    const facts:{l:string;v:React.ReactNode}[]=[
+      {l:"نوع الوثيقة",v:docLabel(detail.docType||guessDocType(detail.idNumber))||"—"},
+      {l:numberLabelOf(detail.docType,detail.idNumber),v:detail.idNumber?ltr(detail.idNumber):"—"},
+      {l:"انتهاء الوثيقة",v:fmtDate(detail.docExpiry)},
+      {l:"الجنس",v:genderText(detail.gender)},
+      {l:"الجنسية",v:detail.nationality||"—"},
+      {l:"تاريخ الميلاد",v:fmtDate(detail.birthDate)},
+      {l:"جوال المستفيد",v:detail.phone?ltr(formatPhone(detail.phone)):"—"},
+      {l:"جوال مسؤول الحجز",v:detail.contactPhone?ltr(formatPhone(detail.contactPhone)):"نفسه"},
+    ];
+    return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="المستفيدون" crumb="ملف المستفيد" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="flex-1 px-4 md:px-8 pb-12 pt-5 max-w-4xl">
-        <button onClick={()=>setDetailId(null)} className="flex items-center gap-2 text-sm font-bold mb-5 cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>
-          <ArrowRight size={14}/>عودة للمستفيدين
+      <PageHeader title="المستفيدون" crumb="ملف المستفيد" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen} hideSearch/>
+      <main className="flex-1 px-4 md:px-8 pb-10 pt-1" style={{maxWidth:980}}>
+        <button type="button" onClick={closeDetail} className="ui-btn ui-btn--ghost ui-btn--sm mb-3" style={{marginInlineStart:-8}}>
+          <ArrowRight size={15}/>المستفيدون
         </button>
-        {/* Profile header */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-          <div className="rounded-2xl p-5 flex items-center gap-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 font-extrabold text-2xl"
-              style={{background:detail.gender==="female"?"#F1E9FA":"#12100F",color:detail.gender==="female"?"#7226BE":B.gold}}>
-              {detail.name[0]}
+
+        {/* رأس الملف: من هو، وما حاله، وما يُفعل به. */}
+        <section className="ui-card p-5">
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-4">
+            <Avatar name={detail.name} size={52}/>
+            <div className="flex-1 min-w-0" style={{minWidth:200}}>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 style={{margin:0,fontSize:20,fontWeight:700,color:B.black,lineHeight:1.4}}>{detail.name}</h2>
+                <BenTag b={detail} count={detailBookings.length}/>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mt-1" style={{fontSize:13,color:B.muted}}>
+                {detail.phone&&<><bdi dir="ltr">{detail.phone}</bdi><span aria-hidden>·</span></>}
+                <bdi dir="ltr">{detail.id}</bdi><span aria-hidden>·</span><span>{genderText(detail.gender)}</span>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-extrabold text-lg" style={{color:B.black,fontFamily:"var(--font-app)"}}>{detail.name}</div>
-              <div className="text-sm font-mono mt-0.5" style={{color:B.muted,direction:"ltr"}}>{detail.phone}</div>
-              <div className="mt-2"><BenTag b={detail} count={detailBookings.length}/></div>
-            </div>
-            <div className="flex flex-col gap-2 flex-shrink-0">
-              <button onClick={()=>openEdit(detail)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
-              <button onClick={()=>toggleSuspend(detail.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                style={{background:detail.suspended?"#E3F3E8":"#FBE6E6",color:detail.suspended?"#1E7A44":"#BE2626",border:`1px solid ${detail.suspended?"#C4E4CE":"#F3C9C9"}`}}>
-                {detail.suspended?"إلغاء الإيقاف":"إيقاف"}
-              </button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" icon={<Pencil size={14}/>} onClick={()=>openEdit(detail)}>تعديل</Button>
+              <Button variant={detail.suspended?"secondary":"danger-soft"} icon={detail.suspended?<CirclePlay size={15}/>:<CirclePause size={15}/>}
+                onClick={()=>toggleSuspend(detail.id)}>{detail.suspended?"إلغاء الإيقاف":"إيقاف"}</Button>
             </div>
           </div>
-          <div className="rounded-2xl p-5" style={{background:B.surface,border:`1px solid ${B.border}`}}>
-            <div className="grid grid-cols-3 gap-4">
-              {[{l:"الطلبات",v:detailBookings.length},{l:"مكتملة",v:detailBookings.filter(bk=>bk.status==="confirmed").length},{l:"الإنفاق",v:sar(detailBookings.filter(bk=>["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0))}].map(s=>(
-                <div key={s.l}>
-                  <div className="text-xs mb-1" style={{color:B.muted,fontWeight:600}}>{s.l}</div>
-                  <div className="font-extrabold text-xl leading-tight" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{s.v}</div>
-                </div>
-              ))}
-            </div>
+        </section>
+
+        {/* الإنفاق يأخذ السطر كاملاً على الجوال: مبلغٌ بوحدته لا يسعه ثلث الشاشة. */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+          <StatCard label="الطلبات" value={detailBookings.length} sub="في سجل الملف"/>
+          <StatCard label="مؤكدة" value={detailBookings.filter(bk=>bk.status==="confirmed").length} sub="صدرت فاتورتها وتذكرتها"/>
+          <div className="col-span-2 md:col-span-1 grid">
+            <StatCard label="الإنفاق" value={sar(detailBookings.filter(bk=>["paid","confirmed"].includes(bk.status)).reduce((a,bk)=>a+bk.total,0))} sub="من الطلبات المدفوعة والمؤكدة"/>
           </div>
         </div>
-        {/* Personal data */}
-        <div className="rounded-2xl p-5 mb-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="font-bold mb-4 flex items-center gap-2 flex-wrap" style={{color:B.black,fontSize:15}}>البيانات الشخصية
-            {detail.source==="auto"&&<span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{background:"#EAF1FE",color:"#1E52C7"}}>أُنشئ تلقائياً من الحجز {detail.createdFrom}</span>}
-            {isExpired(detail.docExpiry)&&<span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:"#FBE6E6",color:"#BE2626"}}>الوثيقة منتهية</span>}
+
+        <section className="ui-card mt-4">
+          <div className="ui-card-head flex-wrap">
+            <h3 className="ui-card-title">البيانات الشخصية</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              {detail.source==="auto"&&<Badge tone="info">أُنشئ تلقائياً من الحجز <bdi dir="ltr">{detail.createdFrom}</bdi></Badge>}
+              {isExpired(detail.docExpiry)&&<Badge tone="danger" dot>الوثيقة منتهية</Badge>}
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[
-              {l:"نوع الوثيقة",v:docLabel(detail.docType||guessDocType(detail.idNumber))||"—"},
-              {l:numberLabelOf(detail.docType,detail.idNumber),v:detail.idNumber||"—",mono:true},
-              {l:"انتهاء الوثيقة",v:detail.docExpiry||"—",mono:true},
-              {l:"الجنس",v:detail.gender==="male"?"ذكر":"أنثى"},
-              {l:"الجنسية",v:detail.nationality||"—"},
-              {l:"تاريخ الميلاد",v:detail.birthDate||"—",mono:true},
-              {l:"جوال المستفيد",v:detail.phone?formatPhone(detail.phone):"—",mono:true},
-              {l:"جوال مسؤول الحجز",v:detail.contactPhone?formatPhone(detail.contactPhone):"نفسه",mono:true},
-            ].map(f=>(
-              <div key={f.l}>
-                <div className="text-xs font-semibold mb-0.5" style={{color:B.muted}}>{f.l}</div>
-                <div className="font-bold text-sm" style={{color:B.black,fontFamily:f.mono?"var(--font-app)":"inherit",direction:f.mono?"ltr":undefined,textAlign:"right"}}>{f.v}</div>
+          <div className="p-5 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
+            {facts.map(f=>(
+              <div key={f.l} className="ts-kv">
+                <span className="ts-kv-k">{f.l}</span>
+                <span className="ts-kv-v">{f.v}</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+
         {isAdmin&&<PrivateNeeds benId={detail.id}/>}
-        {/* Rating + Notes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-          <div className="rounded-2xl p-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="font-bold mb-3" style={{color:B.black,fontSize:15}}>تقييم المستفيد</div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <section className="ui-card p-5">
+            <h3 className="ts-section-title" style={{marginBottom:10}}>تقييم المستفيد</h3>
             <StarRating value={detail.rating} onChange={r=>setRating(detail.id,r)}/>
-            <div className="text-xs mt-2" style={{color:B.muted}}>اضغط على النجوم لتحديث التقييم</div>
-          </div>
-          <div className="rounded-2xl p-5" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <div className="font-bold mb-3" style={{color:B.black,fontSize:15}}>ملاحظات داخلية</div>
-            <textarea value={detail.notes} onChange={e=>setNotes(detail.id,e.target.value)}
-              rows={3} placeholder="تفضيلاته، متطلبات خاصة..."
-              className="w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none resize-none"
-              style={{borderColor:B.border,fontFamily:"inherit",color:B.black}}/>
-          </div>
+            <div className="ui-hint">{detail.rating?`${detail.rating} من 5 — اضغط نجمةً لتحديث التقييم`:"لم يُقيَّم بعد — اضغط نجمةً للتقييم"}</div>
+          </section>
+          <section className="ui-card p-5 md:col-span-2">
+            <label htmlFor="ben-notes" className="ts-section-title block" style={{marginBottom:12}}>ملاحظات داخلية</label>
+            <Textarea id="ben-notes" value={detail.notes} onChange={e=>setNotes(detail.id,e.target.value)}
+              rows={3} placeholder="تفضيلاته، متطلبات خاصة..." style={{resize:"none"}}/>
+          </section>
         </div>
-        {/* Booking history */}
-        <div className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="px-5 py-4 font-bold" style={{color:B.black,borderBottom:`1px solid ${B.border}`}}>سجل الطلبات ({detailBookings.length})</div>
-          <div className="tbl-scroll">
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
-              <thead>
-                <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                  {["رقم الطلب","التاريخ","المبلغ","الحالة","المستندات"].map(h=>(
-                    <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"11px 16px",fontWeight:700}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {detailBookings.map(bk=>{
-                  const docBtn=(label:string,on:()=>void,icon:any)=>{const Icon=icon;return (
-                    <button onClick={on} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                      style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Icon size={12}/>{label}</button>
-                  );};
-                  const cancelled=bk.status==="cancelled"||bk.status==="rejected";
-                  const confirmed=bk.status==="confirmed";
-                  return (
-                  <tr key={bk.id} style={{borderTop:`1px solid ${B.border}`}}>
-                    <td style={{padding:"13px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.black,fontSize:13}}>{bk.id}</td>
-                    <td style={{padding:"13px 16px",color:B.text3}}>{bk.createdAt}</td>
-                    <td style={{padding:"13px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{sar(bk.total)}</td>
-                    <td style={{padding:"13px 16px"}}><StatusBadge status={bk.status} entity="booking"/></td>
-                    <td style={{padding:"10px 16px"}}>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {cancelled
-                          ? docBtn("إشعار الإلغاء",()=>setCancelView(bk),X)
-                          : confirmed
-                            ? <>{docBtn("الفاتورة",()=>openInvoice(bk),CreditCard)}{docBtn("التذكرة",()=>openTicket(bk),Ticket)}</>
-                            : docBtn("الفاتورة المبدئية",()=>openInvoice(bk),CreditCard)}
-                      </div>
-                    </td>
+
+        <section className="ui-card mt-4 overflow-hidden">
+          <div className="ui-card-head">
+            <h3 className="ui-card-title">سجل الطلبات</h3>
+            <span className="ts-count">{detailBookings.length} طلب</span>
+          </div>
+          {detailBookings.length===0 ? (
+            <EmptyState compact icon={<BookOpen size={22}/>} title="لا توجد طلبات مسجّلة" note="طلبات هذا المستفيد تظهر هنا فور وصولها، مطابَقةً بجواله أو مربوطةً بملفه."/>
+          ) : <>
+            <div className="hidden md:block ui-table-scroll">
+              <table className="ui-table">
+                <thead>
+                  <tr>
+                    <th>رقم الطلب</th>
+                    <th>التاريخ</th>
+                    <th>المبلغ</th>
+                    <th>الحالة</th>
+                    <th>المستندات</th>
                   </tr>
-                  );
-                })}
-                {detailBookings.length===0&&<tr><td colSpan={5} style={{padding:"32px 16px",textAlign:"center",color:B.muted}}>لا توجد طلبات مسجّلة</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </motion.div>
+                </thead>
+                <tbody>
+                  {detailBookings.map(bk=>(
+                    <tr key={bk.id}>
+                      <td className="nowrap"><span className="cell-main num">{bk.id}</span></td>
+                      <td className="nowrap" style={{color:B.text2}}>{fmtDate(bk.createdAt)}</td>
+                      <td className="nowrap cell-main">{sar(bk.total)}</td>
+                      <td><StatusBadge status={bk.status} entity="booking"/></td>
+                      <td><div className="flex items-center gap-1.5 flex-wrap">{docsOf(bk)}</div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* على الجوال: الطلب بطاقةُ سطرين وتحتها مستنداته — لا جدولٌ يُمرَّر أفقياً. */}
+            <div className="md:hidden">
+              {detailBookings.map((bk,i)=>(
+                <div key={bk.id} className="p-4" style={{borderTop:i?`1px solid ${B.border}`:"none"}}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm" style={{color:B.black}}><bdi dir="ltr">{bk.id}</bdi></div>
+                      <div className="text-xs mt-0.5" style={{color:B.muted}}>{fmtDate(bk.createdAt)} · {sar(bk.total)}</div>
+                    </div>
+                    <StatusBadge status={bk.status} entity="booking"/>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-3">{docsOf(bk)}</div>
+                </div>
+              ))}
+            </div>
+          </>}
+        </section>
+      </main>
       <AnimatePresence>
         {showModal&&<BenModal ben={editTarget||{}} onSave={saveBen} onClose={()=>{setShowModal(false);setEditTarget(null);}}/>}
         {invoiceView&&<InvoiceModal pay={invoiceView} onClose={()=>setInvoiceView(null)}/>}
@@ -692,148 +739,182 @@ export function BeneficiariesPage({bookings,onMenuOpen}:{bookings:Booking[];onMe
         {cancelView&&<CancellationModal booking={cancelView} onClose={()=>setCancelView(null)}/>}
       </AnimatePresence>
     </div>
+    );
+  }
+
+  /* عدّ الذكور والإناث صار على الشريحتين، فلا تكرّره بطاقتان فوقهما. */
+  const genderChips:ChipOption<GenderFilter>[]=[
+    {value:"all",label:"الكل",count:stats.total},
+    {value:"male",label:"ذكور",count:stats.male},
+    {value:"female",label:"إناث",count:stats.female},
+  ];
+  const narrowed=genderFilter!=="all"||!!query;
+  const filteredOut=bens.length>0;
+  const sortTh=(k:SortKey,label:string,style?:CSSProperties)=>srv.supported
+    ? <th style={style}>{label}</th>
+    : <SortTh k={k} sorter={sorter} style={style}>{label}</SortTh>;
+  const docTypeOf=(b:Beneficiary)=>b.docType||guessDocType(b.idNumber);
+  const addButton=(short=true)=>(
+    <Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{openForm(null);}}>
+      {short?<><span className="hidden sm:inline">إضافة مستفيد</span><span className="sm:hidden">إضافة</span></>:"إضافة مستفيد"}
+    </Button>
   );
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="المستفيدون" crumb="إدارة المستفيدين" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      {/* Stats */}
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
+      {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+      <PageHeader title="المستفيدون" crumb="إدارة المستفيدين" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        actions={mayWrite&&addButton()}/>
+      <div className="px-4 md:px-8 pt-1">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="إجمالي المستفيدين" value={stats.total} sub="في السجل" accent/>
-          <StatCard label="ذكور" value={stats.male} sub="معتمر"/>
-          <StatCard label="إناث" value={stats.female} sub="معتمرة"/>
+          <StatCard label="إجمالي المستفيدين" value={stats.total} sub="في السجل" accent onClick={()=>setGenderFilter("all")}/>
           <StatCard label="حجوزات متكررة" value={stats.repeat} sub="أكثر من رحلة"/>
+          <StatCard label="موقوفون" value={stats.suspended} sub="ملفات موقوفة"/>
+          <StatCard label="وثائق منتهية" value={stats.expired} alert sub={stats.expired?"لا تصلح للسفر قبل تجديدها":"لا وثيقة منتهية"}/>
         </div>
-        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
-          <div className="flex gap-2">
-            <button style={gBtn("all","الكل")} onClick={()=>setGenderFilter("all")}>الكل</button>
-            <button style={gBtn("male","ذكور")} onClick={()=>setGenderFilter("male")}>ذكور</button>
-            <button style={gBtn("female","إناث")} onClick={()=>setGenderFilter("female")}>إناث</button>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm" style={{color:B.muted}}>{srv.searching?"جارِ البحث…":`${pg.total} مستفيد`}</span>
-            {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
-            {mayWrite && (
-            <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
-              <Plus size={14}/>إضافة مستفيد
-            </button>
+        {(!planIsEmpty(plan)||dups.length>0)&&(
+          <div className="flex flex-col gap-2 mt-4">
+            {/* طلبات وصلت بلا ملف مستفيد. شريطٌ يُقال لا عمل صامت: إنشاء
+                ملفات في القاعدة قرارٌ، ولغير المدير يردّه حرس الكتابة. */}
+            {!planIsEmpty(plan)&&(
+              <Note tone="warn" icon={<Link2 size={16} style={{marginTop:8}}/>}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2" style={{minHeight:32}}>
+                  <div className="flex-1" style={{minWidth:200}}>
+                    <b style={{fontWeight:600}}>{plan.bookings} طلب</b>
+                    {" بلا ربط بملف مستفيد"}
+                    {plan.create.length>0&&<> — منها <b style={{fontWeight:600}}>{plan.create.length}</b> تحتاج ملفاً جديداً</>}
+                  </div>
+                  {mayWrite
+                    ? <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={()=>setLinkPreview(true)}>معاينة الربط</Button>
+                        {isSupabaseEnabled&&<Button size="sm" variant="ghost" onClick={autoLink} title="يُنشئ الملفات في القاعدة من بطاقات المعتمرين (ترحيل 20260914)">إنشاء تلقائي من الحجوزات المؤكَّدة</Button>}
+                      </div>
+                    : <span className="text-xs">الربط لمدير النظام</span>}
+                </div>
+              </Note>
+            )}
+            {/* تكرارٌ محتمل — بالجوال أو الوثيقة. يُعرض ولا يُدمج من تلقائه. */}
+            {dups.length>0&&(
+              <Note tone="warn" icon={<CopyIcon size={16} style={{marginTop:8}}/>}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2" style={{minHeight:32}}>
+                  <div className="flex-1" style={{minWidth:200}}>
+                    <b style={{fontWeight:600}}>{dups.length}</b> {dups.length===1?"تكرار محتمل":"تكرارات محتملة"} — ملفّان بنفس {dups.some(d=>d.reason==="doc")?"رقم الوثيقة":"الجوال"}
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={()=>setDupOpen(true)}>{mayWrite?"مقارنة ودمج":"عرض المقارنة"}</Button>
+                </div>
+              </Note>
             )}
           </div>
+        )}
+        <div className="ts-toolbar">
+          <FilterChips label="الجنس" options={genderChips} value={genderFilter} onChange={v=>setGenderFilter(v)}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">
+            {srv.searching?"جارٍ البحث…":narrowed?`${pg.total} من ${bens.length}`:`${pg.total} مستفيد`}
+          </span>
         </div>
-        {/* طلبات وصلت بلا ملف مستفيد. شريطٌ يُقال لا عمل صامت: إنشاء
-            ملفات في القاعدة قرارٌ، ولغير المدير يردّه حرس الكتابة. */}
-        {!planIsEmpty(plan)&&(
-          <div className="flex flex-wrap items-center gap-3 mt-4 px-4 py-3 rounded-xl"
-            style={{background:"#FBF3D6",border:"1px solid #E8D9A8"}}>
-            <Link2 size={16} style={{color:"#8A6A08",flexShrink:0}}/>
-            <div className="flex-1 min-w-0 text-sm" style={{color:"#6b5306"}}>
-              <span className="font-bold">{plan.bookings} طلب</span>
-              {" بلا ربط بملف مستفيد"}
-              {plan.create.length>0&&<> — منها <span className="font-bold">{plan.create.length}</span> تحتاج ملفاً جديداً</>}
-            </div>
-            {mayWrite
-              ? <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={()=>setLinkPreview(true)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.gold,color:B.black,border:"none"}}>معاينة الربط</button>
-                  {isSupabaseEnabled&&<button onClick={autoLink} title="يُنشئ الملفات في القاعدة من بطاقات المعتمرين (ترحيل 20260914)" className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>إنشاء تلقائي من الحجوزات المؤكَّدة</button>}
-                </div>
-              : <span className="text-xs flex-shrink-0" style={{color:"#8A6A08"}}>الربط لمدير النظام</span>}
-          </div>
-        )}
-        {/* تكرارٌ محتمل — بالجوال أو الوثيقة. يُعرض ولا يُدمج من تلقائه. */}
-        {dups.length>0&&(
-          <div className="flex flex-wrap items-center gap-3 mt-3 px-4 py-3 rounded-xl" style={{background:"#FBE6E6",border:"1px solid #F3C9C9"}}>
-            <CopyIcon size={16} style={{color:"#BE2626",flexShrink:0}}/>
-            <div className="flex-1 min-w-0 text-sm" style={{color:"#8A2020"}}>
-              <span className="font-bold">{dups.length}</span> {dups.length===1?"تكرار محتمل":"تكرارات محتملة"} — ملفّان بنفس {dups.some(d=>d.reason==="doc")?"رقم الوثيقة":"الجوال"}
-            </div>
-            <button onClick={()=>setDupOpen(true)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0"
-              style={{background:"#fff",color:"#BE2626",border:"1px solid #F3C9C9"}}>{mayWrite?"مقارنة ودمج":"عرض المقارنة"}</button>
-          </div>
-        )}
-        <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
-      {/* Desktop table */}
-      <main className="flex-1 px-4 md:px-8 pb-12 pt-6">
-        <EntityGate entity="beneficiaries" label="المستفيدين" cols={8}>
-        <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="tbl-scroll tbl-wide">
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+      <main className="flex-1 px-4 md:px-8 pb-8">
+        <EntityGate entity="beneficiaries" label="المستفيدين" cols={7}>
+        {!srv.searching&&pg.total===0 ? (
+          <EmptyState
+            icon={filteredOut?<SearchX size={22}/>:<Users size={22}/>}
+            title={filteredOut?"لا مستفيدين يطابقون البحث":"لا مستفيدين بعد"}
+            note={filteredOut?"جرّب اسماً أو جوالاً أو رقم وثيقةٍ آخر، أو أزل المرشّح.":"تُنشأ الملفات من الحجوزات المؤكَّدة، ويمكنك إضافة مستفيدٍ يدوياً."}
+            action={filteredOut
+              ? <Button variant="secondary" onClick={()=>{setSearch("");setGenderFilter("all");}}>إزالة المرشّحات</Button>
+              : mayWrite?addButton(false):undefined}/>
+        ) : <>
+        {/* Desktop table */}
+        <div className="hidden md:block ui-table-wrap" style={{opacity:srv.searching?0.55:1,transition:"opacity .15s"}}>
+          <div className="ui-table-scroll">
+          <table className="ui-table" style={{minWidth:860}}>
             <thead>
-              <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                {["المستفيد","الجوال","الجنس","رقم الهوية","الطلبات","التقييم","التصنيف","إجراء"].map(h=>(
-                  <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
-                ))}
+              <tr>
+                {/* الجوال صار سطراً ثانياً تحت الاسم، ونوع الوثيقة تحت رقمها:
+                    المعلومة باقية، والجدول يتّسع للاسم كاملاً بلا انكسار. */}
+                {sortTh("name","المستفيد")}
+                <th>الوثيقة</th>
+                <th>الجنس</th>
+                {sortTh("count","الطلبات",{textAlign:"center"})}
+                {sortTh("rating","التقييم")}
+                <th>التصنيف</th>
+                <th className="col-action"><span className="sr-only">إجراءات</span></th>
               </tr>
             </thead>
             <tbody>
-              {pg.rows.map((b,i)=>(
-                <tr key={b.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                  <td style={{padding:"14px 16px"}}>
+              {pg.rows.map(b=>{
+                const dt=docTypeOf(b), expired=isExpired(b.docExpiry);
+                return (
+                <tr key={b.id} className="is-clickable" tabIndex={0} aria-label={`فتح ملف ${b.name}`}
+                  onClick={()=>openDetail(b.id)}
+                  onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) openDetail(b.id); }}>
+                  <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
-                        style={{background:b.gender==="female"?"#F1E9FA":"#12100F",color:b.gender==="female"?"#7226BE":B.gold}}>
-                        {b.name[0]}
+                      <Avatar name={b.name}/>
+                      <div className="min-w-0">
+                        <div className="cell-main nowrap">{b.name}</div>
+                        <div className="cell-sub num">{b.phone||"—"}</div>
                       </div>
-                      <span className="font-bold" style={{color:B.black}}>{b.name}</span>
                     </div>
                   </td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{b.phone}</td>
-                  <td style={{padding:"14px 16px",color:B.text3}}>{b.gender==="male"?"ذكر":"أنثى"}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.muted,fontSize:13}}>
-                    <div style={{direction:"ltr",textAlign:"right"}}>{b.idNumber||"—"}</div>
-                    {(b.docType||guessDocType(b.idNumber))&&<div className="text-xs" style={{fontFamily:"inherit",color:isExpired(b.docExpiry)?"#BE2626":B.muted}}>{docLabel(b.docType||guessDocType(b.idNumber))}{isExpired(b.docExpiry)?" · منتهية":""}</div>}
+                  <td className="nowrap">
+                    <div className="num" style={{display:"block",textAlign:"right",color:B.text3}}>{b.idNumber||"—"}</div>
+                    {dt&&<div className="cell-sub" style={expired?{color:"var(--k-danger)",fontWeight:600}:undefined}>{docLabel(dt)}{expired?" · منتهية":""}</div>}
                   </td>
-                  <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{countOf(b)}</td>
-                  <td style={{padding:"14px 16px"}}>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map(n=><span key={n} style={{color:n<=b.rating?B.gold:"#D8D0C4",fontSize:16}}>★</span>)}
-                    </div>
-                  </td>
-                  <td style={{padding:"14px 16px"}}><BenTag b={b} count={countOf(b)}/></td>
-                  <td className="col-action" style={{padding:"14px 16px"}}>
-                    <div className="flex gap-2">
-                      <button onClick={()=>setDetailId(b.id)} className="px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>الملف</button>
-                      <button onClick={()=>openEdit(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
+                  <td className="nowrap" style={{color:B.text2}}>{genderText(b.gender)}</td>
+                  <td className="cell-main" style={{textAlign:"center"}}>{countOf(b)}</td>
+                  <td><Stars value={b.rating}/></td>
+                  <td><BenTag b={b} count={countOf(b)}/></td>
+                  <td className="col-action" onClick={e=>e.stopPropagation()}>
+                    <div className="row-actions">
+                      <IconButton size="sm" label={`تعديل ${b.name}`} onClick={()=>openEdit(b)}><Pencil size={15}/></IconButton>
+                      <IconButton size="sm" label={`فتح ملف ${b.name}`} onClick={()=>openDetail(b.id)}><ChevronLeft size={16}/></IconButton>
                     </div>
                   </td>
                 </tr>
-              ))}
-              {!srv.searching&&pg.total===0&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا يوجد مستفيدون مطابقون</td></tr>}
+                );
+              })}
             </tbody>
           </table>
           </div>
         </div>
-        {/* Mobile cards */}
-        <div className="md:hidden flex flex-col gap-3">
-          {pg.rows.map(b=>(
-            <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
-              className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0"
-                  style={{background:b.gender==="female"?"#F1E9FA":"#12100F",color:b.gender==="female"?"#7226BE":B.gold}}>
-                  {b.name[0]}
-                </div>
+        {/* Mobile cards — فيها كل ما في صفّ المكتب: الوثيقة والجنس وعدد الطلبات والفعلان. */}
+        <div className="md:hidden flex flex-col gap-2.5" style={{opacity:srv.searching?0.55:1}}>
+          {pg.rows.map(b=>{
+            const dt=docTypeOf(b), expired=isExpired(b.docExpiry);
+            return (
+            <div key={b.id} role="button" tabIndex={0} aria-label={`فتح ملف ${b.name}`} onClick={()=>openDetail(b.id)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) openDetail(b.id); }}
+              className="ui-card ui-card--hover p-4" style={{cursor:"pointer"}}>
+              <div className="flex items-center gap-3">
+                <Avatar name={b.name} size={40}/>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm" style={{color:B.black}}>{b.name}</div>
-                  <div className="text-xs font-mono" style={{color:B.muted}}>{b.phone}</div>
+                  <div className="font-bold truncate" style={{color:B.black,fontSize:15}}>{b.name}</div>
+                  <div className="text-xs mt-0.5" style={{color:B.muted}}><bdi dir="ltr">{b.phone||"—"}</bdi></div>
                 </div>
                 <BenTag b={b} count={countOf(b)}/>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex gap-0.5">{[1,2,3,4,5].map(n=><span key={n} style={{color:n<=b.rating?B.gold:"#D8D0C4",fontSize:14}}>★</span>)}</div>
-                <div className="flex gap-2">
-                  <button onClick={()=>setDetailId(b.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>الملف</button>
-                  <button onClick={()=>openEdit(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
+              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap mt-3 text-xs" style={{color:B.muted}}>
+                <span>{genderText(b.gender)}</span>
+                <span aria-hidden>·</span>
+                <span style={expired?{color:"var(--k-danger)",fontWeight:600}:undefined}>
+                  {b.idNumber?<>{dt?`${docLabel(dt)} `:""}<bdi dir="ltr">{b.idNumber}</bdi></>:"بلا وثيقة"}{expired?" · منتهية":""}
+                </span>
+                <span aria-hidden>·</span>
+                <span>{countOf(b)} طلب</span>
+              </div>
+              <div className="flex items-center justify-between mt-3 pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+                <Stars value={b.rating}/>
+                <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
+                  <Button size="sm" variant="secondary" icon={<Pencil size={14}/>} onClick={()=>openEdit(b)}>تعديل</Button>
+                  <ChevronLeft size={18} style={{color:B.muted,marginInlineStart:4}} aria-hidden/>
                 </div>
               </div>
-            </motion.div>
-          ))}
-          {!srv.searching&&pg.total===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Users size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا يوجد مستفيدون مطابقون</p></div>}
+            </div>
+            );
+          })}
         </div>
+        </>}
         </EntityGate>
         <Pager p={pg} unit="مستفيد"/>
       </main>

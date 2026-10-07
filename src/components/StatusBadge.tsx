@@ -5,13 +5,12 @@
    وحده يعرف ما يوصف. */
 import { statusLabel, statusTone, type StatusEntity } from "@/lib/status";
 
-export function StatusBadge({ status, entity = "booking" }: { status: string; entity?: StatusEntity }) {
+export function StatusBadge({ status, entity = "booking", size = "md" }: { status: string; entity?: StatusEntity; size?: "sm" | "md" }) {
   const { bg, fg } = statusTone(status);
   const label = statusLabel(status, entity);
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap"
-      style={{ background: bg, color: fg }}>
-      <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: fg }} />
+    <span className={`ui-badge${size === "sm" ? " ui-badge--sm" : ""}`} style={{ background: bg, color: fg }}>
+      <span aria-hidden className="ui-badge-dot" />
       {label}
     </span>
   );

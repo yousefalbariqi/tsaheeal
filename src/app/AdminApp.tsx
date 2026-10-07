@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { confirmLeave, hasUnsaved } from "@/lib/useUnsavedGuard";
 import { Package, AlertTriangle, RotateCw, Lock } from "lucide-react";
 import { Toaster } from "sonner";
-import { B } from "@/lib/theme";
+import { B, ELEV } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { hideBootSplash } from "@/lib/bootSplash";
 import { Sidebar, NAV_ITEMS } from "@/components/Sidebar";
@@ -28,12 +28,13 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { SetPasswordPage } from "@/features/auth/SetPasswordPage";
 import { isSupabaseEnabled, isSeedDataEnabled } from "@/supabase/client";
 import { Spinner } from "@/components/Spinner";
+import { Button, ConfirmHost } from "@/components/ui";
 
 function ComingSoonPage({view}:{view:string}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5" style={{color:B.muted}}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primaryDeep,border:`1px solid ${B.border2}`}}>
-        <Package size={32} style={{color:B.gold,opacity:0.5}}/>
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:B.fill,color:B.muted}}>
+        <Package size={26}/>
       </div>
       <div className="text-center">
         <p className="font-bold mb-1" style={{color:B.text3}}>صفحة "{view}" قيد البناء</p>
@@ -49,15 +50,14 @@ function ComingSoonPage({view}:{view:string}) {
 function NoAccessPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-screen gap-5 px-6 text-center" style={{color:B.muted}}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{background:B.primaryDeep,border:`1px solid ${B.border2}`}}>
-        <Lock size={30} style={{color:B.gold,opacity:0.55}}/>
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:B.fill,color:B.muted}}>
+        <Lock size={26}/>
       </div>
       <div>
         <p className="font-bold mb-1" style={{color:B.text3}}>هذه الصفحة للمدير وحده</p>
         <p className="text-sm" style={{color:B.muted}}>راجع مدير النظام إن كنت تحتاج الوصول إليها.</p>
       </div>
-      {onMenuOpen&&<button onClick={onMenuOpen} className="md:hidden text-sm font-bold px-5 py-2 rounded-xl cursor-pointer"
-        style={{background:B.primaryDeep,color:B.gold,border:`1px solid ${B.border2}`}}>القائمة</button>}
+      {onMenuOpen&&<Button variant="dark" className="md:hidden" onClick={onMenuOpen}>القائمة</Button>}
     </div>
   );
 }
@@ -66,7 +66,7 @@ function NoAccessPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
    يُربط بعد. لا يُترك على شاشة الدخول (فهو داخل فعلاً) ولا يُدخل اللوحة. */
 function NotStaffScreen({onSignOut}:{onSignOut:()=>void}) {
   return (
-    <div dir="rtl" className="min-h-screen flex flex-col items-center justify-center gap-5 px-6 text-center"
+    <div dir="rtl" className="ts-admin min-h-screen flex flex-col items-center justify-center gap-5 px-6 text-center"
       style={{fontFamily:"var(--font-app)",background:B.bg}}>
       <TasaheelMark size={64}/>
       <div>
@@ -74,10 +74,8 @@ function NotStaffScreen({onSignOut}:{onSignOut:()=>void}) {
         <p className="text-sm" style={{color:B.muted}}>لوحة الإدارة متاحة لحسابات الموظفين فقط. إن كنت مستفيداً فتابع من الصفحة الرئيسية.</p>
       </div>
       <div className="flex items-center gap-2.5">
-        <a href="/" className="px-5 py-2.5 rounded-xl font-bold text-sm no-underline"
-          style={{background:B.gold,color:B.black}}>الصفحة الرئيسية</a>
-        <button onClick={onSignOut} className="px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-          style={{background:"#fff",border:`1px solid ${B.border}`,color:B.text3}}>تسجيل الخروج</button>
+        <a href="/" className="ui-btn ui-btn--primary">الصفحة الرئيسية</a>
+        <Button variant="secondary" onClick={onSignOut}>تسجيل الخروج</Button>
       </div>
     </div>
   );
@@ -89,7 +87,7 @@ function LoadErrorScreen({message,onRetry}:{message:string;onRetry:()=>void}) {
   const [busy,setBusy]=useState(false);
   const retry=async()=>{ setBusy(true); await onRetry(); setBusy(false); };
   return (
-    <div dir="rtl" className="min-h-screen flex flex-col items-center justify-center gap-5 px-6 text-center"
+    <div dir="rtl" className="ts-admin min-h-screen flex flex-col items-center justify-center gap-5 px-6 text-center"
       style={{fontFamily:"var(--font-app)",background:B.bg}}>
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:"#FBE6E6",border:"1px solid #F3C9C9"}}>
         <AlertTriangle size={28} style={{color:"#BE2626"}}/>
@@ -98,11 +96,7 @@ function LoadErrorScreen({message,onRetry}:{message:string;onRetry:()=>void}) {
         <p className="font-bold mb-1" style={{color:B.text3}}>تعذّر جلب بيانات اللوحة</p>
         <p className="text-sm" style={{color:B.muted}}>{message}</p>
       </div>
-      <button onClick={retry} disabled={busy}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-        style={{background:B.gold,color:B.black,border:"none",opacity:busy?0.7:1}}>
-        {busy?<Spinner size={14} color={B.black}/>:<RotateCw size={14}/>}إعادة المحاولة
-      </button>
+      <Button variant="primary" loading={busy} icon={<RotateCw size={15}/>} onClick={retry}>إعادة المحاولة</Button>
     </div>
   );
 }
@@ -113,9 +107,9 @@ function SavingPill() {
   const syncing = useStore(s=>s.syncing);
   if (!syncing) return null;
   return (
-    <div className="fixed bottom-5 left-5 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold"
-      style={{background:"#F8F1E4",color:B.black,border:`1px solid ${B.border}`,boxShadow:"0 4px 16px rgba(140,100,35,.14)"}}>
-      <Spinner size={12} color={B.black} track="rgba(140,100,35,.18)"/>جارٍ الحفظ…
+    <div role="status" className="fixed bottom-5 z-50 flex items-center gap-2 px-3.5 rounded-full"
+      style={{insetInlineEnd:20,height:36,background:B.ink,color:B.onInk,fontSize:13,fontWeight:500,boxShadow:ELEV[3]}}>
+      <Spinner size={12} color={B.gold2} track="rgba(244,239,228,.2)"/>جارٍ الحفظ…
     </div>
   );
 }
@@ -143,9 +137,9 @@ export default function AdminApp() {
   },[activeView]);
   /* التنقّل لا يهدم المسودات المركّبة. يبقى التأكيد لحالات أخرى تستخدم
      الحارس، مثل مغادرة الصفحة أو العمليات التي لا تحفظ مسودتها محلياً. */
-  const nav=(v:string)=>{
+  const nav=async(v:string)=>{
     if(v===activeView) return;
-    if(!confirmLeave(hasUnsaved())) return;
+    if(!(await confirmLeave(hasUnsaved()))) return;
     navigate(`/admin/${v}`);
   };
   /* /admin وحده يُحوَّل إلى مساره الكامل — استبدالاً حتى لا يعيده زر الرجوع. */
@@ -211,7 +205,7 @@ export default function AdminApp() {
   }
 
   return (
-    <div dir="rtl" lang="ar" className="flex min-h-screen"
+    <div dir="rtl" lang="ar" className="ts-admin flex min-h-screen"
       style={{fontFamily:"var(--font-app)",background:B.bg}}>
       <Sidebar active={activeView} onNav={nav} mobileOpen={mobileSidebar} onMobileClose={()=>setMobileSidebar(false)}
         currentUser={currentUser} onSignOut={signOut} items={navItems}/>
@@ -237,8 +231,9 @@ export default function AdminApp() {
         </>}
       </div>
       <SavingPill/>
+      <ConfirmHost/>
       <Toaster position="bottom-center" dir="rtl" richColors closeButton
-        toastOptions={{style:{fontFamily:"var(--font-app)"}}}/>
+        toastOptions={{style:{fontFamily:"var(--font-app)",borderRadius:14,fontSize:14,boxShadow:ELEV[3]}}}/>
     </div>
   );
 }

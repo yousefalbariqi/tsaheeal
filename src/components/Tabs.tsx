@@ -44,27 +44,26 @@ export function TabStrip<T extends string>({
 
   return (
     <div ref={ref} role="tablist" aria-orientation="horizontal" onKeyDown={onKey}
-      className={`flex gap-1 overflow-x-auto ${dark ? "" : "pt-3"}`} style={{ scrollbarWidth: "none" }}>
+      className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: "none", boxShadow: `inset 0 -1px 0 ${dark ? B.inkLine : B.border}` }}>
       {tabs.map(t => {
         const on = t.id === active;
         return (
           <button key={t.id} role="tab" id={`${idPrefix}-tab-${t.id}`}
             aria-selected={on} aria-controls={`${idPrefix}-panel-${t.id}`}
             tabIndex={on ? 0 : -1} onClick={() => onChange(t.id)}
-            className={`relative px-4 py-2.5 font-bold cursor-pointer transition-all whitespace-nowrap ${dark ? "text-xs rounded-t-lg" : "text-sm rounded-t-xl"}`}
+            className="relative px-4 cursor-pointer whitespace-nowrap"
             style={{
-              background: "transparent",
-              color: on ? B.black : dark ? "#CFC5B6" : B.text2,
-              border: "none",
+              height: 44, background: "transparent", border: "none",
+              fontSize: 14, fontWeight: on ? 600 : 500,
+              color: on ? (dark ? B.onInk : B.black) : dark ? B.onInk2 : B.muted,
             }}>
-            {/* الكتلة الذهبية هي المحدِّد، لا خطٌّ تحته: التبويب المحدّد
-                يُملأ بالذهبي القوي ونصُّه أسود (٥٫٧:١). وهي نفسها العنصر
-                المتحرّك — layoutId يُزلقها بين التبويبات، فحلّت محلّ الخطّ
-                الذي كان يتحرّك وحده فوق سطحٍ أبيض. */}
-            {on && <motion.span layoutId={`${idPrefix}-ink`} aria-hidden
-              className={`absolute inset-0 ${dark ? "rounded-t-lg" : "rounded-t-xl"}`}
-              style={{ background: B.gold }} />}
             <span className="relative">{t.label}</span>
+            {/* المحدِّد خيطٌ ذهبيّ تحت التبويب لا كتلةٌ تملؤه: التبويب موضعٌ
+                لا فعل، والكتلة الذهبية كانت تُقرأ زرّاً أساسياً ثانياً بجوار
+                «حفظ». وهو نفسه العنصر المتحرّك — layoutId يُزلقه بين التبويبات. */}
+            {on && <motion.span layoutId={`${idPrefix}-ink`} aria-hidden
+              className="absolute inset-x-3 bottom-0" transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              style={{ height: 2, borderRadius: 2, background: B.gold }} />}
           </button>
         );
       })}

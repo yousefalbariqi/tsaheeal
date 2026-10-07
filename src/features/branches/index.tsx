@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Plus, X, Building, MapPin, Phone, ExternalLink, CheckCircle2, AlertTriangle } from "lucide-react";
-import { B } from "@/lib/theme";
+import { AnimatePresence } from "motion/react";
+import { Plus, Building, MapPin, Phone, ExternalLink, CheckCircle2, AlertTriangle, Pencil, Archive, CirclePause, CirclePlay, SearchX } from "lucide-react";
+import { B, TONE } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { checkMapUrl, mapEmbedUrl, type MapUrlVerdict } from "@/lib/maps";
 import { phoneError, formatPhone } from "@/lib/phone";
 import type { Branch } from "@/types";
 import { StatCard } from "@/components/StatCard";
-import { Spinner } from "@/components/Spinner";
 import { PageHeader } from "@/components/PageHeader";
 import { DeleteDialog } from "@/components/DeleteDialog";
 import { AppSelect } from "@/components/AppSelect";
@@ -18,8 +17,10 @@ import { useRole } from "@/lib/useRole";
 import { toast } from "sonner";
 import { Field } from "@/components/Field";
 import { Pager, usePaged } from "@/components/Pager";
-import { EntityGate } from "@/components/States";
+import { EntityGate, EmptyState } from "@/components/States";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useConfirmDiscard } from "@/lib/useUnsavedGuard";
+import { Badge, Button, FilterChips, IconButton, Modal, Note, SortTh, useSort, type ChipOption } from "@/components/ui";
 
 const EMPTY: Omit<Branch,"id"> = { name:"", city:"", address:"", gmapUrl:"", phone:"", managerId:"", isActive:true };
 const NONE = "__none__";
@@ -37,12 +38,12 @@ function MapPreview({verdict,url}:{verdict:MapUrlVerdict;url:string}) {
   if(!verdict.ok) return null;              /* الخطأ يظهر في <Err/> لا مرّتين */
   const embed=mapEmbedUrl(url);
   return (
-    <div className="mt-2 rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
-      <div className="flex items-center gap-2 px-3 py-2" style={{background:"#F0FAF3",borderBottom:embed?`1px solid ${B.border}`:"none"}}>
-        <CheckCircle2 size={13} style={{color:"#1E7A44",flexShrink:0}}/>
-        <span className="text-xs font-bold" style={{color:"#1E7A44"}}>رابط خرائط صالح</span>
-        <a href={url} target="_blank" rel="noreferrer" className="mr-auto inline-flex items-center gap-1 text-xs font-bold" style={{color:B.primary}}>
-          <ExternalLink size={11}/>افتح في تبويب جديد
+    <div className="mt-2 overflow-hidden" style={{borderRadius:12,border:`1px solid ${B.border}`}}>
+      <div className="flex items-center gap-2 px-3 py-2" style={{background:TONE.success.bg,borderBottom:embed?`1px solid ${B.border}`:"none"}}>
+        <CheckCircle2 size={14} style={{color:TONE.success.fg,flexShrink:0}}/>
+        <span className="text-xs font-bold" style={{color:TONE.success.fg}}>رابط خرائط صالح</span>
+        <a href={url} target="_blank" rel="noreferrer" className="ui-btn ui-btn--link ms-auto" style={{fontSize:12,gap:4}}>
+          <ExternalLink size={12}/>افتح في تبويب جديد
         </a>
       </div>
       {embed
@@ -57,15 +58,15 @@ function MapPreview({verdict,url}:{verdict:MapUrlVerdict;url:string}) {
 
    المانع يُعرض بنصّه لا يُخفى الزرّ: زرٌّ غائب يجعل الموظف يظنّ أن
    الصلاحية ناقصة، ونصُّ المانع يقول له ما يفعله بدلاً منه. */
-function ArchiveBranchButton({branch,links,onArchive}:{branch:Branch;links:string[];onArchive:()=>void}) {
+function ArchiveBranchButton({branch,links,onArchive,outline}:{branch:Branch;links:string[];onArchive:()=>void;outline?:boolean}) {
   const blocked=links.length>0;
   return (
-    <button onClick={()=>{ if(blocked){ toast.error("لا يمكن أرشفة فرع مرتبط",{description:`${links.join(" · ")} — عطّله بدل أرشفته.`,duration:8000}); return; } onArchive(); }}
-      title={blocked?`مرتبط: ${links.join(" · ")}`:`أرشفة ${branch.name}`}
-      className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-      style={{background:blocked?B.fill:"#FBF3D6",color:blocked?B.muted:"#8A6A08",border:`1px solid ${blocked?B.border:"#E8D9A8"}`}}>
-      {blocked?"مرتبط":"أرشفة"}
-    </button>
+    <IconButton size="sm" variant={outline?"outline":"ghost"}
+      label={blocked?`لا يُؤرشَف — مرتبط: ${links.join(" · ")}`:`أرشفة ${branch.name}`}
+      style={blocked?{color:B.placeholder}:undefined}
+      onClick={()=>{ if(blocked){ toast.error("لا يمكن أرشفة فرع مرتبط",{description:`${links.join(" · ")} — عطّله بدل أرشفته.`,duration:8000}); return; } onArchive(); }}>
+      <Archive size={15}/>
+    </IconButton>
   );
 }
 
@@ -80,9 +81,6 @@ function BranchModal({branch,managers,onSave,onClose}:{
   const [busy,setBusy]=useState(false);
   const requestClose=useConfirmDiscard(form,onClose);
   const set=<K extends keyof typeof form>(k:K,v:(typeof form)[K])=>setForm(f=>({...f,[k]:v}));
-  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
-  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
-
   function validate(){
     const e:{[k:string]:string}={};
     if(!form.name.trim())    e.name="اسم الفرع مطلوب";
@@ -108,84 +106,68 @@ function BranchModal({branch,managers,onSave,onClose}:{
     setBusy(true);
     try { await onSave({...form,city:form.city.trim()}); } finally { setBusy(false); }
   }
-  const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
-  const req=<span style={{color:B.gold}}>*</span>;
+  const req=<span className="ui-req">*</span>;
   const mapCheck=checkMapUrl(form.gmapUrl);
 
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.55)"}}>
-      <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
-        className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
-          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>{branch.id?"تعديل فرع":"إضافة فرع جديد"}</h3>
-          <button onClick={requestClose} aria-label="إغلاق النافذة" title="إغلاق" className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
+    <Modal open onClose={requestClose} width={620}
+      title={branch.id?"تعديل فرع":"إضافة فرع جديد"}
+      footer={<>
+        <Button variant="primary" loading={busy} onClick={handleSave}>{busy?"جارٍ الحفظ…":"حفظ الفرع"}</Button>
+        <Button variant="secondary" disabled={busy} onClick={requestClose}>إلغاء</Button>
+      </>}>
+      <form className="grid grid-cols-1 sm:grid-cols-2 gap-4" onSubmit={e=>{e.preventDefault();void handleSave();}} noValidate>
+        <div className="sm:col-span-2">
+          <Field label={<>اسم الفرع{req}</>} error={errors.name}>
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="فرع الرياض — العليا" className="ui-input" aria-invalid={!!errors.name}/>
+          </Field>
         </div>
-        <div className="p-6 grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <Field label={<>اسم الفرع {req}</>}>
-              <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="فرع الرياض — العليا" className={inp} style={ist}/>
-            </Field>
-            <Err k="name"/>
-          </div>
-          <div>
-            <Field label={<>المدينة {req}</>}>
-              <input value={form.city} onChange={e=>set("city",e.target.value)} placeholder="مثال: الدمام" className={inp} style={ist}/>
-            </Field>
-            <Err k="city"/>
-          </div>
-          <div>
-            {/* «رقم جوال» ومثالٌ لهاتفٍ ثابت: الاسم كان يَعِد بما لا يقبله
-                الحقل ولا يحويه. الفرع يُتّصل به على ثابتٍ أو جوال، فالاسم
-                «رقم التواصل» — وهو ما يصف الحقل بصدق. */}
-            <Field label="رقم التواصل">
-              <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="+966 11 000 0000 أو 05x xxx xxxx" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
-            </Field>
-            <Err k="phone"/>
-          </div>
-          <div className="col-span-2">
-            <Field label={<>العنوان التفصيلي {req}</>}>
-              <input value={form.address} onChange={e=>set("address",e.target.value)} placeholder="طريق الملك فهد، حي العليا" className={inp} style={ist}/>
-            </Field>
-            <Err k="address"/>
-          </div>
-          <div className="col-span-2">
-            <Field label="رابط Google Maps">
-              <input value={form.gmapUrl} onChange={e=>set("gmapUrl",e.target.value)} placeholder="https://maps.google.com/…" className={inp}
-                style={{...ist,direction:"ltr",textAlign:"right",borderColor:mapCheck.reason?"#E1A3A3":B.border}}/>
-            </Field>
-            <MapPreview verdict={mapCheck} url={form.gmapUrl}/>
-          </div>
-          <div>
-            <Field label={<>المسؤول عن الفرع {form.isActive?req:null}</>}>
-              <AppSelect value={form.managerId||NONE} placeholder="اختر المسؤول"
-                onChange={v=>set("managerId",v===NONE?"":v)}
-                options={[{value:NONE,label:"بدون مسؤول"},...managers.map(m=>({value:m.id,label:m.name}))]}/>
-            </Field>
-            <Err k="managerId"/>
-          </div>
-          <div>
-            <Field label="الحالة">
-              <AppSelect value={form.isActive?"active":"inactive"}
-                onChange={v=>set("isActive",v==="active")}
-                options={[{value:"active",label:"نشط"},{value:"inactive",label:"غير نشط"}]}/>
-            </Field>
-          </div>
+        <div>
+          <Field label={<>المدينة{req}</>} error={errors.city}>
+            <input value={form.city} onChange={e=>set("city",e.target.value)} placeholder="مثال: الدمام" className="ui-input" aria-invalid={!!errors.city}/>
+          </Field>
         </div>
-        <div className="px-6 pb-6 flex gap-3">
-          <button onClick={handleSave} disabled={busy} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-extrabold text-sm cursor-pointer"
-            style={{background:busy?"#d6cfc6":B.gold,color:busy?"#a09688":B.black,border:"none",cursor:busy?"not-allowed":"pointer"}}>
-            {busy && <Spinner size={14} color={B.black}/>}
-            {busy?"جارٍ الحفظ…":"حفظ الفرع"}
-          </button>
-          <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
+        <div>
+          {/* «رقم جوال» ومثالٌ لهاتفٍ ثابت: الاسم كان يَعِد بما لا يقبله
+              الحقل ولا يحويه. الفرع يُتّصل به على ثابتٍ أو جوال، فالاسم
+              «رقم التواصل» — وهو ما يصف الحقل بصدق. */}
+          <Field label="رقم التواصل" error={errors.phone}>
+            <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="05x xxx xxxx" className="ui-input" dir="ltr" inputMode="tel" style={{textAlign:"right"}} aria-invalid={!!errors.phone}/>
+          </Field>
         </div>
-      </motion.div>
-    </motion.div>
+        <div className="sm:col-span-2">
+          <Field label={<>العنوان التفصيلي{req}</>} error={errors.address}>
+            <input value={form.address} onChange={e=>set("address",e.target.value)} placeholder="طريق الملك فهد، حي العليا" className="ui-input" aria-invalid={!!errors.address}/>
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="رابط Google Maps" error={errors.gmapUrl}>
+            <input value={form.gmapUrl} onChange={e=>set("gmapUrl",e.target.value)} placeholder="https://maps.google.com/…" className="ui-input" dir="ltr" inputMode="url"
+              style={{textAlign:"right"}} aria-invalid={!!mapCheck.reason||!!errors.gmapUrl}/>
+          </Field>
+          <MapPreview verdict={mapCheck} url={form.gmapUrl}/>
+        </div>
+        <div>
+          <Field label={<>المسؤول عن الفرع{form.isActive?req:null}</>} error={errors.managerId}>
+            <AppSelect value={form.managerId||NONE} placeholder="اختر المسؤول" invalid={!!errors.managerId}
+              onChange={v=>set("managerId",v===NONE?"":v)}
+              options={[{value:NONE,label:"بدون مسؤول"},...managers.map(m=>({value:m.id,label:m.name}))]}/>
+          </Field>
+        </div>
+        <div>
+          <Field label="الحالة">
+            <AppSelect value={form.isActive?"active":"inactive"}
+              onChange={v=>set("isActive",v==="active")}
+              options={[{value:"active",label:"نشط"},{value:"inactive",label:"غير نشط"}]}/>
+          </Field>
+        </div>
+        <button type="submit" hidden/>
+      </form>
+    </Modal>
   );
 }
+
+type StatusFilter = "all"|"active"|"inactive";
 
 export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   /* بوابة الكتابة — مرآة can_write_admin() في القاعدة. كل نقاط فتح
@@ -214,15 +196,25 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   const managers = useMemo(()=>users.map(u=>({id:u.id,name:u.name})),[users]);
   const managerName=(id:string)=>users.find(u=>u.id===id)?.name??"—";
 
+  const [statusFilter,setStatusFilter]=useState<StatusFilter>("all");
   const filtered = useMemo(()=>{
     const q=query.trim();
-    return branches.filter(b=> !q || b.name.includes(q) || b.city.includes(q) || b.address.includes(q) || b.phone.includes(q));
-  },[branches,query]);
+    return branches.filter(b=>
+      (statusFilter==="all"||(statusFilter==="active")===b.isActive) &&
+      (!q || b.name.includes(q) || b.city.includes(q) || b.address.includes(q) || b.phone.includes(q)));
+  },[branches,query,statusFilter]);
+  /* الفرز قبل القصّ على الصفحات. */
+  const sorter = useSort(filtered, useMemo(()=>({
+    name:(b:Branch)=>b.name,
+    city:(b:Branch)=>b.city,
+    manager:(b:Branch)=>b.managerId?(users.find(u=>u.id===b.managerId)?.name??""):null,
+    status:(b:Branch)=>b.isActive?0:1,
+  }),[users]));
 
   /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
      للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
      ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
-  const pg = usePaged(filtered, query);
+  const pg = usePaged(sorter.rows, `${query}|${statusFilter}`);
 
   /* الفروع النشطة بلا مسؤول: التحقّق يمنع الجديد، لكنّ القديم موجود
      أصلاً بلا مسؤول ولن يمرّ على النموذج ما لم يُفتح. الرقم هنا يجعله
@@ -263,116 +255,133 @@ export function BranchesPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   function toggleActive(b:Branch){ setBranches(prev=>prev.map(x=>x.id===b.id?{...x,isActive:!x.isActive}:x)); }
 
   const gmapCell=(url:string)=> url
-    ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold" style={{color:B.primary}}><MapPin size={12}/>خريطة</a>
+    ? <a href={url} target="_blank" rel="noreferrer" className="ui-btn ui-btn--link" style={{fontSize:13,gap:4}}><MapPin size={13}/>خريطة</a>
     : <span style={{color:B.muted}}>—</span>;
+  const statusChips:ChipOption<StatusFilter>[]=[
+    {value:"all",label:"الكل",count:stats.total},
+    {value:"active",label:"نشطة",count:stats.active},
+    {value:"inactive",label:"غير نشطة",count:stats.inactive},
+  ];
+  const filteredOut=filtered.length===0&&branches.length>0;
+  const iconTile=(size:number)=>(
+    <span aria-hidden className="flex items-center justify-center flex-shrink-0" style={{width:size,height:size,borderRadius:10,background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}><Building size={size*0.44}/></span>
+  );
+  const manager=(b:Branch)=> b.managerId
+    ? managerName(b.managerId)
+    : b.isActive
+      ? <Badge tone="warn" size="sm"><AlertTriangle size={11}/>بلا مسؤول</Badge>
+      : <span style={{color:B.muted}}>—</span>;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="الفروع" crumb="إدارة الفروع" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
+      <PageHeader title="الفروع" crumb="إدارة الفروع" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        /* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */
+        actions={mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>openForm(null)}>
+          <span className="hidden sm:inline">إضافة فرع</span><span className="sm:hidden">إضافة</span>
+        </Button>}/>
+      <div className="px-4 md:px-8 pt-1">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="إجمالي الفروع" value={stats.total} sub="في السجل" accent/>
-          <StatCard label="فروع نشطة" value={stats.active} sub="متاحة"/>
-          <StatCard label="غير نشطة" value={stats.inactive} sub="معطّلة"/>
-          <StatCard label="المدن" value={stats.cities} sub="مدينة"/>
+          <StatCard label="إجمالي الفروع" value={stats.total} sub="في السجل" accent onClick={()=>setStatusFilter("all")}/>
+          <StatCard label="فروع نشطة" value={stats.active} sub="تستقبل الطلبات" onClick={()=>setStatusFilter("active")}/>
+          <StatCard label="غير نشطة" value={stats.inactive} sub="معطّلة" onClick={()=>setStatusFilter("inactive")}/>
+          <StatCard label="المدن" value={stats.cities} sub="مدينة مغطّاة"/>
         </div>
         {unassigned.length>0&&(
-          <div className="flex items-center gap-2 mt-3 px-4 py-2.5 rounded-xl text-xs font-bold" style={{background:"#FBF3D6",border:"1px solid #F0E3AE",color:"#8A6A08"}}>
-            <AlertTriangle size={14} style={{flexShrink:0}}/>
-            <span><b>{unassigned.length}</b> {unassigned.length===1?"فرع نشط":"فروع نشطة"} بلا مسؤول — الطلبات الواردة إليها لا يتابعها أحد: {unassigned.map(b=>b.name).join(" · ")}</span>
-          </div>
+          <Note tone="warn" icon={<AlertTriangle size={15}/>} className="mt-3">
+            <b>{unassigned.length}</b> {unassigned.length===1?"فرع نشط":"فروع نشطة"} بلا مسؤول — الطلبات الواردة إليها لا يتابعها أحد: {unassigned.map(b=>b.name).join(" · ")}
+          </Note>
         )}
-        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
-          <span className="text-sm" style={{color:B.muted}}>{filtered.length} فرع</span>
-          {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
-          {mayWrite && (
-          <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
-            <Plus size={14}/>إضافة فرع جديد
-          </button>
-          )}
+        <div className="ts-toolbar">
+          <FilterChips label="حالة الفرع" options={statusChips} value={statusFilter} onChange={v=>setStatusFilter(v)}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">{filtered.length===branches.length?`${branches.length} فرع`:`${filtered.length} من ${branches.length}`}</span>
         </div>
-        <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
 
-      <main className="flex-1 px-4 md:px-8 pb-12 pt-6">
-        <EntityGate entity="branches" label="الفروع" cols={8}>
+      <main className="flex-1 px-4 md:px-8 pb-8">
+        <EntityGate entity="branches" label="الفروع" cols={6}>
+        {filtered.length===0 ? (
+          <EmptyState icon={filteredOut?<SearchX size={22}/>:<Building size={22}/>}
+            title={filteredOut?"لا فروع تطابق البحث":"لا فروع بعد"}
+            note={filteredOut?"جرّب اسماً أو مدينةً أخرى، أو أزل المرشّح.":"أضف أول فرع لتُسنَد إليه الرحلات والطلبات."}
+            action={filteredOut
+              ? <Button variant="secondary" onClick={()=>{setSearch("");setStatusFilter("all");}}>إزالة المرشّحات</Button>
+              : mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>openForm(null)}>إضافة فرع</Button>}/>
+        ) : <>
         {/* Desktop table */}
-        <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="tbl-scroll tbl-wide">
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+        <div className="hidden md:block ui-table-wrap">
+          <div className="ui-table-scroll">
+          <table className="ui-table" style={{minWidth:820}}>
             <thead>
-              <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                {["اسم الفرع","المدينة","العنوان","الخريطة","الجوال","المسؤول","الحالة","إجراءات"].map(h=>(
-                  <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
-                ))}
+              <tr>
+                <SortTh k="name" sorter={sorter}>الفرع</SortTh>
+                <SortTh k="city" sorter={sorter}>المدينة والعنوان</SortTh>
+                <th>التواصل</th>
+                <SortTh k="manager" sorter={sorter}>المسؤول</SortTh>
+                <SortTh k="status" sorter={sorter}>الحالة</SortTh>
+                <th className="col-action"><span className="sr-only">إجراءات</span></th>
               </tr>
             </thead>
             <tbody>
-              {pg.rows.map((b,i)=>(
-                <tr key={b.id} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                  <td style={{padding:"14px 16px"}}>
+              {pg.rows.map(b=>(
+                <tr key={b.id}>
+                  <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primaryDeep,color:B.gold}}><Building size={15}/></div>
-                      <span className="font-bold" style={{color:B.black}}>{b.name}</span>
+                      {iconTile(36)}
+                      <span className="cell-main nowrap">{b.name}</span>
                     </div>
                   </td>
-                  <td style={{padding:"14px 16px",color:B.text3}}>{b.city}</td>
-                  <td style={{padding:"14px 16px",color:B.text2,fontSize:13,maxWidth:220}}>{b.address}</td>
-                  <td style={{padding:"14px 16px"}}>{gmapCell(b.gmapUrl)}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13,direction:"ltr",textAlign:"right"}}>{b.phone?formatPhone(b.phone):"—"}</td>
-                  <td style={{padding:"14px 16px",color:B.text3}}>
-                    {b.managerId
-                      ? managerName(b.managerId)
-                      : b.isActive
-                        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08",border:"1px solid #F0E3AE"}}><AlertTriangle size={10}/>بلا مسؤول</span>
-                        : <span style={{color:B.muted}}>—</span>}
+                  <td style={{maxWidth:280}}>
+                    <div style={{color:B.text3}}>{b.city}</div>
+                    <div className="cell-sub truncate" title={b.address}>{b.address}</div>
                   </td>
-                  <td style={{padding:"14px 16px"}}>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"
-                      style={{background:b.isActive?"#E3F3E8":"#EEECEA",color:b.isActive?"#1E7A44":"#5C554E"}}>{b.isActive?"نشط":"غير نشط"}</span>
+                  <td className="nowrap">
+                    <div className="num" style={{color:B.text2,fontSize:13,textAlign:"start"}}>{b.phone?formatPhone(b.phone):"—"}</div>
+                    <div style={{marginTop:2}}>{gmapCell(b.gmapUrl)}</div>
                   </td>
-                  <td className="col-action" style={{padding:"14px 16px"}}>
-                    <div className="flex gap-2">
-                      <button onClick={()=>{openForm(b);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
-                      <button onClick={()=>toggleActive(b)} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:b.isActive?"#FBF3D6":"#E3F3E8",color:b.isActive?"#8A6A08":"#1E7A44",border:"none"}}>{b.isActive?"تعطيل":"تفعيل"}</button>
+                  <td className="nowrap" style={{color:B.text3}}>{manager(b)}</td>
+                  <td><StatusBadge status={b.isActive?"active":"inactive"} entity="branch"/></td>
+                  <td className="col-action">
+                    <div className="row-actions">
+                      <IconButton size="sm" label={`تعديل ${b.name}`} onClick={()=>openForm(b)}><Pencil size={15}/></IconButton>
+                      <IconButton size="sm" label={b.isActive?"تعطيل الفرع":"تفعيل الفرع"} onClick={()=>toggleActive(b)}>
+                        {b.isActive?<CirclePause size={15}/>:<CirclePlay size={15}/>}
+                      </IconButton>
                       <ArchiveBranchButton branch={b} links={branchLinks(b.id)} onArchive={()=>setDelId(b.id)}/>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filtered.length===0&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد فروع مطابقة</td></tr>}
             </tbody>
           </table>
           </div>
         </div>
-        {/* Mobile cards */}
-        <div className="md:hidden flex flex-col gap-3">
+        {/* Mobile cards — الأفعال نفسها التي في صفّ المكتب. */}
+        <div className="md:hidden flex flex-col gap-2.5">
           {pg.rows.map(b=>(
-            <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:B.primaryDeep,color:B.gold}}><Building size={16}/></div>
+            <div key={b.id} className="ui-card p-4">
+              <div className="flex items-center gap-3">
+                {iconTile(40)}
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm" style={{color:B.black}}>{b.name}</div>
+                  <div className="font-bold truncate" style={{color:B.black,fontSize:15}}>{b.name}</div>
                   <div className="text-xs" style={{color:B.muted}}>{b.city}</div>
                 </div>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold" style={{background:b.isActive?"#E3F3E8":"#EEECEA",color:b.isActive?"#1E7A44":"#5C554E"}}>{b.isActive?"نشط":"غير نشط"}</span>
+                <StatusBadge status={b.isActive?"active":"inactive"} entity="branch"/>
               </div>
-              <div className="text-xs mb-3" style={{color:B.text2}}>{b.address}</div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 text-xs" style={{color:B.text2}}>
-                  {b.phone&&<span className="inline-flex items-center gap-1" style={{direction:"ltr"}}><Phone size={12}/>{b.phone}</span>}
-                  {gmapCell(b.gmapUrl)}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={()=>{openForm(b);}} className="px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer" style={{background:"#fff",color:B.text2,border:`1px solid ${B.border}`}}>تعديل</button>
-                  <ArchiveBranchButton branch={b} links={branchLinks(b.id)} onArchive={()=>setDelId(b.id)}/>
-                </div>
+              <div className="text-sm mt-3" style={{color:B.text2}}>{b.address}</div>
+              <div className="flex items-center gap-3 flex-wrap mt-2 text-xs" style={{color:B.text2}}>
+                {b.phone&&<span className="inline-flex items-center gap-1" dir="ltr"><Phone size={12}/>{formatPhone(b.phone)}</span>}
+                {gmapCell(b.gmapUrl)}
+                <span className="inline-flex items-center gap-1">المسؤول: {manager(b)}</span>
               </div>
-            </motion.div>
+              <div className="flex items-center gap-2 mt-3 pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+                <Button size="sm" variant="secondary" icon={<Pencil size={14}/>} onClick={()=>openForm(b)}>تعديل</Button>
+                <Button size="sm" variant="secondary" onClick={()=>toggleActive(b)}>{b.isActive?"تعطيل":"تفعيل"}</Button>
+                <span className="ms-auto"><ArchiveBranchButton outline branch={b} links={branchLinks(b.id)} onArchive={()=>setDelId(b.id)}/></span>
+              </div>
+            </div>
           ))}
-          {filtered.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Building size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد فروع مطابقة</p></div>}
         </div>
+        </>}
         </EntityGate>
         <Pager p={pg} unit="فرع"/>
       </main>

@@ -1,94 +1,104 @@
 import { motion, AnimatePresence } from "motion/react";
 import {
   Building2, Building, LayoutDashboard, Package, Plane, Bus, BookOpen,
-  Users, CreditCard, Ticket, Settings, Wrench, LogOut, X, Sparkles, ClipboardList,
+  Users, Settings, LifeBuoy, LogOut, X, Sparkles, ClipboardList,
 } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, DUR, EASE } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
 
+/* البنود مجموعةً بما يفعله الموظف لا بترتيب بنائها:
+   «التشغيل» ما يُفتح كل يوم، «المنتجات» ما يُبنى مرّةً ويُراجَع، «النظام»
+   ما يخصّ المدير. كانت اثني عشر بنداً في عمودٍ واحد بلا فاصل، والطلبات —
+   أكثرها استعمالاً — ثامنةً بين الفنادق والدعم. */
 export const NAV_ITEMS = [
-  { view:"dashboard",     label:"الرئيسية",       Icon:LayoutDashboard },
-  { view:"packages",      label:"الباقات",         Icon:Package },
-  { view:"trips",         label:"الرحلات",         Icon:Plane },
-  { view:"manifests",     label:"الكشوفات",        Icon:ClipboardList },
-  { view:"branches",      label:"الفروع",          Icon:Building },
-  { view:"transport",     label:"المواصلات",       Icon:Bus },
-  { view:"hotels",        label:"الفنادق",         Icon:Building2 },
-  { view:"bookings",      label:"الطلبات",         Icon:BookOpen },
-  { view:"customRequests",label:"الطلبات المخصّصة", Icon:Sparkles },
-  { view:"beneficiaries", label:"المستفيدون",      Icon:Users },
-  { view:"payments",      label:"الفواتير",        Icon:CreditCard },
-  { view:"tickets",       label:"التذاكر",         Icon:Ticket },
-  { view:"users",         label:"المستخدمون",      Icon:Users },
-  { view:"support",       label:"الدعم الفني",     Icon:Wrench },
-  { view:"settings",      label:"الإعدادات",       Icon:Settings },
+  { view:"dashboard",     label:"الرئيسية",        Icon:LayoutDashboard, group:"التشغيل" },
+  { view:"bookings",      label:"الطلبات",          Icon:BookOpen,        group:"التشغيل" },
+  { view:"customRequests",label:"الطلبات المخصّصة",  Icon:Sparkles,        group:"التشغيل" },
+  { view:"trips",         label:"الرحلات",          Icon:Plane,           group:"التشغيل" },
+  { view:"manifests",     label:"الكشوفات",         Icon:ClipboardList,   group:"التشغيل" },
+  { view:"packages",      label:"الباقات",          Icon:Package,         group:"المنتجات" },
+  { view:"hotels",        label:"الفنادق",          Icon:Building2,       group:"المنتجات" },
+  { view:"transport",     label:"المواصلات",        Icon:Bus,             group:"المنتجات" },
+  { view:"branches",      label:"الفروع",           Icon:Building,        group:"المنتجات" },
+  /* المستفيد والفاتورة والتذكرة ليست وحدات عمل مستقلة:
+     الطلب هو المعاملة، وملف المستفيد/المستندات تُفتح من داخله. تبقى
+     مساراتها المباشرة لروابط الطباعة والتدقيق القديمة، لا للقائمة. */
+  { view:"users",         label:"المستخدمون",       Icon:Users,           group:"النظام" },
+  { view:"support",       label:"الدعم الفني",      Icon:LifeBuoy,        group:"النظام" },
+  { view:"settings",      label:"الإعدادات",        Icon:Settings,        group:"النظام" },
 ];
 
 /* items يُمرَّر من الخارج ليُصفَّى بالدور — القائمة نفسها لا تعرف
-   الصلاحيات، والافتراضي هو الكل كي تبقى قابلة للاستعمال بلا سياق. */
-export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSignOut,items=NAV_ITEMS}:{active:string;onNav:(v:string)=>void;mobileOpen?:boolean;onMobileClose?:()=>void;currentUser?:{name:string;role:string}|null;onSignOut?:()=>void;items?:typeof NAV_ITEMS}) {
+   الصلاحيات، والافتراضي هو الكل كي تبقى قابلة للاستعمال بلا سياق.
+   badges: عدٌّ بجانب البند (طلباتٌ تنتظر قراراً) — يُحسب في الجذر. */
+export function Sidebar({active,onNav,mobileOpen,onMobileClose,currentUser,onSignOut,items=NAV_ITEMS,badges}:{active:string;onNav:(v:string)=>void;mobileOpen?:boolean;onMobileClose?:()=>void;currentUser?:{name:string;role:string}|null;onSignOut?:()=>void;items?:typeof NAV_ITEMS;badges?:Record<string,number>}) {
   /* الافتراضي أدنى صلاحية لا أعلاها: currentUser فارغ يعني «لم نعرف بعد»،
      وترجمته إلى «مدير النظام» تجعل الواجهة تفشل مفتوحةً — تعرض للمجهول ما
      لا يعرضه إلا للمدير. واسم تجريبي ثابت هنا يظهر لمستخدم حقيقي. */
   const uName = currentUser?.name || "مستخدم";
   const uRole = currentUser?.role || "موظف";
   const uInitial = uName.trim().charAt(0) || "م";
-  const inner = (
-    <aside className="flex flex-col h-full flex-shrink-0"
-      style={{width:256,background:B.primaryDeep,borderLeft:`1px solid ${B.border2}`}}>
-      <div style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-      <div className="flex items-center gap-3 px-5 py-5">
-        <TasaheelMark size={48}/>
-        <div>
-          <div style={{fontFamily:"var(--font-app)",fontSize:15,fontWeight:800,color:"#fff",lineHeight:1.3}}>تساهيل العمرة</div>
-          <div style={{fontSize:10,color:B.gold,letterSpacing:1,marginTop:2}}>لوحة الإدارة</div>
+
+  const panel = (mobile:boolean) => (
+    <aside className="ts-side flex flex-col h-full flex-shrink-0" aria-label="القائمة الرئيسية"
+      style={{width:mobile?284:256,background:B.ink,color:B.onInk}}>
+      {/* حزام الكسوة — خيطٌ ذهبيّ واحد في أعلى السطح الأسود. */}
+      <div aria-hidden style={{height:2,background:`linear-gradient(90deg,transparent,${B.gold} 18%,${B.gold2} 50%,${B.gold} 82%,transparent)`}}/>
+      <div className="flex items-center gap-3 px-5 pt-5 pb-4">
+        <TasaheelMark size={40}/>
+        <div className="min-w-0 flex-1">
+          <div style={{fontSize:15,fontWeight:700,color:B.onInk,lineHeight:1.35}}>تساهيل العمرة</div>
+          <div style={{fontSize:11.5,color:B.onInk3,lineHeight:1.4}}>لوحة الإدارة</div>
         </div>
-        {onMobileClose&&<button onClick={onMobileClose} aria-label="إغلاق القائمة" title="إغلاق القائمة" className="mr-auto p-1.5 cursor-pointer rounded-lg" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>}
+        {mobile&&onMobileClose&&<button onClick={onMobileClose} aria-label="إغلاق القائمة" title="إغلاق القائمة" className="ui-iconbtn ui-iconbtn--on-ink"><X size={18}/></button>}
       </div>
-      <div className="px-5 pb-2">
-        <div style={{fontSize:10,color:"#6E938F",fontWeight:700,letterSpacing:2}}>القائمة الرئيسية</div>
-      </div>
-      <nav className="flex-1 overflow-y-auto px-3 flex flex-col gap-0.5 pb-4" style={{scrollbarWidth:"none"}}>
-        {items.map(({view,label,Icon})=>{
+      <nav className="flex-1 overflow-y-auto px-3 pb-4" style={{scrollbarWidth:"none"}}>
+        {items.map(({view,label,Icon,group},i)=>{
           const on=view===active;
+          const head=group&&group!==items[i-1]?.group;
+          const n=badges?.[view]??0;
           return (
-            <button key={view} onClick={()=>{onNav(view);onMobileClose?.();}}
-              className="relative flex items-center gap-3 w-full text-right px-4 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
-              style={{background:on?"rgba(192,134,44,0.14)":"transparent",border:on?"1px solid rgba(192,134,44,0.28)":"1px solid transparent",color:on?B.gold2:"#B4CFCB",fontWeight:on?700:500}}>
-              {on && <div className="absolute right-0 top-2 bottom-2 w-0.5 rounded-full" style={{background:B.gold}}/>}
-              <Icon size={15} style={{color:on?B.gold:"#9DBAB6",flexShrink:0}}/>
-              <span className="text-sm">{label}</span>
-            </button>
+            <div key={view}>
+              {head&&<div className="px-3" style={{fontSize:11,fontWeight:600,color:B.onInk3,marginTop:i===0?6:18,marginBottom:6}}>{group}</div>}
+              <button onClick={()=>{onNav(view);onMobileClose?.();}} aria-current={on?"page":undefined}
+                className={`ts-side-item${on?" is-on":""}`}>
+                <Icon size={17} strokeWidth={on?2:1.75} aria-hidden style={{flexShrink:0}}/>
+                <span className="flex-1 text-start truncate">{label}</span>
+                {n>0&&<span className="ts-side-badge" aria-label={`${n} بانتظار إجراء`}>{n>99?"99+":n}</span>}
+              </button>
+            </div>
           );
         })}
       </nav>
-      <div style={{height:1,background:B.border2,margin:"0 16px"}}/>
-      <div className="flex items-center gap-3 px-4 py-4">
-        <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
-          style={{background:`linear-gradient(135deg,${B.gold},${B.gold2})`,color:B.black}}>{uInitial}</div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold truncate" style={{color:"#e8e0d4"}}>{uName}</div>
-          <div className="text-xs" style={{color:"#86A8A4"}}>{uRole}</div>
+      <div className="px-3 pb-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{background:B.ink2,border:`1px solid ${B.inkLine}`}}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{background:B.gold,color:B.ink,fontSize:13,fontWeight:700}}>{uInitial}</div>
+          <div className="flex-1 min-w-0">
+            <div className="truncate" style={{fontSize:13,fontWeight:600,color:B.onInk,lineHeight:1.4}}>{uName}</div>
+            <div className="truncate" style={{fontSize:11.5,color:B.onInk3,lineHeight:1.4}}>{uRole}</div>
+          </div>
+          <button onClick={onSignOut} disabled={!onSignOut} aria-label="تسجيل الخروج" title="تسجيل الخروج" className="ui-iconbtn ui-iconbtn--sm ui-iconbtn--on-ink">
+            <LogOut size={15}/>
+          </button>
         </div>
-        <button onClick={onSignOut} aria-label="تسجيل الخروج" title="تسجيل الخروج" className="p-1.5 rounded-lg cursor-pointer" style={{background:"transparent",border:"none",color:onSignOut?"#B4CFCB":"#6E938F"}}>
-          <LogOut size={14}/>
-        </button>
       </div>
     </aside>
   );
   return (
     <>
       {/* Desktop sidebar */}
-      <div className="hidden md:flex h-screen sticky top-0">{inner}</div>
-      {/* Mobile overlay */}
+      <div className="hidden md:flex h-screen sticky top-0">{panel(false)}</div>
+      {/* Mobile overlay — درجٌ للتنقّل لا نموذج: النقر خارجه يُغلقه. */}
       <AnimatePresence>
         {mobileOpen&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:DUR.fast}}
             className="md:hidden fixed inset-0 z-50 flex"
-            style={{background:"rgba(14,12,11,0.7)"}}>
-            <motion.div initial={{x:200}} animate={{x:0}} exit={{x:200}} transition={{type:"spring",stiffness:320,damping:32}}
+            style={{background:"rgba(20,17,14,.56)",backdropFilter:"blur(2px)"}}
+            onClick={onMobileClose}>
+            <motion.div initial={{x:"100%"}} animate={{x:0}} exit={{x:"100%"}} transition={{duration:DUR.slow,ease:EASE}}
               className="h-full" onClick={e=>e.stopPropagation()}>
-              {inner}
+              {panel(true)}
             </motion.div>
           </motion.div>
         )}

@@ -7,6 +7,7 @@
    الرأي بسيط: اسم وتقييم من خمس ونص وصورة اختيارية. */
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { Star } from "lucide-react";
 import type { PkgReview } from "@/types";
 import { C, T, R, SPACE } from "./tokens";
 import { useDir, useReducedMotion } from "./kit";
@@ -90,7 +91,7 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
             style={{ position: "absolute", inset: 0, padding: 16 }}>
             <div className="flex items-center gap-2.5">
               <span style={{
-                width: 36, height: 36, borderRadius: R.pill, background: C.greenTint, color: C.green,
+                width: 36, height: 36, borderRadius: R.pill, background: C.greenTint, color: C.greenDeep,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 ...T.body, fontWeight: 600, flexShrink: 0,
               }}>
@@ -101,10 +102,11 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
               {ratingOutOfFive(rv.rating)!==null && (
                 <span style={{
                   marginInlineStart: "auto", ...T.small, fontWeight: 600,
-                  color: C.green, background: C.greenTint, borderRadius: R.button,
-                  padding: "3px 7px", direction: "ltr", flexShrink: 0,
+                  color: C.greenDeep, background: C.greenTint, borderRadius: R.pill,
+                  padding: "4px 9px", direction: "ltr", flexShrink: 0,
+                  display: "inline-flex", alignItems: "center", gap: 4,
                 }}>
-                  ⭐ {ratingOutOfFive(rv.rating)!.toFixed(1).replace(/\.0$/,"")}/5
+                  <Star size={13} fill="currentColor" strokeWidth={0} aria-hidden="true"/>{ratingOutOfFive(rv.rating)!.toFixed(1).replace(/\.0$/,"")}/5
                 </span>
               )}
             </div>
@@ -116,7 +118,7 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
               {rv.text}
             </div>
 
-            {rv.image && <img src={rv.image} alt={`صورة مرفقة مع رأي ${rv.name}`} style={{width:"100%",height:76,objectFit:"cover",borderRadius:R.button,marginTop:10}}/>}
+            {rv.image && <img src={rv.image} loading="lazy" decoding="async" alt={`صورة مرفقة مع رأي ${rv.name}`} style={{width:"100%",height:76,objectFit:"cover",borderRadius:R.button,marginTop:10}}/>}
 
             {clamped && (
               <button type="button" onClick={onReadMore}
@@ -141,7 +143,7 @@ export function ReviewsSection({ reviews, t, onReadMore }: ReviewsSectionProps) 
                 aria-label={`${k + 1} / ${n}`}
                 style={{
                   width: k === idx ? 18 : 6, height: 6, borderRadius: R.pill, border: "none", padding: 0,
-                  background: k === idx ? C.green : C.border, cursor: "pointer",
+                  background: k === idx ? C.ink : C.border, cursor: "pointer",
                   transition: "width .28s ease, background .28s ease",
                 }}/>
             ))

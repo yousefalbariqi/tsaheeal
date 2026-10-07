@@ -210,7 +210,9 @@ export interface TrackResult {
 export async function myBookings(phoneForSeed?: string): Promise<TrackResult[]> {
   if (hasRealSession()) {
     const { data, error } = await cust().rpc("my_public_bookings");
-    if (error) { console.error(error); return []; }
+    /* الخطأ يُرمى ولا يُعاد قائمةً فارغة: الفارغة تُقرأ «لا حجوزات لك» لعميلٍ
+       له حجزٌ قائم وانقطع اتصاله. الشاشة تعرض خطأً وزرّ إعادة. */
+    if (error) { console.error(error); throw error; }
     return (data as any[] ?? []).map(r => ({
       id: r.id, status: r.status, paymentStatus: r.payment_status, packageName: r.package_name,
       tripDate: r.trip_date, tripTime: r.trip_time, persons: r.persons, total: r.total,

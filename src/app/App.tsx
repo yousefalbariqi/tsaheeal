@@ -1,13 +1,16 @@
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, Navigate, useParams, useSearchParams } from "react-router";
-import { motion } from "motion/react";
-import { X, Check, ShieldCheck, AlertTriangle, Building2, Copy, MessageCircle } from "lucide-react";
-import { B } from "@/lib/theme";
-import { sar } from "@/lib/money";
+import { Check, ShieldCheck, ShieldX, AlertTriangle, Building2, Copy, Link2Off, SearchX,
+         CircleCheck, Lock, CloudOff, ChevronRight } from "lucide-react";
+import { TONE, type ToneName } from "@/lib/theme";
+import { sarNumber, SAR, sar } from "@/lib/money";
+import { fmtDate, fmtTime } from "@/lib/dates";
 import { hideBootSplash } from "@/lib/bootSplash";
 import { fetchBookingForPay, verifyDoc, VerifyUnavailableError,
          type PayView, type VerifyResult } from "@/features/customer/data";
 import { OrgLine } from "@/components/OrgLine";
+import { TasaheelMark } from "@/components/TasaheelMark";
+import { WhatsAppGlyph } from "@/components/WhatsAppFab";
 import { publicSettings, type PublicSettings } from "@/data/settings";
 import { copyText, openWhatsApp } from "@/lib/utils";
 
@@ -27,6 +30,98 @@ const CustomerApp = lazy(() =>
 const PublicDashboard = lazy(() => import("@/features/public-dashboard/PublicDashboard"));
 
 /* ════════════════════════════════════════════════════════════
+   قشرة الصفحات العامة — الدفع والتحقّق (/pay · /inv/…/verify)
+   صفحتان تُفتحان من رابطٍ في واتساب أو من رمز QR، بلا جلسة وبلا تطبيق
+   حولهما. كانتا خلفيةً ذهبيةً متدرّجة بعنوانٍ لاتيني؛ الآن لوحة «الكسوة»:
+   صفحةٌ عاجية، شريطٌ أسود فيه العلامة وتحته خيطٌ ذهبي، وبطاقةٌ بيضاء.
+   الأنماط في styles/customer-misc.css تحت `kp-`.
+════════════════════════════════════════════════════════════ */
+function PubShell({kicker,children}:{kicker:string;children:ReactNode}) {
+  return (
+    <div dir="rtl" lang="ar" className="kp-page">
+      <header className="kp-head">
+        <TasaheelMark size={44}/>
+        <div>
+          <b>تساهيل العمرة</b>
+          <span>{kicker}</span>
+        </div>
+      </header>
+      <main className="kp-main">{children}</main>
+      <footer className="kp-foot"><OrgLine/></footer>
+    </div>
+  );
+}
+
+/** كتلة الحكم — أيقونة في دائرة بلون المعنى، عنوان، وسطر. واحدةٌ لكل
+    الحالات (رابط غير صالح، مغلق، مسدَّد، تذكرة صالحة…) فتُقرأ بالشكل نفسه. */
+function Verdict({tone,icon,title,children,band}:{
+  tone:ToneName; icon:ReactNode; title:string; children?:ReactNode;
+  /** شريطٌ ملوّن بعرض البطاقة — لحكمٍ يُقرأ من بُعد (باب الحافلة). */
+  band?:boolean;
+}) {
+  const c=TONE[tone];
+  return (
+    <div className="kp-verdict" data-band={band?"":undefined} role="status"
+      style={band?{background:c.bg,borderBottom:`1px solid ${c.line}`}:undefined}>
+      <span className="kp-verdict-icon" aria-hidden
+        style={{background:band?"#fff":c.bg,color:c.fg,boxShadow:band?`0 0 0 1px ${c.line}`:undefined}}>{icon}</span>
+      <h1 style={band?{color:c.fg}:undefined}>{title}</h1>
+      {children&&<p>{children}</p>}
+    </div>
+  );
+}
+
+/** صفوف «تسمية ← قيمة». القيم الفارغة و«—» تُسقط. */
+function Facts({rows}:{rows:[string,ReactNode][]}) {
+  const shown=rows.filter(([,v])=>v!==""&&v!=null&&v!=="—");
+  if(!shown.length) return null;
+  return (
+    <dl className="kp-facts">
+      {shown.map(([l,v])=>(<div key={l}><dt>{l}</dt><dd>{v}</dd></div>))}
+    </dl>
+  );
+}
+
+/** صفٌّ قابل للنسخ: القيمة وزرٌّ يتحوّل إلى «تم النسخ» ثانيتين. */
+function CopyRow({label,value,display,ltr}:{label:string;value:string;display?:string;ltr?:boolean}) {
+  const [done,setDone]=useState(false);
+  const timer=useRef<number|undefined>(undefined);
+  useEffect(()=>()=>window.clearTimeout(timer.current),[]);
+  const copy=()=>{
+    copyText(value); setDone(true);
+    window.clearTimeout(timer.current);
+    timer.current=window.setTimeout(()=>setDone(false),2000);
+  };
+  return (
+    <div className="kp-copy">
+      <div>
+        <span>{label}</span>
+        <b dir={ltr?"ltr":undefined}>{display??value}</b>
+      </div>
+      <button type="button" onClick={copy} data-done={done?"":undefined}
+        aria-label={`نسخ ${label}`}>
+        {done?<Check size={16}/>:<Copy size={16}/>}
+        <span aria-live="polite">{done?"تم النسخ":"نسخ"}</span>
+      </button>
+    </div>
+  );
+}
+
+/** هيكل الانتظار. لا يُرى في الفتح الأول (شاشة البدء فوقه حتى تصل
+    البيانات)، ويبقى لمن تأخّر عنه الجواب بعد زوالها. */
+function PubSkeleton() {
+  return (
+    <div className="kp-card" aria-busy="true" style={{padding:24,display:"grid",gap:14}}>
+      <div className="kp-skel" style={{width:"40%",height:14}}/>
+      <div className="kp-skel" style={{width:"62%",height:38}}/>
+      <div className="kp-skel" style={{height:56,marginTop:8}}/>
+      <div className="kp-skel" style={{height:56}}/>
+      <div className="kp-skel" style={{height:50,borderRadius:999,marginTop:8}}/>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
    PUBLIC BANK TRANSFER — صفحة التحويل للعميل (/pay/:id)
 ════════════════════════════════════════════════════════════ */
 const PAY_METHODS = [
@@ -38,7 +133,10 @@ const PAY_METHODS = [
 function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
   const [pay,setPay]=useState<PayView|null>(null);
   const [loading,setLoading]=useState(true);
-  const [method,setMethod]=useState<string>("");
+  /* طريقةٌ واحدة = مختارةٌ سلفاً: كان العميل يضغط «تحويل بنكي» — الخيار
+     الوحيد — ليرى بيانات الحساب ويُفعَّل زرّ الإيصال. متى أُضيفت طريقةٌ
+     ثانية عاد الاختيار فارغاً وظهرت الشرائح. */
+  const [method,setMethod]=useState<string>(PAY_METHODS.length===1?PAY_METHODS[0].id:"");
   const [stage,setStage]=useState<"form"|"success">("form");
   const [payErr,setPayErr]=useState("");
   const [settings,setSettings]=useState<PublicSettings|null>(null);
@@ -68,122 +166,128 @@ function PayCheckoutPage({bookingId,token}:{bookingId:string;token:string}) {
     setStage("success");
   };
 
-  if(loading) return null;
+  const KICKER="السداد بالتحويل البنكي";
+  if(loading) return <PubShell kicker={KICKER}><PubSkeleton/></PubShell>;
+
+  const bank=settings?.bankTransfer;
+  const bankReady=!!(bank?.bankName&&bank.accountName&&bank.iban);
+  /* الآيبان يُعرض مجموعاتٍ رباعية ليُراجَع بالعين، ويُنسخ متّصلاً. */
+  const ibanShown=(bank?.iban??"").replace(/\s/g,"").replace(/(.{4})/g,"$1 ").trim();
 
   return (
-    <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
-      style={{fontFamily:"var(--font-app)",background:"linear-gradient(160deg, #8C6423 0%, #B7893F 56%, #E8D4A8 100%)"}}>
-      <div className="w-full my-6" style={{maxWidth:440}}>
-        <div className="text-center mb-5">
-          <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
-          <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TASAHEEL AL-UMRAH · BANK TRANSFER</div>
+    <PubShell kicker={KICKER}>
+      {pay && pay.payOpen === false ? (
+        /* ── رابط مغلق ──
+           كان يُعرض نموذج الدفع لأي رابطٍ صحيح مهما تقادم: رحلةٌ راحت،
+           أو طلبٌ أُلغي، أو مهلةٌ انقضت — والعميل يدفع ثمن مقعدٍ في
+           حافلةٍ وصلت. والسبب يُقال صريحاً: «رابط غير صالح» يجعله
+           يتّصل ليسأل. */
+        <div className="kp-card">
+          {pay.paymentStatus==="verified"
+            ? <Verdict tone="success" icon={<CircleCheck size={30}/>} title="سُدّد هذا الطلب">
+                {pay.closedReason ?? "انتهت صلاحية هذا الرابط."}
+              </Verdict>
+            : <Verdict tone="warn" icon={<Lock size={28}/>} title="رابط الدفع مغلق">
+                {pay.closedReason ?? "انتهت صلاحية هذا الرابط."}
+              </Verdict>}
+          <div className="kp-body">
+            <Facts rows={[["رقم الطلب",<bdi dir="ltr">{pay.id}</bdi>],["الباقة",pay.packageName]]}/>
+            <p className="kp-note">للاستفسار تواصل معنا وسنساعدك.</p>
+          </div>
         </div>
-        {pay && pay.payOpen === false ? (
-          /* ── رابط مغلق ──
-             كان يُعرض نموذج الدفع لأي رابطٍ صحيح مهما تقادم: رحلةٌ راحت،
-             أو طلبٌ أُلغي، أو مهلةٌ انقضت — والعميل يدفع ثمن مقعدٍ في
-             حافلةٍ وصلت. والسبب يُقال صريحاً: «رابط غير صالح» يجعله
-             يتّصل ليسأل. */
-          <div className="rounded-2xl p-8 text-center" style={{background:"#fff"}}>
-            <AlertTriangle size={40} style={{color:"#8A6A08",margin:"0 auto 12px"}}/>
-            <div className="font-extrabold text-lg" style={{color:B.black}}>
-              {pay.paymentStatus==="verified" ? "سُدّد هذا الطلب" : "رابط الدفع مغلق"}
-            </div>
-            <div className="text-sm mt-1" style={{color:B.muted}}>{pay.closedReason ?? "انتهت صلاحية هذا الرابط."}</div>
-            <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-              {[["رقم الطلب",pay.id],["الباقة",pay.packageName]].map(([l,v])=>(
-                <div key={l} className="flex items-center justify-between gap-2">
-                  <span style={{color:B.muted}}>{l}</span>
-                  <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>
-              للاستفسار تواصل معنا وسنساعدك.
+      ) : !pay ? (
+        <div className="kp-card">
+          <Verdict tone="danger" icon={<Link2Off size={28}/>} title="رابط غير صالح">
+            لم يُعثر على طلب بهذا الرقم (<bdi dir="ltr">{bookingId}</bdi>)، أو أن الرابط منتهي.
+          </Verdict>
+          <div className="kp-body">
+            <p className="kp-note">افتح الرابط من آخر رسالة وصلتك منا، أو تواصل معنا لنرسل لك رابطاً جديداً.</p>
+          </div>
+        </div>
+      ) : stage==="success" ? (
+        <div className="kp-card">
+          <Verdict tone="gold" icon={<WhatsAppGlyph size={30}/>} title="أرسل إيصال التحويل للفريق">
+            لم يتغير وضع السداد. يؤكده الموظف بعد مراجعة التحويل.
+          </Verdict>
+          <div className="kp-body">
+            <Facts rows={[
+              ["رقم الطلب",<bdi dir="ltr">{pay.id}</bdi>],["الباقة",pay.packageName],
+              ["طريقة السداد","تحويل بنكي"],["المبلغ المطلوب",amount],
+            ]}/>
+            <p className="kp-note">احتفظ برقم التحويل أو صورة الإيصال. ستصلك رسالة بعد اعتماد الموظف له.</p>
+            <button type="button" className="kp-secondary" onClick={()=>setStage("form")}>
+              <ChevronRight size={18}/>العودة إلى بيانات التحويل
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── المبلغ ── أكبر ما في الصفحة: هو ما سيكتبه العميل في تطبيق بنكه */}
+          <div className="kp-card kp-amount">
+            <span>المبلغ المطلوب</span>
+            <strong><bdi dir="ltr">{sarNumber(pay.total)}</bdi> <small>{SAR}</small></strong>
+            <div>
+              <b>{pay.packageName}</b>
+              <span>طلب رقم <bdi dir="ltr">{pay.id}</bdi></span>
             </div>
           </div>
-        ) : !pay ? (
-          <div className="rounded-2xl p-8 text-center" style={{background:"#fff"}}>
-            <X size={40} style={{color:"#BE2626",margin:"0 auto 12px"}}/>
-            <div className="font-extrabold text-lg" style={{color:B.black}}>رابط غير صالح</div>
-            <div className="text-sm mt-1" style={{color:B.muted}}>لم يُعثر على طلب بهذا الرقم ({bookingId})، أو أن الرابط منتهي.</div>
-          </div>
-        ) : stage==="success" ? (
-          <motion.div initial={{opacity:0,scale:0.96}} animate={{opacity:1,scale:1}} className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
-            <div className="flex flex-col items-center text-center px-6 py-9">
-              <motion.div initial={{scale:0}} animate={{scale:1}} transition={{type:"spring",damping:14}} className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background:"#EAF1FE"}}>
-                <MessageCircle size={34} style={{color:"#2457A6"}}/>
-              </motion.div>
-              <div className="font-extrabold text-xl" style={{color:B.black}}>أرسل إيصال التحويل للفريق</div>
-              <div className="text-sm mt-1.5" style={{color:B.text2}}>لم يتغير وضع السداد. يؤكده الموظف بعد مراجعة التحويل.</div>
-              <div className="w-full rounded-xl mt-5 p-4 flex flex-col gap-2 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-                {[["رقم الطلب",pay.id],["الباقة",pay.packageName],["طريقة السداد","تحويل بنكي"],["المبلغ المطلوب",amount]].map(([l,v])=>(
-                  <div key={l} className="flex items-center justify-between gap-2">
-                    <span style={{color:B.muted}}>{l}</span>
-                    <span className="font-bold" style={{color:B.black,fontFamily:"var(--font-app)"}}>{v}</span>
+
+          {PAY_METHODS.length>1&&(
+            <div className="kp-methods" role="radiogroup" aria-label="طريقة السداد">
+              {PAY_METHODS.map(m=>{
+                const on=method===m.id;
+                return (
+                  <button key={m.id} type="button" role="radio" aria-checked={on}
+                    data-on={on?"":undefined} onClick={()=>setMethod(m.id)}>
+                    {m.emoji&&<span>{m.emoji}</span>}{m.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {method === "bank_transfer" && (
+            <>
+              <section className="kp-card">
+                <h2 className="kp-title"><Building2 size={18}/>بيانات التحويل</h2>
+                {bankReady&&bank ? (
+                  <div className="kp-rows">
+                    <CopyRow label="الآيبان" value={bank.iban} display={ibanShown} ltr/>
+                    <CopyRow label="صاحب الحساب" value={bank.accountName}/>
+                    <div className="kp-copy"><div><span>البنك</span><b>{bank.bankName}</b></div></div>
+                    <CopyRow label="مرجع التحويل (رقم الطلب)" value={pay.id} ltr/>
                   </div>
-                ))}
-              </div>
-              <div className="text-xs mt-4 leading-relaxed" style={{color:B.muted}}>احتفظ برقم التحويل أو صورة الإيصال. ستصلك رسالة بعد اعتماد الموظف له.</div>
-            </div>
-            <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}><OrgLine/></div>
-          </motion.div>
-        ) : (
-          <div className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
-            <div className="px-6 py-5" style={{borderBottom:`1px solid ${B.border}`}}>
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-bold" style={{color:B.muted}}>طلب رقم <span style={{fontFamily:"var(--font-app)",color:B.text2}}>{pay.id}</span></div>
-                  <div className="font-extrabold text-base mt-0.5" style={{color:B.black}}>{pay.packageName}</div>
-                </div>
-                <div className="text-left">
-                  <div className="text-xs" style={{color:B.muted}}>المبلغ المطلوب</div>
-                  <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:B.gold}}>{amount}</div>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 py-5">
-              <div className="text-sm font-extrabold mb-3" style={{color:B.black}}>طريقة السداد</div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {PAY_METHODS.map(m=>{
-                  const on=method===m.id;
-                  return (
-                    <button key={m.id} onClick={()=>setMethod(m.id)}
-                      className="flex items-center justify-center gap-1.5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-                      style={{background:on?"rgba(192,134,44,0.1)":"#fff",border:`1.5px solid ${on?B.gold:B.border}`,color:on?"#8a6a08":B.text2}}>
-                      {m.emoji&&<span>{m.emoji}</span>}{m.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {method === "bank_transfer" && (
-                <div className="mt-4 rounded-xl p-4 text-sm" style={{background:B.fill,border:`1px solid ${B.border}`}}>
-                  {settings?.bankTransfer.bankName && settings.bankTransfer.accountName && settings.bankTransfer.iban ? <>
-                    <div className="flex items-center gap-2 font-extrabold mb-3" style={{color:B.black}}><Building2 size={16} style={{color:B.gold}}/>بيانات التحويل</div>
-                    <div className="flex flex-col gap-2"><div><span style={{color:B.muted}}>البنك: </span>{settings.bankTransfer.bankName}</div><div><span style={{color:B.muted}}>صاحب الحساب: </span>{settings.bankTransfer.accountName}</div><div className="flex items-start justify-between gap-2"><span style={{color:B.muted}}>الآيبان: </span><button onClick={()=>copyText(settings.bankTransfer.iban)} className="font-bold text-left break-all cursor-pointer" style={{background:"none",border:"none",padding:0,color:"#2457A6",direction:"ltr",fontFamily:"var(--font-app)"}} title="نسخ الآيبان">{settings.bankTransfer.iban} <Copy size={12} className="inline"/></button></div>{settings.bankTransfer.instructions&&<div className="text-xs mt-1" style={{color:B.text2}}>{settings.bankTransfer.instructions}</div>}</div>
-                  </> : <div style={{color:B.text2}}>بيانات الحساب لم تُضبط بعد. اضغط «إرسال الإيصال» لطلبها من خدمة العملاء.</div>}
-                  <div className="text-xs mt-3" style={{color:B.text2}}>اكتب رقم الطلب <b style={{fontFamily:"var(--font-app)"}}>{pay.id}</b> في مرجع التحويل. لا يُعتبر الحجز مدفوعاً إلا بعد مراجعة الموظف.</div>
-                </div>
-              )}
-            </div>
-            <div className="px-6 pb-6">
-              {payErr&&(
-                <div className="rounded-xl px-4 py-3 text-sm font-bold mb-3"
-                  style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{payErr}</div>
-              )}
-              <button onClick={doPay} disabled={!canPay}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-extrabold text-sm"
-                style={{background:canPay?B.gold:"#EEECEA",color:canPay?B.black:B.muted,border:"none",cursor:canPay?"pointer":"not-allowed"}}>
-                <MessageCircle size={15}/>أرسل إيصال التحويل
-              </button>
-              <div className="flex items-center justify-center gap-1.5 mt-3 text-xs" style={{color:B.muted}}>
-                <ShieldCheck size={12}/>لا تُدخل أي بيانات بطاقة في هذا الرابط
-              </div>
-            </div>
+                ) : (
+                  <p className="kp-note" style={{padding:"0 20px 20px",margin:0}}>
+                    بيانات الحساب لم تُضبط بعد. اضغط «أرسل الإيصال» لطلبها من خدمة العملاء.
+                  </p>
+                )}
+              </section>
+
+              <section className="kp-card">
+                <h2 className="kp-title">خطوات السداد</h2>
+                <ol className="kp-steps">
+                  <li><span>1</span><p>حوّل <b>{amount}</b> {bankReady?"إلى الحساب أعلاه من تطبيق بنكك.":"إلى حساب تساهيل بعد أن تصلك بياناته."}</p></li>
+                  <li><span>2</span><p>اكتب رقم الطلب <b><bdi dir="ltr">{pay.id}</bdi></b> في مرجع التحويل.</p></li>
+                  <li><span>3</span><p>أرسل لنا الإيصال عبر واتساب. لا يُعتبر الحجز مدفوعاً إلا بعد مراجعة الموظف.</p></li>
+                </ol>
+                {bankReady&&bank?.instructions&&<p className="kp-instructions">{bank.instructions}</p>}
+              </section>
+            </>
+          )}
+
+          {payErr&&(
+            <div className="kp-alert" role="alert"><AlertTriangle size={18}/><span>{payErr}</span></div>
+          )}
+          <div className="kp-cta-bar">
+            <button type="button" onClick={doPay} disabled={!canPay} className="kp-cta">
+              <WhatsAppGlyph size={22}/>أرسل الإيصال عبر واتساب
+            </button>
+            <p className="kp-safe"><ShieldCheck size={15}/>لا تُدخل أي بيانات بطاقة في هذا الرابط</p>
           </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </PubShell>
   );
 }
 
@@ -218,7 +322,8 @@ function VerifyPage({docId}:{docId:string}) {
   },[docId]);
   useEffect(()=>{ if(state!=="loading") hideBootSplash(); },[state]);
 
-  if(state==="loading") return null;
+  const KICKER="التحقّق من المستند";
+  if(state==="loading") return <PubShell kicker={KICKER}><PubSkeleton/></PubShell>;
 
   /* ── الحكم على المستند لا على حجزه ──
      كان `VALID_STATUSES.includes(res.status)` — حالة **الحجز**. فتذكرةٌ
@@ -236,72 +341,48 @@ function VerifyPage({docId}:{docId:string}) {
     none:"لم تُدفع", sent:"رابط أُرسل", failed:"فشل الدفع",
   };
   const phaseLabel = phase ? (PHASE_AR[phase] ?? phase) : (res ? (STATUS_AR[res.status] ?? res.status) : "");
-  const tone = valid ? {bg:"#E3F3E8",fg:"#1E7A44",bd:"#C4E4CE"} : {bg:"#FBE6E6",fg:"#BE2626",bd:"#F3C9C9"};
 
   return (
-    <div dir="rtl" lang="ar" className="min-h-screen flex items-start justify-center p-4"
-      style={{fontFamily:"var(--font-app)",background:"linear-gradient(160deg, #8C6423 0%, #B7893F 56%, #E8D4A8 100%)"}}>
-      <div className="w-full my-6" style={{maxWidth:420}}>
-        <div className="text-center mb-5">
-          <div style={{fontFamily:"var(--font-app)",fontSize:22,fontWeight:800,color:"#fff"}}>تساهيل العمرة</div>
-          <div style={{fontSize:10,color:B.gold,letterSpacing:3,marginTop:2}}>TICKET VERIFICATION</div>
-        </div>
-
-        <div className="rounded-2xl overflow-hidden" style={{background:"#fff"}}>
-          {state==="ok"&&res ? <>
-            <div className="flex flex-col items-center text-center px-6 py-7" style={{background:tone.bg,borderBottom:`1px solid ${tone.bd}`}}>
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{background:"#fff"}}>
-                {valid?<Check size={30} style={{color:tone.fg}}/>:<AlertTriangle size={28} style={{color:tone.fg}}/>}
-              </div>
-              <div className="font-extrabold text-lg" style={{color:tone.fg}}>
-                {valid?"تذكرة صالحة":`غير صالحة — ${phaseLabel}`}
-              </div>
-              {res.ticketNo&&<div className="text-sm mt-1" style={{color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>{res.ticketNo}</div>}
-            </div>
-            <div className="px-6 py-5 flex flex-col gap-2.5">
-              {([
-                ["الاسم",res.clientName],
-                ["الباقة",res.packageName],
-                ["تاريخ الرحلة",`${res.tripDate}${res.tripTime&&res.tripTime!=="—"?` · ${res.tripTime}`:""}`],
-                ["نقطة الانطلاق",res.departurePoint],
-                ["عدد المعتمرين",`${res.persons}`],
-                ["رقم الطلب",res.bookingId],
-              ] as [string,string][])
-                .filter(([,v])=>!!v&&v!=="—")
-                .map(([l,v])=>(
-                  <div key={l} className="flex items-center justify-between gap-3">
-                    <span className="text-sm" style={{color:B.muted}}>{l}</span>
-                    <span className="text-sm font-bold truncate" style={{color:B.black,textAlign:"end"}}>{v}</span>
-                  </div>
-                ))}
-            </div>
+    <PubShell kicker={KICKER}>
+      <div className="kp-card">
+        {state==="ok"&&res ? <>
+          {/* الحكم شريطٌ بعرض البطاقة بلون المعنى: يُقرأ من ذراعٍ ممدودة
+              على باب الحافلة قبل أيّ سطرٍ تحته. */}
+          <Verdict band tone={valid?"success":"danger"}
+            icon={valid?<ShieldCheck size={32}/>:<ShieldX size={32}/>}
+            title={valid?"تذكرة صالحة":`غير صالحة — ${phaseLabel}`}>
+            {res.ticketNo&&<bdi dir="ltr" className="kp-docno">{res.ticketNo}</bdi>}
+          </Verdict>
+          <div className="kp-body">
+            <Facts rows={[
+              ["الاسم",res.clientName],
+              ["الباقة",res.packageName],
+              ["تاريخ الرحلة",res.tripDate&&res.tripDate!=="—"
+                ? `${fmtDate(res.tripDate)}${res.tripTime&&res.tripTime!=="—"?` · ${fmtTime(res.tripTime)}`:""}`
+                : ""],
+              ["نقطة الانطلاق",res.departurePoint],
+              ["عدد المعتمرين",`${res.persons}`],
+              ["رقم الطلب",res.bookingId?<bdi dir="ltr">{res.bookingId}</bdi>:""],
+            ]}/>
             {/* الاسم مقصوص في القاعدة عمداً — يُقال هنا حتى لا يُقرأ نقصاً. */}
-            <div className="px-6 pb-5 text-xs leading-relaxed" style={{color:B.muted}}>
+            <p className="kp-note">
               الاسم مختصر لحماية الخصوصية. طابِق الوثيقة الرسمية للمعتمر مع كشف الرحلة عند الصعود.
-            </div>
-          </> : (
-            <div className="px-6 py-10 text-center">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{background:"#FBE6E6"}}>
-                <X size={28} style={{color:"#BE2626"}}/>
-              </div>
-              <div className="font-extrabold text-lg" style={{color:B.black}}>
-                {state==="none"?"لا يوجد مستند بهذا الرقم":"تعذّر التحقّق الآن"}
-              </div>
-              <div className="text-sm mt-2 leading-relaxed" style={{color:B.muted}}>
-                {state==="none"
-                  ? "تأكّد من الرمز، أو راجع موظف الرحلة."
-                  : "الرقم المقروء من الرمز صحيح، لكن خدمة التحقّق غير متاحة الآن — راجع موظف الرحلة."}
-              </div>
-              <div className="inline-block mt-4 px-4 py-2 rounded-xl text-sm font-bold"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2,fontFamily:"var(--font-app)",direction:"ltr"}}>
-                {docId}
-              </div>
-            </div>
-          )}
-          <div className="px-6 py-4 text-center text-xs font-bold" style={{borderTop:`1px solid ${B.border}`,color:B.text2}}><OrgLine/></div>
-        </div>
+            </p>
+          </div>
+        </> : <>
+          {state==="none"
+            ? <Verdict tone="neutral" icon={<SearchX size={28}/>} title="لا يوجد مستند بهذا الرقم">
+                تأكّد من الرمز، أو راجع موظف الرحلة.
+              </Verdict>
+            : <Verdict tone="warn" icon={<CloudOff size={28}/>} title="تعذّر التحقّق الآن">
+                الرقم المقروء من الرمز صحيح، لكن خدمة التحقّق غير متاحة الآن — راجع موظف الرحلة.
+              </Verdict>}
+          <div className="kp-body" style={{textAlign:"center"}}>
+            <bdi dir="ltr" className="kp-code">{docId}</bdi>
+          </div>
+        </>}
       </div>
-    </div>
+    </PubShell>
   );
 }
 
@@ -322,12 +403,14 @@ function PayRoute() {
    الترتيب لا يهمّ — react-router يرجّح المسار الأخصّ، فـ/admin و/pay
    يسبقان الجامع. */
 export default function App() {
-  /* fallback={null} مقصود: شاشة البدء في index.html ما زالت على الشاشة
-     ولا تُزال إلا عند جهوز بيانات الشاشة (hideBootSplash)، فأي مؤشّر
-     تحميل هنا يعني شاشة تحميل ثانية فوق الأولى — وهي التي أُزيلت أصلاً.
-     تعذّر جلب الشفرة يرفع استثناءً يلتقطه ErrorBoundary. */
+  /* البديل صفحةٌ عاجية فارغة لا مؤشّر تحميل: في الفتح الأول شاشة البدء
+     (index.html) فوقها ولا تُزال إلا عند جهوز بيانات الشاشة
+     (hideBootSplash)، فأي مؤشّر هنا شاشة تحميل ثانية تحت الأولى. وكانت
+     null — فمن انتقل بين مسارين بعد زوال شاشة البدء رأى وميضاً أبيض
+     صريحاً؛ الآن يرى لون الصفحة نفسه. تعذّر جلب الشفرة يرفع استثناءً
+     يلتقطه ErrorBoundary. */
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<div className="kp-fallback" aria-busy="true"/>}>
       <Routes>
         <Route path="/admin/*" element={<AdminApp/>}/>
         <Route path="/dashboard" element={<PublicDashboard/>}/>

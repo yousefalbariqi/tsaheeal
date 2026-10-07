@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ChangeEventHandler, type ReactNode } from "react";
 import {
-  Armchair, Car, Pencil, Trash2, X, Plus, Wrench, AlertTriangle,
-  ImagePlus, Film, Star, ChevronUp, ChevronDown, Check, Bus, Download, FileUp,
+  Armchair, Trash2, X, Plus, Wrench, Layers, CircleCheck, SearchX, MessageSquareText,
+  ImagePlus, Film, Star, ChevronUp, ChevronDown, Check, Bus, Plane, Download, FileUp,
 } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, TONE, ELEV } from "@/lib/theme";
 import { SAR } from "@/lib/money";
 import { useDebounced } from "@/lib/useDebounced";
-import { EntityGate } from "@/components/States";
-import { TabStrip } from "@/components/Tabs";
-import type { VehicleMode, VehicleStatus, MediaKind, HotelMedia, TransportReview, Transport } from "@/types";
+import { EntityGate, EmptyState } from "@/components/States";
+import { TabStrip, TabPanel } from "@/components/Tabs";
+import { Badge, Button, IconButton, Input, Textarea, Modal, Note, Segmented, Switch, confirmDialog } from "@/components/ui";
+import type { VehicleMode, MediaKind, HotelMedia, TransportReview, Transport } from "@/types";
 import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
 import { EntityActions } from "@/components/EntityActions";
 import { useStore, writeLocalOnly } from "@/store/useStore";
-import { transportReadiness, gapsByTab, isOperational, type TrTab } from "./readiness";
+import { transportReadiness, gapsByTab, type TrTab } from "./readiness";
 import { isLive } from "@/lib/trip";
 import { busCountOf } from "@/lib/buses";
 import { permanentlyDelete } from "@/data/repository";
@@ -28,105 +28,125 @@ import { NumericInput } from "@/components/NumericInput";
 import { onPickMedia } from "@/lib/mediaUpload";
 import { TRANSPORT_FEATURE_CATALOG, transportFeatureIcon } from "./featureIcons";
 
-/* ─── Transport Card Hero ─── */
-function TransportHero({mode,vehicleType,status,seats,cover}:{mode:VehicleMode;vehicleType:string;status:VehicleStatus;seats:number;cover?:string}) {
-  const isBus = mode==="bus";
-  return (
-    <div className="relative overflow-hidden" style={{height:156,background:B.primaryDeep}}>
-      {cover&&<><img src={cover} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
-        <div className="absolute inset-0" style={{background:"linear-gradient(180deg,rgba(14,12,11,0.15) 0%,rgba(14,12,11,0.55) 100%)"}}/></>}
-      {/* Geometric pattern — road lines for bus, stars for flight */}
-      {!cover&&(isBus
-        ? <div className="absolute inset-0" style={{backgroundImage:`repeating-linear-gradient(to bottom,transparent 0px,transparent 18px,rgba(192,134,44,0.06) 18px,rgba(192,134,44,0.06) 20px)`,backgroundSize:"100% 40px"}}>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,rgba(25,20,10,0.7) 0%,rgba(14,12,11,0.95) 60%)"}}/>
-          </div>
-        : <div className="absolute inset-0">
-            {Array.from({length:24},(_,i)=>(
-              <div key={i} className="absolute rounded-full" style={{width:i%3===0?3:2,height:i%3===0?3:2,background:"rgba(192,134,44,0.25)",top:`${Math.sin(i*1.7)*40+50}%`,left:`${(i/24)*100}%`}}/>
-            ))}
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(135deg,rgba(0,20,40,0.8) 0%,rgba(14,12,11,0.95) 65%)"}}/>
-          </div>
-      )}
-      {/* Top gold strip */}
-      <div className="absolute top-0 inset-x-0" style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-      {/* Central icon (hidden when cover present) */}
-      {!cover&&<div className="absolute inset-0 flex items-center justify-center" style={{userSelect:"none"}}>
-        <span style={{fontSize:72,opacity:0.12,filter:"grayscale(30%)"}}>{isBus?"🚌":"✈️"}</span>
-      </div>}
-      {/* Status + type badges */}
-      <div className="absolute top-3 right-3 flex items-center gap-2">
-        <StatusBadge status={status} entity="transport"/>
-      </div>
-      <div className="absolute top-3 left-3">
-        <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:"rgba(14,12,11,0.7)",color:B.cream,border:"1px solid rgba(255,255,255,0.08)"}}>
-          {isBus?"🚌":"✈️"} {vehicleType}
-        </span>
-      </div>
-      {/* Seats count at bottom */}
-      <div className="absolute bottom-0 inset-x-0 flex items-end justify-between px-4 pb-3">
-        <div className="flex items-center gap-1.5">
-          {isBus&&<><Armchair size={13} style={{color:B.gold}}/>
-            <span className="text-xs font-bold" style={{color:"rgba(192,134,44,0.9)"}}>{seats} مقعد</span></>}
-        </div>
-        <span className="text-xs font-semibold" style={{color:"rgba(240,230,204,0.45)"}}>
-          {isBus?"حافلة":"طيران"}
-        </span>
-      </div>
-    </div>
-  );
-}
+const transportsWord=(n:number)=>`${n} ${n>=3&&n<=10?"مواصلات":"مواصلة"}`;
+const vehiclesWord=(n:number)=>n===1?"مركبة واحدة":n===2?"مركبتان":`${n} ${n<=10?"مركبات":"مركبة"}`;
+
+/* وسم التجهيزة على البطاقة — للقراءة لا للضغط، فليس شريحة ترشيح. */
+const featureTag:CSSProperties={display:"inline-flex",alignItems:"center",gap:6,height:26,padding:"0 10px",borderRadius:999,
+  background:B.fill,border:`1px solid ${B.border}`,color:B.text3,fontSize:12,fontWeight:500,whiteSpace:"nowrap",maxWidth:"100%"};
 
 /* ─── Transport Card ─── */
-/* بطاقة المواصلة تعرض الإجراءين التشغيليين فقط: إيقاف/تفعيل أو حذف نهائي. */
+/* بطاقة المواصلة تعرض الإجراءين التشغيليين فقط: إيقاف/تفعيل أو حذف نهائي.
+   وصدرها صورة المركبة إن رُفعت، وإلّا لوحٌ هادئ بأيقونة الوسيلة — لا رمزٌ
+   تعبيريّ بحجم ٧٢ يتبدّل شكله من جهازٍ لآخر. */
 function TransportCard({tr,onEdit,canWrite,isAdmin,onToggleActive,onDelete,deleteBlockers}:{
   tr:Transport;onEdit:()=>void;canWrite:boolean;isAdmin:boolean;
   onToggleActive:(next:boolean)=>void;
   onDelete:(reason:string)=>Promise<void>|void;deleteBlockers:string[];
 }) {
-  const isVIP = tr.vehicleType.includes("VIP");
+  const isBus = tr.mode==="bus";
+  const ModeIcon = isBus?Bus:Plane;
+  const cover = tr.media?.find(m=>m.primary&&m.kind==="image")?.url||tr.media?.find(m=>m.kind==="image")?.url;
+  /* المتوقفة تَبهت ولا تختفي: سطحها لون الصفحة وصورتها بلا ألوان، وأزرارها
+     تبقى بوضوحها لأن «تفعيل» هو المخرج منها. */
+  const paused = tr.status!=="active";
   return (
-    <motion.div layout initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:0.95}}
-      whileHover={{y:-4}} transition={{duration:0.2}}
-      className="rounded-2xl overflow-hidden flex flex-col"
-      style={{background:"#fff",border:`1px solid ${isVIP?"rgba(192,134,44,0.4)":B.border}`,boxShadow:isVIP?"0 4px 20px -8px rgba(192,134,44,0.2)":"0 2px 12px -4px rgba(21,76,72,0.08)"}}>
-      <TransportHero mode={tr.mode} vehicleType={tr.vehicleType} status={tr.status} seats={tr.seats}
-        cover={tr.media?.find(m=>m.primary&&m.kind==="image")?.url||tr.media?.find(m=>m.kind==="image")?.url}/>
-      <div className="flex flex-col flex-1 px-5 pt-4 pb-4 gap-3">
+    <article className={`ui-card ui-card--hover overflow-hidden flex flex-col${paused?" ui-card--flat":""}`}
+      style={paused?{background:B.bg}:undefined}>
+      <div className="relative" style={{aspectRatio:"2 / 1",background:B.fill,borderBottom:`1px solid ${B.border}`}}>
+        {cover
+          ? <img src={cover} alt="" loading="lazy"
+              style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",...(paused?{filter:"grayscale(1)",opacity:0.6}:null)}}/>
+          : <span aria-hidden className="absolute inset-0 flex items-center justify-center" style={{color:B.borderStrong}}>
+              <ModeIcon size={44} strokeWidth={1.25}/>
+            </span>}
+        {/* الشارة فوق أرضيةٍ بيضاء: حشوتها الباهتة تضيع على الصورة وعلى الغائر. */}
+        <span className="absolute inline-flex rounded-full" style={{top:12,insetInlineStart:12,background:B.surface,boxShadow:ELEV[1]}}>
+          <StatusBadge status={tr.status} entity="transport"/>
+        </span>
+      </div>
+      <div className="flex flex-col flex-1 p-4 gap-3">
         {/* Name + ID */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{tr.name}</h3>
-            <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
-              <Car size={11} style={{color:B.gold}}/>
-              <span>{tr.vehicleType}</span>
-            </div>
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="ui-card-title min-w-0" style={paused?{color:B.text2}:undefined}>{tr.name}</h3>
+            <span dir="ltr" className="flex-shrink-0" style={{fontSize:12,color:B.muted,lineHeight:"21px"}}>{tr.id}</span>
           </div>
-          <span className="text-xs font-mono flex-shrink-0 px-2 py-0.5 rounded-lg mt-0.5"
-            style={{background:B.fill,color:B.muted,border:`1px solid ${B.border}`,fontSize:10}}>{tr.id}</span>
+          <div className="flex items-center gap-1.5 mt-1 min-w-0" style={{fontSize:13,color:B.text2}}>
+            <ModeIcon size={14} style={{color:B.muted,flexShrink:0}}/>
+            <span className="truncate">{tr.vehicleType||(isBus?"حافلة":"طيران")}</span>
+          </div>
         </div>
+        {/* السعة للحافلة وحدها: النوع يُسجَّل مرّة، وعدد مركباته بجانب مقاعده. */}
+        {isBus&&(
+          <div className="flex items-center gap-1.5 min-w-0" style={{fontSize:13,color:B.text2}}>
+            <Armchair size={14} style={{color:B.muted,flexShrink:0}}/>
+            <span className="truncate"><b style={{color:paused?B.text2:B.black,fontWeight:600}}>{tr.seats}</b> مقعد · {vehiclesWord(Math.max(1,tr.fleetCount??1))}</span>
+          </div>
+        )}
 
         {/* Features */}
         {tr.features.length>0 && (
           <div className="flex flex-wrap gap-1.5">
             {tr.features.slice(0,3).map(f=>{
               const Icon=transportFeatureIcon(f.icon);
-              return <span key={f.id} className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text3}}><Icon size={11} style={{color:B.gold}}/>{f.text}</span>;
+              /* تجهيزةٌ قديمة بلا رمزٍ محفوظ تُكتب نصّاً وحده — لا نجمةٌ بديلة تتكرّر على كل وسم. */
+              return <span key={f.id} style={featureTag}>{f.icon&&<Icon size={14} style={{color:B.muted,flexShrink:0}}/>}<span className="truncate">{f.text}</span></span>;
             })}
-            {tr.features.length>3&&<span className="text-xs px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>+{tr.features.length-3}</span>}
+            {tr.features.length>3&&<span dir="ltr" style={{...featureTag,color:B.muted}} title={tr.features.slice(3).map(f=>f.text).filter(Boolean).join(" · ")}>+{tr.features.length-3}</span>}
           </div>
         )}
 
         {/* Actions */}
-        <div className="mt-auto pt-3" style={{borderTop:`1px solid ${B.border}`}}>
-          <EntityActions
-            name={tr.name} label="المواصلة" canWrite={canWrite} isAdmin={isAdmin}
-            onEdit={onEdit}
-            active={tr.status==="active"} onToggleActive={onToggleActive} toggleAsLabel safeAlternative="الإيقاف"
-            onPermanentDelete={onDelete} deleteBlockers={deleteBlockers}/>
-        </div>
+        {canWrite&&(
+          <div className="mt-auto pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+            <EntityActions
+              name={tr.name} label="المواصلة" canWrite={canWrite} isAdmin={isAdmin}
+              onEdit={onEdit}
+              active={tr.status==="active"} onToggleActive={onToggleActive} toggleAsLabel safeAlternative="الإيقاف"
+              onPermanentDelete={onDelete} deleteBlockers={deleteBlockers}/>
+          </div>
+        )}
       </div>
-    </motion.div>
+    </article>
+  );
+}
+
+/* قسمٌ معنون داخل النموذج: عنوانٌ وسطرُ شرحٍ وفعلُ القسم عند طرفه. */
+function FormSection({title,sub,aside,first=false,children}:{title:ReactNode;sub?:ReactNode;aside?:ReactNode;first?:boolean;children:ReactNode}) {
+  return (
+    <section className="flex flex-col gap-3.5" style={first?undefined:{borderTop:`1px solid ${B.border}`,marginTop:8,paddingTop:20}}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        {/* العنوان ينكمش وسطرُ شرحه يلتفّ، فتبقى أفعال القسم بجانبه ما اتّسع السطر. */}
+        <div className="min-w-0 flex-1" style={{flexBasis:220}}>
+          <h3 className="ts-section-title flex items-center gap-2">{title}</h3>
+          {sub&&<p className="ui-card-sub" style={{margin:"2px 0 0"}}>{sub}</p>}
+        </div>
+        {aside&&<div className="flex items-center gap-2 flex-wrap flex-shrink-0">{aside}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* فراغ قسمٍ داخل النموذج — سطرٌ هادئ لا لوحة. */
+function FormEmpty({icon,children}:{icon:ReactNode;children:ReactNode}) {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-xl text-center" style={{border:`1.5px dashed ${B.border}`,padding:"18px 16px",fontSize:13,lineHeight:1.6,color:B.muted}}>
+      <span aria-hidden className="flex-shrink-0">{icon}</span><span>{children}</span>
+    </div>
+  );
+}
+
+/* زرّ اختيار ملف بهيئة الزرّ الثانوي. الحقل مخفيٌّ عن العين لا عن لوحة
+   المفاتيح (sr-only لا hidden): يُبلَغ بـTab وتظهر حلقة التركيز على الزرّ. */
+const pickRing="relative has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--k-gold)]";
+function FileButton({accept,onChange,icon,variant="secondary",children}:{accept:string;onChange:ChangeEventHandler<HTMLInputElement>;icon?:ReactNode;variant?:"secondary"|"ghost";children:ReactNode}) {
+  return (
+    <label className={`ui-btn ui-btn--${variant} ui-btn--sm ${pickRing}`}>
+      {icon}{children}
+      <input type="file" accept={accept} className="sr-only" onChange={onChange}/>
+    </label>
   );
 }
 
@@ -219,10 +239,12 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   const isEdit=draft.editId!==null;
   const [tab,setTab]=useState<TrTab>(draft.tab);
   const [featureIconTarget,setFeatureIconTarget]=useState<string|null>(null);
+  const [showFeatGallery,setShowFeatGallery]=useState(false);
   const [form,setForm]=useState<Transport>(()=>copyDraftValue(draft.form));
   const formRef=useRef(form);
   const [reviewImport,setReviewImport]=useState<ImportedTransportReview[]|null>(null);
-  const bodyRef=useRef<HTMLDivElement>(null);
+  const bodyRef=useRef<HTMLElement|null>(null);
+  const anchorRef=useRef<HTMLDivElement>(null);
   const scrollByTabRef=useRef<Partial<Record<TrTab,number>>>(draft.scrollByTab);
   const snapshot = (nextForm:Transport, nextTab=tab, scrollByTab=scrollByTabRef.current) =>
     onDraftChange({ ...draft, form:copyDraftValue(nextForm), tab:nextTab, scrollByTab:{...scrollByTab} });
@@ -241,6 +263,19 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
     scrollByTabRef.current={...scrollByTabRef.current,[tab]:bodyRef.current.scrollTop};
     snapshot(form,tab,scrollByTabRef.current);
   };
+  /* ما يُمرَّر هو جسم النافذة المشتركة، ولا مرجع إليه من هنا: يُلتقط من
+     علامةٍ داخله ويُسمَع تمريره مباشرةً — فحفظ موضع كل تبويب في المسوّدة
+     يبقى كما كان. والمستمع يقرأ آخر saveScroll لا نسخة أول رسم. */
+  const saveScrollRef=useRef(saveScroll);
+  saveScrollRef.current=saveScroll;
+  useEffect(()=>{
+    const el=anchorRef.current?.closest<HTMLElement>(".ui-modal-body")??null;
+    bodyRef.current=el;
+    if(!el) return;
+    const onScroll=()=>saveScrollRef.current();
+    el.addEventListener("scroll",onScroll,{passive:true});
+    return ()=>el.removeEventListener("scroll",onScroll);
+  },[]);
   useEffect(()=>{
     const frame=requestAnimationFrame(()=>{ if(bodyRef.current) bodyRef.current.scrollTop=scrollByTabRef.current[tab]??0; });
     return ()=>cancelAnimationFrame(frame);
@@ -291,9 +326,7 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   const updMedia=(id:string,field:keyof HotelMedia,val:any)=>set("media",media.map(m=>m.id===id?{...m,[field]:val}:m));
   const setPrimaryMedia=(id:string)=>set("media",media.map(m=>({...m,primary:m.id===id&&m.kind==="image"})));
   const moveMedia=(id:string,dir:-1|1)=>{const arr=[...media];const i=arr.findIndex(m=>m.id===id);const j=i+dir;if(j<0||j>=arr.length)return;[arr[i],arr[j]]=[arr[j],arr[i]];set("media",arr);};
-  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all";
-  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
-  const req=<span style={{color:B.gold}}>*</span>;
+  const req=<span className="ui-req">*</span>;
   /* الحفظ يُمنع لسببين فقط — اسمٌ فارغ، وسعةٌ تحت المحجوز. الباقي يُمنع
      التفعيلَ لا الحفظ: الموظف يدّخر عملاً نصف مكتمل ويعود إليه. */
   const seatsTooLow=form.mode==="bus"&&form.seats<seatFloor;
@@ -312,11 +345,11 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
     onSave(form);
   }
   const gaps=gapsByTab(form);
-  /* ٢٧) العدد داخل اسم التبويب لا في مكانٍ آخر: «المواصفات ٣» يقول ما
-     فيها، و«المعلومات ⚠٢» يقول أين النقص — فلا يفتح الموظف أربعة
-     تبويبات ليعرف أيّها ينتظره. */
+  /* ٢٧) العدد داخل اسم التبويب لا في مكانٍ آخر: «المواصفات 3» يقول ما
+     فيها، و«المعلومات · ينقص 2» يقول أين النقص — فلا يفتح الموظف أربعة
+     تبويبات ليعرف أيّها ينتظره. والنقص يُكتب كلمةً لا رمز تحذيرٍ تعبيريّاً. */
   const count=(n:number)=>n>0?` ${n}`:"";
-  const gap=(n:number)=>n>0?` ⚠${n}`:"";
+  const gap=(n:number)=>n>0?` · ينقص ${n}`:"";
   const TABS:{id:TrTab;label:string}[]=[
     {id:"info",    label:`المعلومات${gap(gaps.info)}`},
     {id:"features",label:`المواصفات${count(form.features.length)}${gap(gaps.features)}`},
@@ -328,276 +361,255 @@ function TransportModal({draft,onSave,onCancel,seatFloor,onDraftChange}:{
   const BUS_TYPES=["حافلة عادية","حافلة VIP","ميني باص"];
   const FLIGHT_TYPES=["طيران داخلي","طيران دولي","طيران خاص"];
   const typeOptions=form.mode==="bus"?BUS_TYPES:FLIGHT_TYPES;
+  const mediaFull=media.length>=TRANSPORT_MEDIA_MAX;
+  /* المعرض يُطوى كما في مرافق الفندق: سبعٌ وعشرون شريحةً مفتوحةً دائماً تدفع
+     السطور المحفوظة خارج الشاشة على الجوال. يُفتح للإضافة ولتبديل رمز، ويبقى
+     مفتوحاً ما دامت القائمة فارغة — فلا يُسأل الموظف ضغطةً قبل أول تجهيزة. */
+  const galleryOpen=showFeatGallery||!!featureIconTarget||form.features.length===0;
+  const autosaveNote="التعديلات غير المحفوظة تُحفظ تلقائياً";
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
-      <motion.div initial={{opacity:0,y:40}} animate={{opacity:1,y:0}} exit={{opacity:0,y:40}}
-        transition={{type:"spring",damping:30,stiffness:400}}
-        className="w-full sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{maxWidth:620,maxHeight:"92vh",background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        {/* Header */}
-        <div className="relative px-6 pt-6 pb-0 flex-shrink-0" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>
-                {form.mode==="bus"?"🚌":"✈️"}
-              </div>
-              <div>
-                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"var(--font-app)"}}>{isEdit?"تعديل المواصلة":"إضافة مواصلة جديدة"}</h2>
-                <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"} · التعديلات غير المحفوظة تُحفظ تلقائياً</div>
-              </div>
+    <Modal open onClose={onCancel} width={760}
+      title={isEdit?"تعديل المواصلة":"إضافة مواصلة"}
+      sub={isEdit?<><span dir="ltr">{form.id}</span> · {autosaveNote}</>:autosaveNote}
+      /* خطّ الشريط وخطّ حاويته على السطر نفسه: التبويبات تبدأ بمحاذاة المحتوى والخطّ يبلغ الحافتين. */
+      toolbar={<div className="flex-shrink-0" style={{paddingInline:8,boxShadow:`inset 0 -1px 0 ${B.border}`}}>
+        <TabStrip tabs={TABS} active={tab} onChange={selectTab} tone="onLight" idPrefix="trn"/>
+      </div>}
+      footer={<div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 w-full">
+        {!canSave&&<span role="status" className={`${seatsTooLow?"ui-error":"ui-hint"} basis-full sm:basis-auto sm:order-last`} style={{margin:0}}>{saveBlock}</span>}
+        <Button variant="primary" className="flex-1 sm:flex-none" icon={<Check size={16}/>} disabled={!canSave} onClick={handleSave}>حفظ المواصلة</Button>
+        <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onCancel}>إلغاء</Button>
+      </div>}>
+      {/* تبديل التبويب بلا انتظار خروج سابقه (TabPanel): المحتوى حاضر، والانتظار كان مصطنعاً. */}
+      <div ref={anchorRef}>
+        <TabPanel id="info" idPrefix="trn" active={tab==="info"}>
+          <FormSection first title="التعريف">
+            {/* Mode toggle */}
+            <div>
+              <div className="ui-label">وسيلة النقل{req}</div>
+              <Segmented<VehicleMode> label="وسيلة النقل" value={form.mode}
+                options={[{value:"bus",label:<><Bus size={16}/>حافلة</>},{value:"flight",label:<><Plane size={16}/>طيران</>}]}
+                onChange={m=>{
+                  set("mode",m);
+                  if(m==="flight") {
+                    set("vehicleType","طيران"); set("seats",0); set("seatCost",0);
+                    set("model",""); set("year",""); set("status","inactive");
+                  } else {
+                    set("vehicleType","حافلة عادية");
+                    if(formRef.current.seats<=0) set("seats",49);
+                    set("status","inactive");
+                  }
+                }}/>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <button onClick={onCancel} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer"
-                style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={15}/></button>
-            </div>
-          </div>
-          <TabStrip tabs={TABS} active={tab} onChange={selectTab} tone="onDark" idPrefix="trn"/>
-        </div>
-        {/* Body */}
-        <div ref={bodyRef} onScroll={saveScroll} className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:"none"}}>
-          <AnimatePresence mode="wait">
-            {tab==="info"&&<motion.div role="tabpanel" id="trn-panel-info" aria-labelledby="trn-tab-info" key="info" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
-              {/* Mode toggle */}
-              <div>
-                <label className="block text-xs font-bold mb-2" style={{color:B.text3}}>وسيلة النقل <span style={{color:B.gold}}>*</span></label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["bus","flight"] as const).map(m=>(
-                    <button key={m} onClick={()=>{
-                      set("mode",m);
-                      if(m==="flight") {
-                        set("vehicleType","طيران"); set("seats",0); set("seatCost",0);
-                        set("model",""); set("year",""); set("status","inactive");
-                      } else {
-                        set("vehicleType","حافلة عادية");
-                        if(formRef.current.seats<=0) set("seats",49);
-                        set("status","inactive");
-                      }
-                    }}
-                      className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                      style={{background:form.mode===m?B.gold:B.fill,color:form.mode===m?B.black:B.muted,border:`2px solid ${form.mode===m?B.gold:B.border}`}}>
-                      <span className="text-lg">{m==="bus"?"🚌":"✈️"}</span>
-                      {m==="bus"?"حافلة":"طيران"}
-                    </button>
-                  ))}
-                </div>
+            <div><Field label={<>{form.mode==="flight"?"اسم المواصلة / الطيران":"الاسم"}{req}</>}>
+                   <Input value={form.name} placeholder={form.mode==="flight"?"مثال: طيران الرياض إلى جدة":"مثال: حافلة الحرمين 1"} onChange={e=>set("name",e.target.value)}/>
+                 </Field></div>
+          </FormSection>
+          {form.mode==="flight"&&(
+            <Note tone="neutral" icon={<Plane size={16}/>}>الطيران خيارُ نقلٍ يُعرض ضمن الباقة — لا تُدار مقاعده ولا تكلفته من هنا.</Note>
+          )}
+          {form.mode==="bus"&&<>
+          <FormSection title="السعة والأسطول"
+            sub="تُسجّل مواصفات هذا النوع مرة واحدة، ويُوزَّع عدد مركباته على الرحلات المتداخلة: رحلةٌ بثلاثة باصات تأخذ ثلاثة منه.">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div><Field label="النوع">
+                     <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
+                   </Field>
               </div>
-              <div><Field label={<>{form.mode==="flight"?"اسم المواصلة / الطيران":"الاسم"} <span style={{color:B.gold}}>*</span></>}>
-                     <input className={inp} style={ist} value={form.name} placeholder={form.mode==="flight"?"مثال: طيران الرياض إلى جدة":"مثال: حافلة الحرمين 1"} onChange={e=>set("name",e.target.value)}/>
+              <div><Field label={<>عدد المقاعد{req}</>}
+                     error={seatFloor>0&&form.seats<seatFloor?`لا تنزل تحت ${seatFloor} — محجوزة في رحلة مرتبطة.`:undefined}
+                     hint={seatFloor>0?`الحدّ الأدنى ${seatFloor} مقعداً (محجوزة حالياً).`:undefined}>
+                     <NumericInput min={Math.max(1,seatFloor)} className={`ui-input${form.seats<seatFloor?" is-invalid":""}`}
+                       value={form.seats} onValueChange={v=>set("seats",Number(v))}/>
                    </Field></div>
-              {form.mode==="bus"&&<>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div><Field label="النوع">
-                       <AppSelect value={form.vehicleType} onChange={v=>set("vehicleType",v)} options={typeOptions.map(o=>({value:o,label:o}))}/>
-                     </Field>
-                </div>
-                <div><Field label={<>عدد المقاعد {req}</>}>
-                       <NumericInput min={Math.max(1,seatFloor)} className={inp}
-                         style={{...ist,borderColor:form.seats<seatFloor?"#E1A3A3":B.border}}
-                         value={form.seats} onValueChange={v=>set("seats",Number(v))}/>
-                     </Field>
-                     {seatFloor>0&&(
-                       form.seats<seatFloor
-                         ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>لا تنزل تحت {seatFloor} — محجوزة في رحلة مرتبطة.</div>
-                         : <div className="text-xs mt-1" style={{color:B.muted}}>الحدّ الأدنى {seatFloor} مقعداً (محجوزة حالياً).</div>
-                     )}</div>
-                <div><Field label="عدد المركبات من هذا النوع">
-                       <NumericInput min={1} className={inp} style={ist} value={form.fleetCount ?? 1} onValueChange={v=>set("fleetCount",Math.max(1,Number(v)||1))}/>
-                     </Field>
-                     <div className="text-xs mt-1" style={{color:B.muted}}>تُسجّل مواصفات هذا النوع مرة واحدة، ويُوزَّع هذا العدد على الرحلات المتداخلة: رحلةٌ بثلاثة باصات تأخذ ثلاثة منه.</div></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Field label={<>تكلفة المقعد ({SAR}) {req}</>}>
-                       <NumericInput min={1} className={inp}
-                         style={{...ist,color:B.gold,fontWeight:800,fontFamily:"var(--font-app)",borderColor:form.seatCost>0?B.border:"#E8D9A8"}}
-                         value={form.seatCost} onValueChange={v=>set("seatCost",Number(v))}/>
-                     </Field>
-                     {form.seatCost<=0&&<div className="text-xs font-bold mt-1" style={{color:"#8A6A08"}}>صفرٌ ليس سعراً — تدخل هذه القيمة تسعير كل باقة مرتبطة.</div>}</div>
-                <div><Field label="الشركة / الموديل">
-                       <input className={inp} style={ist} value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"شركة الطيران"} onChange={e=>set("model",e.target.value)}/>
-                     </Field></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Field label="سنة التصنيع">
-                       <NumericInput min={1990} max={new Date().getFullYear()+1} className={inp} style={ist} value={form.year} placeholder="2024" onValueChange={v=>set("year",v)}/>
-                     </Field></div>
-              </div>
-              </>}
-            </motion.div>}
-            {tab==="features"&&<motion.div role="tabpanel" id="trn-panel-features" aria-labelledby="trn-tab-features" key="features" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
-              <div className="flex items-end justify-between gap-3">
-                <div><p className="font-bold text-sm" style={{color:B.black}}>تجهيزات الحافلة</p>
-                  <p className="text-xs mt-0.5" style={{color:B.muted}}>اختر رمزاً لإضافة تجهيزة، ثم اكتب اسمها كما سيظهر للعميل.</p></div>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>{form.features.length}</span>
-              </div>
-              <div className="grid gap-2" style={{gridTemplateColumns:"repeat(auto-fill, minmax(42px, 1fr))"}}>
+              <div><Field label="عدد المركبات من هذا النوع">
+                     <NumericInput min={1} className="ui-input" value={form.fleetCount ?? 1} onValueChange={v=>set("fleetCount",Math.max(1,Number(v)||1))}/>
+                   </Field></div>
+            </div>
+          </FormSection>
+          <FormSection title="التكلفة والمركبة">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div><Field label={<>تكلفة المقعد ({SAR}){req}</>}
+                     hint={form.seatCost<=0?<span style={{color:TONE.warn.fg,fontWeight:600}}>صفرٌ ليس سعراً — تدخل هذه القيمة تسعير كل باقة مرتبطة.</span>:undefined}>
+                     <NumericInput min={1} className="ui-input" value={form.seatCost} onValueChange={v=>set("seatCost",Number(v))}/>
+                   </Field></div>
+              <div><Field label="الشركة / الموديل">
+                     <Input value={form.model} placeholder={form.mode==="bus"?"مرسيدس توريزمو":"شركة الطيران"} onChange={e=>set("model",e.target.value)}/>
+                   </Field></div>
+              <div><Field label="سنة التصنيع">
+                     <NumericInput min={1990} max={new Date().getFullYear()+1} className="ui-input" value={form.year} placeholder="2024" onValueChange={v=>set("year",v)}/>
+                   </Field></div>
+            </div>
+          </FormSection>
+          </>}
+        </TabPanel>
+
+        <TabPanel id="features" idPrefix="trn" active={tab==="features"}>
+          <FormSection first
+            title={<>تجهيزات الحافلة{form.features.length>0&&<Badge>{form.features.length}</Badge>}</>}
+            sub="اختر تجهيزةً لتُضاف سطراً، ثم عدّل اسمها كما سيظهر للعميل."
+            aside={form.features.length>0&&(
+              <Button size="sm" variant="secondary" icon={galleryOpen&&!featureIconTarget?<X size={14}/>:<Plus size={14}/>}
+                onClick={()=>{setFeatureIconTarget(null);setShowFeatGallery(v=>!v);}}>
+                {galleryOpen&&!featureIconTarget?"إغلاق المعرض":"إضافة تجهيزة"}
+              </Button>)}>
+            {/* المعرض شرائحُ برمزها واسمها: الرمز وحده كان يُختار على التخمين.
+                والشريحة تُضيف سطراً ولا «تُضيء» — ما أُضيف يُقرأ في السطور تحتها. */}
+            {galleryOpen&&(
+            <div className="rounded-xl p-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+              {featureIconTarget&&<p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,fontWeight:600,color:B.text3}}>اختر الرمز الجديد لهذه التجهيزة.</p>}
+              <div className="flex flex-wrap gap-1.5">
                 {TRANSPORT_FEATURE_CATALOG.map(({id,label,Icon})=>(
-                  <button key={id} type="button" aria-label={label} title={label} onClick={()=>{
+                  <button key={id} type="button" className="ui-chip" title={featureIconTarget?`استعمل رمز «${label}»`:`إضافة «${label}»`} onClick={()=>{
                     if(featureIconTarget) { chooseFeatIcon(featureIconTarget,id); setFeatureIconTarget(null); }
                     else addFeat(id,label);
-                  }}
-                    className="aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all"
-                    style={{background:B.fill,color:B.text2,border:`1.5px solid ${B.border}`}}><Icon size={18}/></button>
+                  }}><Icon size={15}/>{label}</button>
                 ))}
               </div>
-              {featureIconTarget&&<p className="text-xs font-bold -mt-1" style={{color:"#8A6A08"}}>اختر الرمز الجديد من المعرض أعلاه.</p>}
-              <AnimatePresence>{form.features.map(f=>(
-                <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                  className="flex gap-2 items-center rounded-xl p-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                  {(()=>{ const Icon=transportFeatureIcon(f.icon); const picking=featureIconTarget===f.id; return (
-                    <button type="button" aria-label="تغيير رمز التجهيزة" title="تغيير الرمز" onClick={()=>setFeatureIconTarget(picking?null:f.id)}
-                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer"
-                      style={{background:picking?B.gold:"#FBF3D6",border:`1px solid ${picking?B.gold:"#EBD9A0"}`,color:picking?B.black:"#8A6A08"}}><Icon size={18}/></button>
-                  ); })()}
-                  <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="مثال: واي فاي مجاني" onChange={e=>updFeat(f.id,e.target.value)}/>
-                  <div className="flex flex-col gap-1">
-                    <button aria-label="تقديم التجهيزة" title="تقديم" onClick={()=>moveFeat(f.id,-1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronUp size={12}/></button>
-                    <button aria-label="تأخير التجهيزة" title="تأخير" onClick={()=>moveFeat(f.id,1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronDown size={12}/></button>
-                  </div>
-                  <button aria-label="حذف التجهيزة" title="حذف التجهيزة" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
-                </motion.div>
-              ))}</AnimatePresence>
-              {form.features.length===0&&<div className="flex flex-col items-center py-10 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Wrench size={26} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف تجهيزات بعد</p></div>}
-            </motion.div>}
-            {tab==="media"&&<motion.div role="tabpanel" id="trn-panel-media" aria-labelledby="trn-tab-media" key="media" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <p className="font-bold text-sm flex items-center gap-2" style={{color:B.black}}>صور وفيديو المركبة
-                  <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:media.length>=TRANSPORT_MEDIA_MAX?"#FBE6E6":B.fill,color:media.length>=TRANSPORT_MEDIA_MAX?"#BE2626":B.muted,border:`1px solid ${media.length>=TRANSPORT_MEDIA_MAX?"#F3C9C9":B.border}`}}>{media.length} / {TRANSPORT_MEDIA_MAX}</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <button onClick={()=>addMedia("image")} disabled={media.length>=TRANSPORT_MEDIA_MAX} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:media.length>=TRANSPORT_MEDIA_MAX?B.fill:B.black,border:"none",color:media.length>=TRANSPORT_MEDIA_MAX?B.muted:B.cream,opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><ImagePlus size={12}/>صورة</button>
-                  <button onClick={()=>addMedia("video")} disabled={media.length>=TRANSPORT_MEDIA_MAX} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#1E52C7",opacity:media.length>=TRANSPORT_MEDIA_MAX?0.6:1}}><Film size={12}/>فيديو</button>
-                </div>
-              </div>
-              <p className="text-xs -mt-2" style={{color:B.muted}}>رتّب العناصر بالأسهم — أول صورة أساسية تظهر كغلاف المركبة.</p>
-              <AnimatePresence>{media.map((m,idx)=>(
-                <motion.div key={m.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                  className="rounded-2xl p-3 flex gap-3" style={{border:`1px solid ${m.primary?B.gold:B.border}`,background:m.primary?"rgba(192,134,44,0.05)":"#fff"}}>
-                  <label className="relative rounded-xl overflow-hidden flex items-center justify-center cursor-pointer flex-shrink-0" style={{width:88,height:88,border:`1px dashed ${B.border}`,background:B.fill}}>
-                    {m.url
-                      ? (m.kind==="image"
-                          ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                          : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
-                      : <div className="flex flex-col items-center gap-1" style={{color:B.muted}}>{m.kind==="image"?<ImagePlus size={20}/>:<Film size={20}/>}<span style={{fontSize:10}}>اختر ملفاً</span></div>}
-                    <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={onPickMedia("transport",url=>updMedia(m.id,"url",url))}/>
-                  </label>
-                  <div className="flex-1 flex flex-col gap-2 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:B.fill,color:B.text2,border:`1px solid ${B.border}`}}>#{idx+1}</span>
-                      <span className="text-xs font-bold" style={{color:m.kind==="image"?"#8a6a08":"#1E52C7"}}>{m.kind==="image"?"صورة":"فيديو"}</span>
-                      {m.primary&&<span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:"#FBF3D6",color:"#8A6A08"}}>أساسية</span>}
+            </div>
+            )}
+            {form.features.length>0&&(
+              <div className="flex flex-col gap-2">
+                {form.features.map((f,idx)=>{ const Icon=transportFeatureIcon(f.icon); const picking=featureIconTarget===f.id; return (
+                  <div key={f.id} className="flex gap-2 items-center">
+                    {/* المحدَّد أسودُ لا ذهبي: هو موضع التبديل لا فعلٌ يُضغط. */}
+                    <button type="button" aria-label="تغيير رمز التجهيزة" title="تغيير الرمز" aria-pressed={picking}
+                      onClick={()=>setFeatureIconTarget(picking?null:f.id)} className="ui-iconbtn ui-iconbtn--outline"
+                      style={{width:42,height:42,...(picking?{background:B.ink,borderColor:B.ink,color:B.onInk}:{background:B.fill,color:B.text3})}}><Icon size={18}/></button>
+                    <Input className="flex-1 min-w-0" value={f.text} placeholder="مثال: واي فاي مجاني" aria-label="اسم التجهيزة" onChange={e=>updFeat(f.id,e.target.value)}/>
+                    <div className="flex items-center flex-shrink-0">
+                      <IconButton size="sm" label="تقديم التجهيزة" disabled={idx===0} onClick={()=>moveFeat(f.id,-1)}><ChevronUp size={16}/></IconButton>
+                      <IconButton size="sm" label="تأخير التجهيزة" disabled={idx===form.features.length-1} onClick={()=>moveFeat(f.id,1)}><ChevronDown size={16}/></IconButton>
+                      <IconButton size="sm" variant="danger" label="حذف التجهيزة" onClick={()=>delFeat(f.id)}><Trash2 size={15}/></IconButton>
                     </div>
-                    {m.kind==="image"&&(
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button onClick={()=>setPrimaryMedia(m.id)} disabled={m.primary} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                          style={{background:m.primary?"#FBF3D6":B.fill,color:m.primary?"#8A6A08":B.muted,border:`1px solid ${m.primary?"#EBD9A0":B.border}`}}><Star size={11}/>{m.primary?"الصورة الأساسية":"اجعلها أساسية"}</button>
-                        <select value={m.category} onChange={e=>updMedia(m.id,"category",e.target.value)} className="border rounded-lg px-2.5 py-1.5 text-xs cursor-pointer"
-                          style={{borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"}}>
-                          {TRANSPORT_MEDIA_CATS.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    )}
                   </div>
-                  <div className="flex flex-col gap-1 flex-shrink-0">
-                    <button aria-label="تقديم العنصر في الترتيب" title="تقديم العنصر في الترتيب" onClick={()=>moveMedia(m.id,-1)} disabled={idx===0} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:B.fill,border:`1px solid ${B.border}`,color:idx===0?B.border:B.text2}}><ChevronUp size={14}/></button>
-                    <button aria-label="تأخير العنصر في الترتيب" title="تأخير العنصر في الترتيب" onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:B.fill,border:`1px solid ${B.border}`,color:idx===media.length-1?B.border:B.text2}}><ChevronDown size={14}/></button>
-                    <button aria-label="حذف الصورة أو الفيديو" title="حذف الصورة أو الفيديو" onClick={()=>delMedia(m.id)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
-                      style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><Trash2 size={13}/></button>
+                );})}
+              </div>
+            )}
+            {form.features.length===0&&<FormEmpty icon={<Wrench size={18}/>}>لم تُضف تجهيزات بعد — اختر من المعرض أعلاه.</FormEmpty>}
+          </FormSection>
+        </TabPanel>
+
+        <TabPanel id="media" idPrefix="trn" active={tab==="media"}>
+          <FormSection first
+            title={<>صور وفيديو المركبة<Badge tone={mediaFull?"danger":"neutral"}><span dir="ltr">{media.length} / {TRANSPORT_MEDIA_MAX}</span></Badge></>}
+            sub="رتّب العناصر بالأسهم — أول صورة أساسية تظهر كغلاف المركبة."
+            aside={<>
+              <Button size="sm" variant="secondary" icon={<ImagePlus size={14}/>} disabled={mediaFull} onClick={()=>addMedia("image")}>صورة</Button>
+              <Button size="sm" variant="secondary" icon={<Film size={14}/>} disabled={mediaFull} onClick={()=>addMedia("video")}>فيديو</Button>
+            </>}>
+            {media.map((m,idx)=>(
+              <div key={m.id} className="ui-card ui-card--flat p-3 flex gap-3 items-start">
+                <label title={m.url?"تغيير الملف":"اختر ملفاً"}
+                  className={`rounded-xl overflow-hidden flex items-center justify-center cursor-pointer flex-shrink-0 bg-[var(--k-fill)] hover:bg-[var(--k-surface)] transition-colors ${pickRing}`}
+                  style={{width:88,height:88,border:m.url?`1px solid ${B.border}`:`1.5px dashed ${B.borderStrong}`}}>
+                  {m.url
+                    ? (m.kind==="image"
+                        ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
+                    : <div className="flex flex-col items-center gap-1" style={{color:B.muted}}>{m.kind==="image"?<ImagePlus size={20}/>:<Film size={20}/>}<span style={{fontSize:12}}>اختر ملفاً</span></div>}
+                  <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="sr-only" onChange={onPickMedia("transport",url=>updMedia(m.id,"url",url))}/>
+                </label>
+                <div className="flex-1 flex flex-col gap-2 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap" style={{minHeight:32}}>
+                    <span style={{fontSize:14,fontWeight:600,color:B.black}}>{m.kind==="image"?"صورة":"فيديو"} {idx+1}</span>
+                    {m.kind==="image"&&(m.primary
+                      ? <Badge style={{background:B.ink,color:B.onInk}}><Star size={12} fill={B.gold} stroke={B.gold}/>أساسية</Badge>
+                      : <Button size="sm" variant="ghost" icon={<Star size={14}/>} onClick={()=>setPrimaryMedia(m.id)}>اجعلها أساسية</Button>)}
                   </div>
-                </motion.div>
-              ))}</AnimatePresence>
-              {media.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><ImagePlus size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لم تُضف صور أو فيديو بعد</p></div>}
-            </motion.div>}
-            {tab==="reviews"&&<motion.div role="tabpanel" id="trn-panel-reviews" aria-labelledby="trn-tab-reviews" key="reviews" initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.12}} className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="font-bold text-sm" style={{color:B.black}}>آراء المعتمرين</p>
-                  <p className="text-xs mt-0.5 leading-relaxed" style={{color:B.muted}}>CSV مطلوب بالأعمدة: اسم العميل، نص الرأي، التقييم (1–5)، حالة النشر (منشور / غير منشور).</p>
+                  {m.kind==="image"&&(
+                    <div style={{maxWidth:240}}>
+                      <AppSelect ariaLabel="تصنيف الصورة" value={m.category} onChange={v=>updMedia(m.id,"category",v)}
+                        options={TRANSPORT_MEDIA_CATS.map(c=>({value:c,label:c}))} placeholder="تصنيف الصورة"/>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={downloadTransportReviewTemplate} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><Download size={12}/>تحميل النموذج</button>
-                  <label className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}>
-                    <FileUp size={12}/>استيراد CSV
-                    <input type="file" accept=".csv,text/csv" className="hidden" onChange={event=>{readReviewImport(event.target.files?.[0]);event.currentTarget.value="";}}/>
-                  </label>
-                  <button onClick={addReview} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة</button>
+                <div className="flex flex-col flex-shrink-0">
+                  <IconButton size="sm" label="تقديم العنصر في الترتيب" onClick={()=>moveMedia(m.id,-1)} disabled={idx===0}><ChevronUp size={16}/></IconButton>
+                  <IconButton size="sm" label="تأخير العنصر في الترتيب" onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1}><ChevronDown size={16}/></IconButton>
+                  <IconButton size="sm" variant="danger" label="حذف الصورة أو الفيديو" onClick={()=>delMedia(m.id)}><Trash2 size={15}/></IconButton>
                 </div>
               </div>
-              {reviewImport&&(
-                <div className="rounded-2xl p-4 flex flex-col gap-3" style={{background:"#FBF3D6",border:"1px solid #EBD9A0"}}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-bold" style={{color:"#6b5a2a"}}>معاينة قبل الاستيراد — {reviewImport.length} رأي</div>
-                    <button type="button" onClick={()=>setReviewImport(null)} className="text-xs font-bold cursor-pointer" style={{background:"none",border:"none",color:B.text2}}>إلغاء</button>
-                  </div>
-                  <div className="overflow-x-auto rounded-xl" style={{border:`1px solid ${B.border}`,background:"#fff"}}>
-                    <table className="w-full text-xs" style={{minWidth:460,borderCollapse:"collapse"}}>
-                      <thead style={{background:B.fill,color:B.text2}}><tr>
-                        <th className="p-2 text-start">العميل</th><th className="p-2 text-start">الرأي</th><th className="p-2 text-start">التقييم</th><th className="p-2 text-start">النشر</th>
-                      </tr></thead>
-                      <tbody>{reviewImport.slice(0,8).map((review,index)=><tr key={`${review.name}-${index}`} style={{borderTop:`1px solid ${B.border}`,color:B.text3}}>
-                        <td className="p-2 font-bold">{review.name}</td><td className="p-2">{review.text}</td><td className="p-2">{review.rating}/5</td><td className="p-2">{review.consent?"منشور":"غير منشور"}</td>
+            ))}
+            {media.length===0&&(
+              <button type="button" onClick={()=>addMedia("image")}
+                className="flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer rounded-2xl border-[1.5px] border-dashed border-[var(--k-border-strong)] bg-[var(--k-fill)] hover:bg-[var(--k-surface)] hover:border-[var(--k-muted)] transition-colors"
+                style={{color:B.text2,padding:16,minHeight:136,fontFamily:"inherit",filter:"none"}}>
+                <ImagePlus size={22} style={{color:B.muted}}/>
+                <span style={{fontSize:13,fontWeight:600}}>أضف صور المركبة</span>
+                <span style={{fontSize:12,color:B.muted}}>أول صورةٍ تصير الغلاف — حتى {TRANSPORT_MEDIA_MAX} ملفات.</span>
+              </button>
+            )}
+          </FormSection>
+        </TabPanel>
+
+        <TabPanel id="reviews" idPrefix="trn" active={tab==="reviews"}>
+          <FormSection first title="آراء المعتمرين"
+            sub="CSV مطلوب بالأعمدة: اسم العميل، نص الرأي، التقييم (1–5)، حالة النشر (منشور / غير منشور)."
+            aside={<>
+              <Button size="sm" variant="secondary" icon={<Download size={14}/>} onClick={downloadTransportReviewTemplate}>تحميل النموذج</Button>
+              <FileButton accept=".csv,text/csv" icon={<FileUp size={14}/>} onChange={event=>{readReviewImport(event.target.files?.[0]);event.currentTarget.value="";}}>استيراد CSV</FileButton>
+              <Button size="sm" variant="secondary" icon={<Plus size={14}/>} onClick={addReview}>إضافة</Button>
+            </>}>
+            {reviewImport&&(
+              <div className="rounded-xl p-3 flex flex-col gap-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                <strong style={{fontSize:14,fontWeight:600,color:B.black}}>معاينة قبل الاستيراد — {reviewImport.length} رأي</strong>
+                <div className="ui-table-wrap" style={{boxShadow:"none",borderRadius:12}}>
+                  <div className="ui-table-scroll">
+                    <table className="ui-table" style={{minWidth:460}}>
+                      <thead><tr><th>العميل</th><th>الرأي</th><th>التقييم</th><th>النشر</th></tr></thead>
+                      <tbody>{reviewImport.slice(0,8).map((review,index)=><tr key={`${review.name}-${index}`}>
+                        <td className="nowrap cell-main">{review.name}</td><td>{review.text}</td>
+                        <td className="nowrap"><span dir="ltr">{review.rating} / 5</span></td>
+                        <td className="nowrap">{review.consent?"منشور":"غير منشور"}</td>
                       </tr>)}</tbody>
                     </table>
                   </div>
-                  {reviewImport.length>8&&<p className="text-xs" style={{color:B.muted}}>تُعرض أول 8 آراء من أصل {reviewImport.length}.</p>}
-                  <button type="button" onClick={confirmReviewImport} className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                    style={{background:B.gold,color:B.black,border:"none"}}><Check size={13}/>اعتماد الاستيراد</button>
                 </div>
-              )}
-              <AnimatePresence>{form.reviews.map(rv=>(
-                <motion.div key={rv.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                  className="rounded-2xl p-4 flex gap-3" style={{border:`1px solid ${B.border}`}}>
-                  <div className="flex-1 flex flex-col gap-2">
-                    <input className={inp} style={ist} value={rv.name} placeholder="الاسم الأول" onChange={e=>updReview(rv.id,"name",e.target.value)}/>
-                    <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={rv.text} placeholder="ماذا قال عن المواصلة؟" onChange={e=>updReview(rv.id,"text",e.target.value)}/>
-                    {typeof rv.rating==="number"&&<span className="text-xs font-bold" style={{color:"#8A6A08"}}>التقييم: {rv.rating}/5</span>}
+                {reviewImport.length>8&&<p style={{margin:0,fontSize:12,color:B.muted}}>تُعرض أول 8 آراء من أصل {reviewImport.length}.</p>}
+                {/* داكنٌ لا ذهبي: الذهبي في هذه النافذة لـ«حفظ المواصلة» وحده. */}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="dark" icon={<Check size={14}/>} onClick={confirmReviewImport}>اعتماد الاستيراد</Button>
+                  <Button size="sm" variant="ghost" onClick={()=>setReviewImport(null)}>إلغاء</Button>
+                </div>
+              </div>
+            )}
+            {form.reviews.map((rv,idx)=>(
+              <div key={rv.id} className="ui-card ui-card--flat p-3 flex gap-2 items-start">
+                <div className="flex-1 flex flex-col gap-2 min-w-0">
+                  <Input value={rv.name} placeholder="الاسم الأول" aria-label={`اسم صاحب الرأي ${idx+1}`} onChange={e=>updReview(rv.id,"name",e.target.value)}/>
+                  <Textarea rows={2} value={rv.text} placeholder="ماذا قال عن المواصلة؟" aria-label={`نصّ الرأي ${idx+1}`} style={{minHeight:68}} onChange={e=>updReview(rv.id,"text",e.target.value)}/>
+                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+                    <label className="inline-flex items-center gap-2 cursor-pointer" style={{fontSize:13,fontWeight:500,color:rv.consent?TONE.success.fg:B.text2}}>
+                      <Switch checked={rv.consent} onChange={()=>updReview(rv.id,"consent",!rv.consent)} label="إذن النشر"/>
+                      {rv.consent?"تم الإذن":"في انتظار الإذن"}
+                    </label>
+                    {typeof rv.rating==="number"&&(
+                      <span className="inline-flex items-center gap-1.5" style={{fontSize:13,color:B.text2}}>
+                        <Star aria-hidden size={14} fill={B.gold} stroke={B.gold}/>التقييم {rv.rating} من 5
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     {rv.image&&(
-                      <div className="relative rounded-xl overflow-hidden self-start" style={{border:`1px solid ${B.border}`,width:96,height:96}}>
+                      <div className="rounded-lg overflow-hidden flex-shrink-0" style={{border:`1px solid ${B.border}`,width:44,height:44}}>
                         <img src={rv.image} alt="صورة مرفقة" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                        <button aria-label="إزالة صورة الرأي" title="إزالة صورة الرأي" onClick={()=>updReview(rv.id,"image",undefined)} className="absolute top-1 left-1 w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer"
-                          style={{background:"rgba(190,38,38,0.92)",color:"#fff",border:"none"}}><X size={12}/></button>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button onClick={()=>updReview(rv.id,"consent",!rv.consent)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                        style={{background:rv.consent?"#E3F3E8":B.fill,color:rv.consent?"#1E7A44":B.muted,border:`1px solid ${rv.consent?"#C4E4CE":B.border}`}}>
-                        <Check size={11}/>{rv.consent?"تم الإذن":"في انتظار الإذن"}
-                      </button>
-                      <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                        style={{background:B.fill,color:"#8a6a08",border:`1px solid ${B.border}`}}>
-                        <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"إرفاق صورة (اختياري)"}
-                        <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("transport-reviews",url=>updReview(rv.id,"image",url))}/>
-                      </label>
-                    </div>
+                    <FileButton variant="ghost" accept="image/*" icon={<ImagePlus size={14}/>} onChange={onPickMedia("transport-reviews",url=>updReview(rv.id,"image",url))}>
+                      {rv.image?"تغيير الصورة":"إرفاق صورة (اختياري)"}
+                    </FileButton>
+                    {rv.image&&<Button size="sm" variant="ghost" icon={<X size={14}/>} onClick={()=>updReview(rv.id,"image",undefined)}>إزالة الصورة</Button>}
                   </div>
-                  <button aria-label="حذف الرأي" title="حذف الرأي" onClick={()=>delReview(rv.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer mt-0.5"
-                    style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>
-                </motion.div>
-              ))}</AnimatePresence>
-              {form.reviews.length===0&&<div className="flex flex-col items-center py-12 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Star size={28} style={{opacity:0.3,marginBottom:8}}/><p className="text-sm">لا توجد آراء</p></div>}
-            </motion.div>}
-          </AnimatePresence>
-        </div>
-        <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={handleSave} disabled={!canSave} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold"
-            style={{background:canSave?B.gold:"#d6cfc6",color:canSave?B.black:"#a09688",border:"none",cursor:canSave?"pointer":"not-allowed"}}>
-            <Check size={14}/>حفظ المواصلة</button>
-          {!canSave&&<span className="self-center text-xs font-bold" style={{color:"#BE2626"}}>{saveBlock}</span>}
-          <button onClick={onCancel} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
-        </div>
-      </motion.div>
-    </motion.div>
+                </div>
+                <IconButton size="sm" variant="danger" label="حذف الرأي" onClick={()=>delReview(rv.id)}><Trash2 size={15}/></IconButton>
+              </div>
+            ))}
+            {form.reviews.length===0&&!reviewImport&&<FormEmpty icon={<MessageSquareText size={18}/>}>لا آراء بعد — أضف رأياً يدوياً أو استورد ملف CSV.</FormEmpty>}
+          </FormSection>
+        </TabPanel>
+      </div>
+    </Modal>
   );
 }
 
@@ -654,9 +666,16 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     setTransports(p=>editorDraft?.editId?p.map(x=>x.id===t.id?t:x):[t,...p]);
     discardEditorDraft();
   }
+  /* الإغلاق يسأل دائماً ثم يمحو المسوّدة — السؤال حوار اللوحة الموحَّد
+     (confirmDialog) بدل حوارٍ منسوخٍ في هذا الملف؛ والمسار نفسه: «متابعة
+     التعديل» تُبقي النافذة ومسوّدتها، و«إلغاء التعديلات» تمحوهما. */
   const requestCancel=()=>{
     if(!editorDraft) return;
-    if(window.confirm("هل تريد إلغاء التعديلات؟ ستُحذف كل التعديلات غير المحفوظة.")) discardEditorDraft();
+    void confirmDialog({
+      title:"إلغاء التعديلات؟",
+      message:"ستُحذف كل التعديلات غير المحفوظة على بيانات المواصلة. لا يمكن التراجع عن هذا الإجراء.",
+      confirmLabel:"إلغاء التعديلات", cancelLabel:"متابعة التعديل", tone:"danger",
+    }).then(ok=>{ if(ok) discardEditorDraft(); });
   };
 
   /* موانع الحذف النهائي — تُعرض بنصّها لا تُخفي الزرّ.
@@ -682,54 +701,49 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     if(p.length) out.push(`تعتمد عليها ${p.length===1?"باقة":`${p.length} باقات`}: ${p.map(x=>x.name).join(" · ")}`);
     return out;
   }
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
+  const clearFilters=()=>{setSearch("");setModeFilter("all");setStatusFilter("all");};
+  /* «لا شيء بعد» غير «لا شيء يطابق»: الأول يُخرَج منه بالإضافة، والثاني بإزالة المرشّحات. */
+  const filteredOut=transports.length>0;
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="المواصلات" crumb="إدارة المواصلات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      <div className="px-8 pt-5">
-        {/* Stats */}
-        <div className="grid grid-cols-5 gap-3">
-          <StatCard label="إجمالي المركبات" value={stats.total} sub="في النظام" accent/>
-          <StatCard label="نشطة" value={stats.active} sub={`${stats.total-stats.active} متوقفة`}/>
-          <StatCard label="حافلات" value={stats.buses} sub="مسجّلة"/>
-          <StatCard label="رحلات طيران" value={stats.flights} sub="مسجّلة"/>
-          <StatCard label="إجمالي المقاعد" value={stats.totalSeats.toLocaleString()} sub="الطاقة الاستيعابية للأسطول"/>
+      {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+      <PageHeader title="المواصلات" crumb="إدارة المواصلات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        searchPlaceholder="ابحث بالاسم أو المعرّف أو الموديل"
+        actions={mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{openForm(null);}}>
+          <span className="hidden sm:inline">إضافة مواصلة</span><span className="sm:hidden">إضافة</span>
+        </Button>}/>
+      <div className="px-4 md:px-8 pt-1">
+        {/* Stats — أربعٌ لا خمس: مقاعد الأسطول سطرٌ تحت عدد الحافلات، فهي
+            مقاعدها وحدها. وكل بطاقةٍ تُرشِّح القائمة بما تعدّه. */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="كل المواصلات" value={stats.total} sub="في النظام" accent icon={<Layers size={15}/>} onClick={clearFilters}/>
+          <StatCard label="نشطة" value={stats.active} sub={`${stats.total-stats.active} متوقفة`} icon={<CircleCheck size={15}/>} onClick={()=>setStatusFilter("active")}/>
+          <StatCard label="حافلات" value={stats.buses} sub={`${stats.totalSeats.toLocaleString("en-US")} مقعد في الأسطول`} icon={<Bus size={15}/>} onClick={()=>setModeFilter("bus")}/>
+          <StatCard label="طيران" value={stats.flights} sub="خيارات مسجّلة" icon={<Plane size={15}/>} onClick={()=>setModeFilter("flight")}/>
         </div>
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button style={fb(statusFilter==="all")} onClick={()=>setStatusFilter("all")}>الكل</button>
-              <button style={fb(statusFilter==="active")} onClick={()=>setStatusFilter("active")}>نشط</button>
-              <button style={fb(statusFilter==="inactive")} onClick={()=>setStatusFilter("inactive")}>متوقف</button>
-            </div>
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button style={fb(modeFilter==="all")} onClick={()=>setModeFilter("all")}>الكل</button>
-              <button style={fb(modeFilter==="bus")} onClick={()=>setModeFilter("bus")}>🚌 حافلات</button>
-              <button style={fb(modeFilter==="flight")} onClick={()=>setModeFilter("flight")}>✈️ طيران</button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm" style={{color:B.muted}}><b style={{color:B.black}}>{filtered.length}</b> / {transports.length}</span>
-            {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
-            {mayWrite && (
-            <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.35)"}}>
-              <Plus size={15}/>إضافة مواصلة
-            </button>
-            )}
-          </div>
+        <div className="ts-toolbar">
+          <Segmented<"all"|"active"|"inactive"> label="حالة المواصلة" value={statusFilter} onChange={setStatusFilter}
+            options={[{value:"all",label:"الكل"},{value:"active",label:"نشط"},{value:"inactive",label:"متوقف"}]}/>
+          <Segmented<"all"|"bus"|"flight"> label="وسيلة النقل" value={modeFilter} onChange={setModeFilter}
+            options={[{value:"all",label:"كل الوسائل"},{value:"bus",label:<><Bus size={15}/>حافلات</>},{value:"flight",label:<><Plane size={15}/>طيران</>}]}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">
+            {filtered.length===transports.length?transportsWord(transports.length):`${filtered.length} من ${transports.length}`}
+          </span>
         </div>
-        <div className="mt-5" style={{height:1,background:B.border}}/>
       </div>
-      <main className="flex-1 px-4 md:px-8 pb-10 pt-6">
+      <main className="flex-1 px-4 md:px-8 pb-8">
         <EntityGate entity="transports" label="المواصلات" skeleton="cards">
         {filtered.length===0
-          ?<motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col items-center justify-center py-24 rounded-2xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <Bus size={44} style={{opacity:0.2,color:B.gold,marginBottom:12}}/><p className="font-bold" style={{color:B.black}}>لا توجد مواصلات مطابقة</p>
-          </motion.div>
-          :<motion.div layout className="grid gap-5" style={{gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
-            <AnimatePresence>{filtered.map(t=>(
+          ?<EmptyState
+              icon={filteredOut?<SearchX size={22}/>:<Bus size={22}/>}
+              title={filteredOut?"لا مواصلات تطابق البحث":"لا مواصلات بعد"}
+              note={filteredOut?"جرّب كلمةً أخرى أو أزل المرشّحات.":"أضف أنواع الحافلات وخيارات الطيران لتُربط بالباقات والرحلات."}
+              action={filteredOut
+                ? <Button variant="secondary" onClick={clearFilters}>إزالة المرشّحات</Button>
+                : mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{openForm(null);}}>إضافة مواصلة</Button>}/>
+          :<div className="grid gap-4" style={{gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,300px),1fr))"}}>
+            {filtered.map(t=>(
               <TransportCard key={t.id} tr={t} canWrite={mayWrite} isAdmin={isAdmin}
                 onEdit={()=>{openForm(t);}}
                 onToggleActive={next=>{
@@ -747,15 +761,13 @@ export function TransportPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
                   writeLocalOnly(()=>setTransports(p=>p.filter(x=>x.id!==t.id)));
                 }}
                 deleteBlockers={blockersFor(t.id)}/>
-            ))}</AnimatePresence>
-          </motion.div>
+            ))}
+          </div>
         }
         </EntityGate>
       </main>
-      <AnimatePresence>
-        {editorDraft&&<TransportModal draft={editorDraft} seatFloor={editorDraft.editId?seatFloorFor(editorDraft.editId):0}
-          onDraftChange={saveEditorDraft} onSave={handleSave} onCancel={requestCancel}/>}
-      </AnimatePresence>
+      {editorDraft&&<TransportModal draft={editorDraft} seatFloor={editorDraft.editId?seatFloorFor(editorDraft.editId):0}
+        onDraftChange={saveEditorDraft} onSave={handleSave} onCancel={requestCancel}/>}
     </div>
   );
 }

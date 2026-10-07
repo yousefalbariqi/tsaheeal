@@ -22,11 +22,13 @@
    أصلاً على الشاشة. فالتنزيل يستعمل محرّك طباعة المتصفّح نفسه، ويُسمّي
    المستند بـ`document.title` فيقترحه اسماً للملف. */
 import { useCallback, useEffect, useState } from "react";
-import { Printer, Download, Phone, X, Ban, RotateCcw, Check } from "lucide-react";
+import { Printer, Download, X, Ban, RotateCcw, Check } from "lucide-react";
 import { toast } from "sonner";
-import { B } from "@/lib/theme";
+import { B, ELEV, TONE } from "@/lib/theme";
 import { openWhatsApp } from "@/lib/utils";
-import { Spinner } from "@/components/Spinner";
+import { fmtDateTime } from "@/lib/dates";
+import { Badge, Button, IconButton, confirmDialog } from "@/components/ui";
+import { WhatsAppGlyph } from "@/components/WhatsAppFab";
 import type { DocEvent } from "@/types";
 import {
   fetchDocEvents, logDocEvent, setEventOutcome, SEND_OUTCOMES,
@@ -36,12 +38,17 @@ import {
 /** آخر إرسالٍ خلال هذه المدّة يُعدّ «للتوّ» فيُطلب تأكيدٌ قبل التكرار. */
 const RECENT_SEND_MS = 10 * 60_000;
 
-const btn = (bg: string, fg: string, disabled = false): React.CSSProperties => ({
-  display: "inline-flex", alignItems: "center", gap: 6,
-  padding: "8px 16px", borderRadius: 12, fontSize: 13, fontWeight: 700,
-  background: bg, color: fg, border: "none",
-  cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1,
-});
+/* اسم المستند في رأس الشريط — يقول ما المفتوح قبل أن تُقرأ الورقة. */
+const DOC_NAME: Partial<Record<DocType, string>> = { invoice: "فاتورة", ticket: "تذكرة" };
+
+/* أخضر واتساب — لون علامةٍ لا لون معنى، فلا مقابل له في اللوحة. يلوّن
+   الأيقونة وحدها؛ الزرّ نفسه ثانويّ كجيرانه. */
+const WHATSAPP_GREEN = "#25D366";
+
+/* lib/dates يقرأ نصّ التخزين كما كُتب (بلا منطقة زمنية)، وطابع الحدث لحظةٌ
+   بتوقيت UTC — فيُحوَّل أوّلاً إلى ساعة الرياض ثم يُنسَّق. */
+const riyadhStamp = (ms: number): string =>
+  new Date(ms + 3 * 3_600_000).toISOString().slice(0, 16).replace("T", " ");
 
 const fmtWhen = (iso: string): string => {
   const d = new Date(iso);
@@ -49,7 +56,7 @@ const fmtWhen = (iso: string): string => {
   if (mins < 1) return "الآن";
   if (mins < 60) return `قبل ${mins} د`;
   if (mins < 1440) return `قبل ${Math.floor(mins / 60)} س`;
-  return d.toISOString().slice(0, 16).replace("T", " · ");
+  return fmtDateTime(riyadhStamp(d.getTime()));
 };
 
 export interface DocActionsProps {
@@ -89,7 +96,12 @@ export function DocActions(p: DocActionsProps) {
        الموظف من إعادته يجعله ينسخ الرابط يدوياً — فيخرج من السجلّ. */
     if (sentRecently) {
       const when = fmtWhen(lastSend!.createdAt);
-      if (!window.confirm(`أُرسلت هذه الرسالة ${when} بواسطة ${lastSend!.actorName ?? "موظف"}.\nهل تريد إرسالها مرّة أخرى؟`)) return;
+      const again = await confirmDialog({
+        title: "إرسال الرسالة مرّة أخرى؟",
+        message: `أُرسلت هذه الرسالة ${when} بواسطة ${lastSend!.actorName ?? "موظف"}.`,
+        confirmLabel: "إرسال مرّة أخرى",
+      });
+      if (!again) return;
     }
     setBusy(true);
     try {
@@ -140,69 +152,63 @@ export function DocActions(p: DocActionsProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2" data-print-hide>
-      <div className="flex gap-2 flex-wrap justify-end">
-        <button onClick={print} style={btn(B.gold, B.black)}>
-          <Printer size={14} />طباعة
-        </button>
-        <button onClick={download} style={btn("#fff", B.text2)}
-          className="border" >
-          <Download size={14} />تنزيل PDF
-        </button>
-        {p.whatsapp && (
-          <button onClick={send} disabled={busy} style={btn("#25D366", "#fff", busy)}>
-            {busy ? <Spinner size={13} color="#fff" /> : <Phone size={14} />}
-            {lastSend ? "إعادة الإرسال" : "إرسال واتساب"}
-          </button>
-        )}
-        {p.onRefund && (
-          <button onClick={p.onRefund} style={btn("#E0F2FB", "#0E7CA8")}>
-            <RotateCcw size={14} />استرجاع
-          </button>
-        )}
-        {p.onCancelDoc && (
-          <button onClick={p.onCancelDoc} style={btn("#FBE6E6", "#BE2626")}>
-            <Ban size={14} />إلغاء
-          </button>
-        )}
-        <button onClick={p.onClose} style={btn(B.fill, B.text2)}>
-          <X size={14} />إغلاق
-        </button>
+    /* شريطٌ واحد أبيض فوق الورقة: اسم المستند، ثم الأفعال، ثم الإغلاق.
+       الذهبي للطباعة وحدها — هي ما فُتح المستند لأجله — وما عداها ثانويّ.
+       على الجوال ينزل صفّ الأفعال تحت العنوان ويلتفّ بأزرارٍ متساوية. */
+    <div data-print-hide style={{ background: B.surface, borderRadius: 16, boxShadow: ELEV[3], padding: "10px 12px" }}>
+      <div className="flex items-center gap-x-3 gap-y-2.5 flex-wrap">
+        <div className="order-1 flex-1 min-w-0 ps-1.5">
+          <div style={{ fontSize: 12, color: B.muted, lineHeight: 1.4 }}>{DOC_NAME[p.docType] ?? "مستند"}</div>
+          <div className="truncate" dir="ltr" style={{ fontSize: 15, fontWeight: 700, color: B.black, lineHeight: 1.4, textAlign: "end" }}>{p.docId}</div>
+        </div>
+        <div className="order-3 sm:order-2 w-full sm:w-auto flex items-center gap-2 flex-wrap">
+          <Button variant="primary" icon={<Printer size={16} />} onClick={print} className="flex-1 sm:flex-none">طباعة</Button>
+          <Button variant="secondary" icon={<Download size={16} />} onClick={download} className="flex-1 sm:flex-none">تنزيل PDF</Button>
+          {p.whatsapp && (
+            <Button variant="secondary" loading={busy} onClick={send} className="flex-1 sm:flex-none"
+              icon={<span style={{ color: WHATSAPP_GREEN, display: "inline-flex" }}><WhatsAppGlyph size={17} /></span>}>
+              {lastSend ? "إعادة الإرسال" : "إرسال واتساب"}
+            </Button>
+          )}
+          {p.onRefund && (
+            <Button variant="danger-soft" icon={<RotateCcw size={15} />} onClick={p.onRefund} className="flex-1 sm:flex-none">استرجاع</Button>
+          )}
+          {p.onCancelDoc && (
+            <Button variant="danger-soft" icon={<Ban size={15} />} onClick={p.onCancelDoc} className="flex-1 sm:flex-none">إلغاء</Button>
+          )}
+        </div>
+        <div className="order-2 sm:order-3 flex items-center gap-2">
+          <span aria-hidden className="hidden sm:block" style={{ width: 1, height: 24, background: B.border }} />
+          <IconButton label="إغلاق" onClick={p.onClose}><X size={18} /></IconButton>
+        </div>
       </div>
 
       {/* ── سؤال النتيجة ──
           يظهر بعد الإرسال مباشرةً ويختفي بالإجابة. لا يُلحّ: تجاهله
           يترك الحدث مسجّلاً بلا نتيجة، وذاك أصدق من نتيجةٍ مفترضة. */}
       {pending !== null && (
-        <div className="flex items-center gap-2 flex-wrap justify-end px-3 py-2 rounded-xl"
-          style={{ background: "#E3F3E8", border: "1px solid #C4E4CE" }}>
-          <span className="text-xs font-bold" style={{ color: "#1E7A44" }}>هل وصلت الرسالة؟</span>
+        <div className="flex items-center gap-2 flex-wrap mt-2.5 px-3 py-2 rounded-xl"
+          style={{ background: TONE.success.bg, border: `1px solid ${TONE.success.line}` }}>
+          <span className="text-sm font-bold me-auto" style={{ color: TONE.success.fg }}>هل وصلت الرسالة؟</span>
           {SEND_OUTCOMES.map(o => (
-            <button key={o} onClick={() => saveOutcome(o)}
-              className="px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
-              style={{ background: "#fff", border: "1px solid #C4E4CE", color: "#1E7A44" }}>{o}</button>
+            <Button key={o} size="sm" variant="secondary" onClick={() => saveOutcome(o)}>{o}</Button>
           ))}
-          <button onClick={() => setPending(null)}
-            className="px-2 py-1 rounded-lg text-xs cursor-pointer"
-            style={{ background: "none", border: "none", color: "#5C554E" }}>لاحقاً</button>
+          <Button size="sm" variant="ghost" onClick={() => setPending(null)}>لاحقاً</Button>
         </div>
       )}
 
       {/* ── آخر إرسال ──
           سطرٌ واحد يجيب «هل أُرسلت؟» بلا فتح سجلّ. */}
       {lastSend && pending === null && (
-        <div className="flex items-center gap-2 flex-wrap justify-end text-xs" style={{ color: B.muted }}>
-          <Check size={12} style={{ color: "#1E7A44" }} />
+        <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 px-1.5 text-xs"
+          style={{ color: B.muted, borderTop: `1px solid ${B.border}` }}>
+          <Check size={14} style={{ color: TONE.success.fg }} />
           <span>
             آخر إرسال {fmtWhen(lastSend.createdAt)}
             {lastSend.actorName ? ` — ${lastSend.actorName}` : ""}
           </span>
           {lastSend.outcome && (
-            <span className="px-2 py-0.5 rounded-full font-bold"
-              style={{ background: lastSend.outcome === "وصلت" ? "#E3F3E8" : "#FBF3D6",
-                       color: lastSend.outcome === "وصلت" ? "#1E7A44" : "#8A6A08" }}>
-              {lastSend.outcome}
-            </span>
+            <Badge tone={lastSend.outcome === "وصلت" ? "success" : "warn"}>{lastSend.outcome}</Badge>
           )}
         </div>
       )}

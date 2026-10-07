@@ -20,8 +20,8 @@ export function Spinner({ size = 15, color, track, border = 2 }: {
       transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
       style={{
         width: size, height: size,
-        border: `${border}px solid ${track ?? "rgba(0,0,0,0.3)"}`,
-        borderTopColor: color ?? "#5C421B",
+        border: `${border}px solid ${track ?? "rgba(27,23,18,0.18)"}`,
+        borderTopColor: color ?? "#1B1712",
         borderRadius: "50%",
         display: "inline-block",
         flexShrink: 0,

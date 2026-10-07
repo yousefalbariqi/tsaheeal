@@ -7,12 +7,13 @@
    وهو كذب — المكتب مغلق. الوقوف مع سطر «يستأنف 6:00 ص» يقول الحقيقة. */
 import { useEffect, useState } from "react";
 import { Clock, MoonStar, CheckCheck } from "lucide-react";
+import { TONE } from "@/lib/theme";
 import { C, T, R, FONT, LTR } from "./tokens";
 import { useReducedMotion } from "./kit";
 import { slaState, formatCountdown, riyadhClock, OPEN_HOUR, CLOSE_HOUR } from "../sla";
 
-const SIZE = 176;
-const STROKE = 12;
+const SIZE = 148;
+const STROKE = 10;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * RADIUS;
 
@@ -41,14 +42,15 @@ export function SlaCountdown({ submittedAt, t }: {
     return () => clearInterval(id);
   }, [s.expired]);
 
-  const tone = s.expired ? C.ink3 : s.paused ? C.gold : C.green;
+  /* الحلقة ذهبية ما دام الوعد جارياً، وتبهت عند الوقوف: الواقف لا يُنادي العين. */
+  const tone = s.expired ? C.ink3 : s.paused ? C.border : C.gold;
   const offset = CIRC * s.progress;
 
   return (
     <div className="flex flex-col items-center" style={{ gap: 14 }}>
       {/* الوعد نصّاً أولاً — الحلقة تؤكّده ولا تحلّ محلّه */}
       <div className="flex items-center" style={{ gap: 8, ...T.h3, color: C.ink, textAlign: "center" }}>
-        <Clock size={18} style={{ color: C.green, flexShrink: 0 }} />
+        <Clock size={18} style={{ color: C.greenDeep, flexShrink: 0 }} />
         {t("contactWithin")}
       </div>
 
@@ -66,12 +68,12 @@ export function SlaCountdown({ submittedAt, t }: {
         <div className="flex flex-col items-center justify-center"
           style={{ position: "absolute", inset: 0, gap: 2 }}>
           <span style={{
-            ...LTR, fontFamily: FONT.mono, fontSize: 30, fontWeight: 600,
+            ...LTR, fontFamily: FONT.mono, fontSize: 26, fontWeight: 600,
             color: s.expired ? C.ink2 : C.ink, lineHeight: 1.1,
           }}>
             {formatCountdown(s.remainingMs)}
           </span>
-          <span style={{ ...T.small, fontWeight: 400, color: C.ink2 }}>
+          <span style={{ ...T.small, fontWeight: 400, color: C.ink2, textAlign: "center", maxWidth: SIZE - 44 }}>
             {s.expired ? t("slaSoon") : t("slaLeft")}
           </span>
         </div>
@@ -81,9 +83,9 @@ export function SlaCountdown({ submittedAt, t }: {
       {s.paused && s.resumesAt != null && (
         <div className="flex items-center" style={{
           gap: 8, paddingInline: 12, paddingBlock: 8, borderRadius: R.pill,
-          background: C.goldTint, border: `1px solid ${C.gold}33`,
+          background: C.white, border: `1px solid ${TONE.gold.line}`,
         }}>
-          <MoonStar size={15} style={{ color: C.gold, flexShrink: 0 }} />
+          <MoonStar size={15} style={{ color: C.greenDeep, flexShrink: 0 }} />
           <span style={{ ...T.small, fontWeight: 400, color: C.ink }}>
             {t("slaPaused")} · {t("slaResumes").replace("{time}", clockLabel(s.resumesAt, t))}
           </span>
@@ -92,12 +94,12 @@ export function SlaCountdown({ submittedAt, t }: {
 
       {s.expired && (
         <div className="flex items-center" style={{ gap: 8 }}>
-          <CheckCheck size={15} style={{ color: C.green, flexShrink: 0 }} />
+          <CheckCheck size={15} style={{ color: C.greenDeep, flexShrink: 0 }} />
           <span style={{ ...T.small, fontWeight: 400, color: C.ink2 }}>{t("slaExpiredNote")}</span>
         </div>
       )}
 
-      <span style={{ ...T.small, fontWeight: 400, color: C.ink3, textAlign: "center" }}>
+      <span style={{ ...T.small, fontWeight: 400, color: C.ink2, textAlign: "center" }}>
         {t("workHours")
           .replace("{from}", String(OPEN_HOUR()))
           /* الإغلاق يُعرض بنظام ١٢ ساعة («١٠ مساءً»)، فما بعد الظهر

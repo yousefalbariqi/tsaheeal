@@ -4,6 +4,12 @@ import { fetchCatalog, fetchPublicDashboardSeats, type Catalog, type PublicDashb
 import { hideBootSplash } from "@/lib/bootSplash";
 import type { Trip } from "@/types";
 import { busCountOf, seatsPerBus } from "@/lib/buses";
+import { fmtDateShort, fmtTime } from "@/lib/dates";
+import { TasaheelMark } from "@/components/TasaheelMark";
+
+/* الشكل كلّه في styles/customer-misc.css تحت البادئة `pdk-` (لوحة الكسوة:
+   صفحة عاجية، رأس أسود بخيطٍ ذهبي، بطاقات بيضاء). الأصناف القديمة
+   `.public-dashboard*` في index.css لم تعد مستعملة هنا. */
 
 type SeatState = "male" | "female" | "reserved" | "available";
 const WEEK_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -16,16 +22,22 @@ const atNoon = (value: string | Date) => {
 const ymd = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const addDays = (date: Date, days: number) => { const d = new Date(date); d.setDate(d.getDate() + days); return d; };
 const weekStartOf = (date: Date) => addDays(atNoon(date), -atNoon(date).getDay());
-const formatDate = (value: string) => new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "long" }).format(atNoon(value));
+/* «7 أغسطس» بأرقامٍ لاتينية وتقويمٍ ميلادي — من lib/dates. كان المنسّق
+   "ar-SA" عارياً فيخرج التاريخ هجرياً بأرقامٍ هندية بجوار أيامٍ ميلادية. */
+const formatDate = (value: string) => fmtDateShort(value);
 const weekLabel = (start: Date) => `${formatDate(ymd(start))} — ${formatDate(ymd(addDays(start, 6)))}`;
 const tripName = (trip: Trip, packages: Catalog["packages"]) => packages.find(p => p.id === trip.packageId)?.name ?? "رحلة العمرة";
 const remaining = (trip: Trip) => Math.max(0, trip.seats - trip.bookedSeats);
 const occupancy = (trip: Trip) => trip.seats ? Math.min(100, Math.round(trip.bookedSeats / trip.seats * 100)) : 0;
 
 function SeatLegend() {
-  return <div className="public-dashboard-legend" aria-label="دليل ألوان المقاعد">
-    {(["male", "female", "available", "reserved"] as SeatState[]).map(state => <span key={state}><i className={`is-${state}`}/>{SEAT_LABEL[state]}</span>)}
-  </div>;
+  return (
+    <ul className="pdk-legend" aria-label="دليل ألوان المقاعد">
+      {(["available", "male", "female", "reserved"] as SeatState[]).map(state => (
+        <li key={state}><i className="pdk-seat" data-state={state} aria-hidden />{SEAT_LABEL[state]}</li>
+      ))}
+    </ul>
+  );
 }
 
 /* الرحلة بأكثر من باص تُرسم باصاً باصاً، وأرقام كل باصٍ من ١ — المقعد
@@ -36,28 +48,49 @@ function BusMap({ trip, seats }: { trip: Trip; seats: PublicDashboardSeat[] }) {
   const perBus = buses > 1 ? seatsPerBus(trip) : trip.seats;
   const assigned = seats.length;
   const awaitingAllocation = Math.max(0, trip.bookedSeats - assigned);
-  return <>
-    {Array.from({ length: buses }, (_, b) => {
-      const offset = b * perBus;
-      const rows = Array.from({ length: Math.ceil(Math.max(perBus, 1) / 4) }, (_, index) => [index * 4 + 1, index * 4 + 2, index * 4 + 3, index * 4 + 4].filter(no => no <= perBus));
-      const title = buses > 1 ? `الباص ${b + 1}` : trip.busCode ? `حافلة رقم ${trip.busCode}` : "الحافلة";
-      return <section key={b} className="public-dashboard-bus" aria-label={`كروكي مقاعد ${title}`}>
-        <div className="public-dashboard-bus-head"><span><BusFront size={19}/> {title}</span><small>مقدمة الحافلة</small></div>
-        <div className="public-dashboard-seat-rows">
-          {rows.map((row, index) => <div className="public-dashboard-seat-row" key={index}>
-            <div>{row.slice(0, 2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"}/>)}</div>
-            <span className="public-dashboard-aisle" aria-hidden="true">{index + 1}</span>
-            <div>{row.slice(2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"}/>)}</div>
-          </div>)}
-        </div>
-        {b === buses - 1 && awaitingAllocation > 0 && <p className="public-dashboard-allocation"><CircleDot size={15}/> {awaitingAllocation} مقعدًا محجوزًا بانتظار التوزيع</p>}
-      </section>;
-    })}
-  </>;
+  return (
+    <div className="pdk-buses">
+      {Array.from({ length: buses }, (_, b) => {
+        const offset = b * perBus;
+        const rows = Array.from(
+          { length: Math.ceil(Math.max(perBus, 1) / 4) },
+          (_, index) => [index * 4 + 1, index * 4 + 2, index * 4 + 3, index * 4 + 4].filter(no => no <= perBus),
+        );
+        const title = buses > 1 ? `الباص ${b + 1}` : trip.busCode ? `حافلة رقم ${trip.busCode}` : "الحافلة";
+        return (
+          <section key={b} className="pdk-bus" aria-label={`كروكي مقاعد ${title}`}>
+            <div className="pdk-bus-head">
+              <b><BusFront size={18} /> {title}</b>
+              <span>مقدمة الحافلة</span>
+            </div>
+            <div className="pdk-rows">
+              {rows.map((row, index) => (
+                <div className="pdk-row" key={index}>
+                  <div>{row.slice(0, 2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"} />)}</div>
+                  <span className="pdk-aisle" aria-hidden="true" />
+                  <div>{row.slice(2).map(no => <Seat key={no} no={no} state={seatMap.get(no + offset) ?? "available"} />)}</div>
+                </div>
+              ))}
+            </div>
+            {b === buses - 1 && awaitingAllocation > 0 && (
+              <p className="pdk-pending"><CircleDot size={15} /> {awaitingAllocation} مقعدًا محجوزًا بانتظار التوزيع</p>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
 }
 
+/** خانةٌ برقمها وحده — أيقونة الكرسي داخل خانةٍ عرضها ٤٠ بكسل كانت تزاحم
+    الرقم، والرقم هو ما يُقرأ من بُعد. */
 function Seat({ no, state }: { no: number; state: SeatState }) {
-  return <span className={`public-dashboard-seat is-${state}`} title={`${SEAT_LABEL[state]} · مقعد ${no}`} aria-label={`${SEAT_LABEL[state]} · مقعد ${no}`}><Armchair size={17}/><b>{no}</b></span>;
+  return (
+    <span className="pdk-seat" data-state={state}
+      title={`${SEAT_LABEL[state]} · مقعد ${no}`} aria-label={`${SEAT_LABEL[state]} · مقعد ${no}`}>
+      {no}
+    </span>
+  );
 }
 
 export default function PublicDashboard() {
@@ -91,22 +124,128 @@ export default function PublicDashboard() {
   const nearlyFull = weekTrips.filter(trip => occupancy(trip) >= 85 && remaining(trip) > 0).length;
   const today = ymd(new Date());
 
-  return <main className="public-dashboard" dir="rtl" lang="ar">
-    <header className="public-dashboard-header">
-      <div><span className="public-dashboard-kicker">تساهيل العمرة · عرض تشغيلي عام</span><h1>مركز عمليات الرحلات</h1><p><CalendarDays size={16}/> {weekLabel(weekStart)} <em>·</em> {WEEK_DAYS[new Date().getDay()]} {formatDate(today)}</p></div>
-      <div className="public-dashboard-week-nav" aria-label="التنقل بين الأسابيع"><button onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label="الأسبوع السابق"><ChevronRight size={20}/></button><button className="is-current" onClick={() => setWeekStart(weekStartOf(new Date()))}>هذا الأسبوع</button><button onClick={() => setWeekStart(addDays(weekStart, 7))} aria-label="الأسبوع التالي"><ChevronLeft size={20}/></button><button className="is-refresh" onClick={() => void load(true)} disabled={refreshing} aria-label="تحديث البيانات"><RefreshCw size={17} className={refreshing ? "is-spinning" : ""}/></button></div>
-    </header>
+  const dayLine = (trip: Trip) =>
+    `${WEEK_DAYS[atNoon(trip.departureDate).getDay()]} ${formatDate(trip.departureDate)} · ${fmtTime(trip.departureTime)}`;
 
-    <section className="public-dashboard-metrics" aria-label="ملخص الأسبوع">
-      <Metric label="رحلات الأسبوع" value={weekTrips.length} icon={<BusFront/>}/><Metric label="مقاعد متاحة" value={available} icon={<Armchair/>}/><Metric label="قريبة من الامتلاء" value={nearlyFull} icon={<AlertTriangle/>}/><Metric label="تنطلق اليوم" value={weekTrips.filter(t => t.departureDate === today).length} icon={<Users/>}/>
-    </section>
+  return (
+    <main className="pdk" dir="rtl" lang="ar">
+      <header className="pdk-head">
+        <div className="pdk-head-inner">
+          <div className="pdk-brand">
+            <TasaheelMark size={48} />
+            <div>
+              <span>تساهيل العمرة · عرض تشغيلي عام</span>
+              <h1>مركز عمليات الرحلات</h1>
+            </div>
+          </div>
+          <div className="pdk-nav" aria-label="التنقل بين الأسابيع">
+            <button type="button" className="pdk-iconbtn" onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label="الأسبوع السابق">
+              <ChevronRight size={20} />
+            </button>
+            <button type="button" className="pdk-week" onClick={() => setWeekStart(weekStartOf(new Date()))}>
+              <CalendarDays size={16} />
+              <span><small>{weekFrom === ymd(weekStartOf(new Date())) ? "هذا الأسبوع" : "العودة لهذا الأسبوع"}</small>{weekLabel(weekStart)}</span>
+            </button>
+            <button type="button" className="pdk-iconbtn" onClick={() => setWeekStart(addDays(weekStart, 7))} aria-label="الأسبوع التالي">
+              <ChevronLeft size={20} />
+            </button>
+            <button type="button" className="pdk-iconbtn" onClick={() => void load(true)} disabled={refreshing} aria-label="تحديث البيانات">
+              <RefreshCw size={18} className={refreshing ? "animate-spin" : undefined} />
+            </button>
+          </div>
+        </div>
+      </header>
 
-    {loading ? <div className="public-dashboard-loading">يجري تجهيز لوحة الرحلات…</div> : !weekTrips.length ? <section className="public-dashboard-empty"><CalendarDays size={28}/><strong>لا توجد رحلات في هذا الأسبوع</strong><span>انتقل إلى الأسبوع السابق أو التالي لعرض بقية الرحلات.</span></section> : <div className="public-dashboard-layout">
-      <section className="public-dashboard-trips"><div className="public-dashboard-section-title"><div><span>كل الرحلات</span><h2>{weekTrips.length} رحلات في هذا الأسبوع</h2></div><small>اختر رحلة لعرض الكروكي</small></div>{weekTrips.map(trip => <button key={trip.id} type="button" className={`public-dashboard-trip ${trip.id === selected?.id ? "is-selected" : ""}`} onClick={() => setSelectedId(trip.id)}><span className="public-dashboard-trip-number">{weekTrips.indexOf(trip) + 1}</span><span className="public-dashboard-trip-copy"><strong>{tripName(trip, catalog.packages)}</strong><small>{WEEK_DAYS[atNoon(trip.departureDate).getDay()]} {formatDate(trip.departureDate)} · {trip.departureTime}</small><span className="public-dashboard-progress"><i style={{ width: `${occupancy(trip)}%` }}/></span></span><span className="public-dashboard-trip-stats"><b>{remaining(trip)}</b><small>مقعد متبقٍ</small></span></button>)}</section>
-      {selected && <section className="public-dashboard-focus"><div className="public-dashboard-focus-head"><div><span>الرحلة المحددة</span><h2>{tripName(selected, catalog.packages)}</h2><p>{selected.departureCity || selected.departurePoint} <i/> {WEEK_DAYS[atNoon(selected.departureDate).getDay()]} {formatDate(selected.departureDate)} · {selected.departureTime}</p></div><div className="public-dashboard-remaining"><small>المقاعد المتبقية</small><strong>{remaining(selected)}</strong><span>{occupancy(selected)}% إشغال</span></div></div><SeatLegend/><BusMap trip={selected} seats={seatPlans[selected.id] ?? []}/></section>}
-    </div>}
-    <footer className="public-dashboard-footer">مخطط المقاعد للمتابعة التشغيلية فقط · لا يعرض أي بيانات شخصية</footer>
-  </main>;
+      <div className="pdk-body">
+        <p className="pdk-today">اليوم: {WEEK_DAYS[new Date().getDay()]} {formatDate(today)}</p>
+
+        <section className="pdk-metrics" aria-label="ملخص الأسبوع">
+          <Metric label="رحلات الأسبوع" value={weekTrips.length} icon={<BusFront size={20} />} />
+          <Metric label="مقاعد متاحة" value={available} icon={<Armchair size={20} />} />
+          <Metric label="قريبة من الامتلاء" value={nearlyFull} icon={<AlertTriangle size={20} />} />
+          <Metric label="تنطلق اليوم" value={weekTrips.filter(t => t.departureDate === today).length} icon={<Users size={20} />} />
+        </section>
+
+        {loading ? (
+          <div className="pdk-layout" aria-busy="true" aria-label="يجري تجهيز لوحة الرحلات…">
+            <div className="pdk-card pdk-skel-card">
+              {[0, 1, 2, 3].map(i => <div key={i} className="pdk-skel" style={{ height: 64 }} />)}
+            </div>
+            <div className="pdk-card pdk-skel-card">
+              <div className="pdk-skel" style={{ width: "46%", height: 30 }} />
+              <div className="pdk-skel" style={{ height: 320 }} />
+            </div>
+          </div>
+        ) : !weekTrips.length ? (
+          <section className="pdk-card pdk-empty">
+            <span aria-hidden><CalendarDays size={28} /></span>
+            <strong>لا توجد رحلات في هذا الأسبوع</strong>
+            <p>انتقل إلى الأسبوع السابق أو التالي لعرض بقية الرحلات.</p>
+            <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))}>الأسبوع التالي</button>
+          </section>
+        ) : (
+          <div className="pdk-layout">
+            <section className="pdk-card pdk-trips">
+              <div className="pdk-card-head">
+                <h2>رحلات الأسبوع <b>{weekTrips.length}</b></h2>
+                <span>اختر رحلة لعرض الكروكي</span>
+              </div>
+              {weekTrips.map((trip, i) => (
+                <button key={trip.id} type="button" className="pdk-trip"
+                  data-on={trip.id === selected?.id ? "" : undefined}
+                  aria-pressed={trip.id === selected?.id}
+                  onClick={() => setSelectedId(trip.id)}>
+                  <span className="pdk-trip-no">{i + 1}</span>
+                  <span className="pdk-trip-copy">
+                    <strong>{tripName(trip, catalog.packages)}</strong>
+                    <small>{dayLine(trip)}</small>
+                    <span className="pdk-bar" data-full={occupancy(trip) >= 85 ? "" : undefined}>
+                      <i style={{ width: `${occupancy(trip)}%` }} />
+                    </span>
+                  </span>
+                  <span className="pdk-trip-left">
+                    <b>{remaining(trip)}</b>
+                    <small>مقعد متبقٍ</small>
+                  </span>
+                </button>
+              ))}
+            </section>
+
+            {selected && (
+              <section className="pdk-card pdk-focus">
+                <div className="pdk-focus-head">
+                  <div>
+                    <span>الرحلة المحددة</span>
+                    <h2>{tripName(selected, catalog.packages)}</h2>
+                    <p>{selected.departureCity || selected.departurePoint} <i /> {dayLine(selected)}</p>
+                  </div>
+                  <div className="pdk-left">
+                    <small>المقاعد المتبقية</small>
+                    <strong>{remaining(selected)}</strong>
+                    <span>{occupancy(selected)}% إشغال</span>
+                  </div>
+                </div>
+                <SeatLegend />
+                <BusMap trip={selected} seats={seatPlans[selected.id] ?? []} />
+              </section>
+            )}
+          </div>
+        )}
+
+        <footer className="pdk-foot">مخطط المقاعد للمتابعة التشغيلية فقط · لا يعرض أي بيانات شخصية</footer>
+      </div>
+    </main>
+  );
 }
 
-function Metric({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) { return <article><span>{icon}</span><div><small>{label}</small><strong>{value}</strong></div></article>; }
+function Metric({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+  return (
+    <article className="pdk-metric">
+      <span aria-hidden>{icon}</span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}

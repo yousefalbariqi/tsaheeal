@@ -104,12 +104,4 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .trip-cal-day { transition: transform .12s ease, outline-color .12s ease; outline: 1.5px solid transparent; outline-offset: -1.5px; }
 .trip-cal-day:not(:disabled):hover { outline-color: #E6C77F; }
 .trip-cal-day:not(:disabled):active { transform: scale(.94); }
-.trip-cal-day:focus-visible { outline: 2px solid #1F6F6B; outline-offset: 1px; }
-
-/* لا يُنتقل إلى الدفع قبل أن يطابق اختيار المقاعد عدد المعتمرين. الحارس
-   في الحفظ يعيد التحقق أيضاً؛ هذه الإشارة تمنع الالتباس في محطة الاستقبال. */
-.reception-booking.is-seat-pending > div:last-child > aside:last-child > .grid > :nth-last-child(-n + 2) {
-  opacity: .48;
-  pointer-events: none;
-  user-select: none;
-}
+.trip-cal-day:focus-visible { outline: 2px solid #C0862C; outline-offset: 1px; }

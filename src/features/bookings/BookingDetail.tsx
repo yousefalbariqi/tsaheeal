@@ -2,7 +2,8 @@
 
    ثلاث طبقاتٍ لا رابع:
 
-     ١ ملخّصٌ شبكيّ   — من ومع من وإلى أين وبكم، في عشر خاناتٍ مرتّبة.
+     ١ رأس الطلب      — من هو وأين يقف وبكم في السطر الأول، وتحته من
+                        ومع من وإلى أين أزواجاً «معلومة: قيمة».
                         الباقة والفندق ونوع السكن متجاورةٌ عمداً: الموظف
                         يقرأ «الرحلة» كتلةً واحدة لا مبعثرةً في الصفحة.
      ٢ صفّان من الأزرار — التعامل مع العميل، ثم العمل نفسه.
@@ -24,45 +25,51 @@
    دائماً — لا جدارٌ من الكروكيات. ورحلةٌ غير رحلة الطلب تُعرض للقراءة:
    نقلُ الطلب إلى رحلةٍ أخرى يغيّر السعر والسعة، وله مسارُه لا نقرةُ
    مقعد. */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Armchair, ArrowRight, Check, FileText, Mail, MoreHorizontal,
-  Pencil, Phone, Printer, Wallet,
+  AlertTriangle, Armchair, ArrowRight, Ban, Check, ChevronDown, CircleX, Copy, FileText, Info, Lock, Mail,
+  MessageCircle, MoreHorizontal, Pencil, Percent, Phone, Send, Star, Ticket, UserRound, Wallet,
 } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, DUR, EASE, ELEV, TONE } from "@/lib/theme";
 import type { Booking, BookingStatus, BookingTravellerCounts, Payment, Pilgrim, Pkg, TicketEntry, Trip } from "@/types";
 import { copyText, invVerifyUrl, openWhatsApp, payLinkFor, todayYMD } from "@/lib/utils";
-import { sar, sarNumber } from "@/lib/money";
+import { sar } from "@/lib/money";
+import { fmtDate, fmtDateShort, fmtDateTime, fmtDayDate, fmtTime } from "@/lib/dates";
 import { isSellable, seatsOf } from "@/lib/trip";
 import { AppSelect } from "@/components/AppSelect";
 import { NationalitySelect } from "@/components/NationalitySelect";
+import { ArabicDatePicker } from "@/components/ArabicDatePicker";
 import { DOC_TYPES, docTypeDef, guessDocType, numberLabelOf } from "@/data/docTypes";
-import { BusSeatGrid } from "@/components/BusSeatGrid";
+import { BusSeatGrid, SEAT_TONE } from "@/components/BusSeatGrid";
 import { busCountOf, privacyPairLabel, seatLabel, seatsLabel, tripPrivacyPartner } from "@/lib/buses";
 import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { Spinner } from "@/components/Spinner";
 import { EventTimeline } from "@/components/EventTimeline";
+import { Badge, Button, IconButton, Input, Note } from "@/components/ui";
 import { useStore, flushSync, clearSyncError } from "@/store/useStore";
 import { useRole } from "@/lib/useRole";
 import { InvoiceModal } from "@/features/payments";
 import { TicketCard } from "@/features/tickets";
 import { logDocEvent, SEND_OUTCOMES } from "@/features/docs/docEvents";
-import { blockingGaps, isStale, payDeadlineHours, staleDays, type FlowCtx, type Transition } from "./flow";
-import { closeActions, closedAs } from "./stages";
+import { blockingGaps, isStale, staleDays, type FlowCtx, type Transition } from "./flow";
+import { closeActions, closedAs, stageLabel, stageOf } from "./stages";
 import { afterEdit, allVerified as everyVerified, markVerified, verifyState } from "./verification";
 import { ConfirmTransition, type TransitionSubmit } from "./ConfirmTransition";
 import { acceptBooking, applyDiscount, cancelBooking, rejectBooking } from "./ops";
 import { toast } from "sonner";
 
 const validPhone = (p: string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
+
 /* الإطلاق التجريبي: لا تُثبت اللوحة إلا تحويلاتٍ راجعها الموظف. */
 const PAY_METHODS = ["تحويل بنكي"];
 
 type WorkState = "ready" | "done" | "blocked";
-const card = { background: "#fff", border: `1px solid ${B.border}` } as const;
 const SHEET = 1080;
+/* الرقم اللاتيني داخل سطرٍ عربي: يُعزل اتجاهه ويُحاذى إلى بداية السطر. */
+const LTR = { direction: "ltr", unicodeBidi: "isolate", textAlign: "end" } as const;
 
 /** ترتيب المقاعد المختارة يحمل توزيع الحجز: يختار الموظف الذكور أولاً
     ثم الإناث، فيبقى اللون أداة ترتيب حقيقية لا تخميناً من الهوية. */
@@ -85,6 +92,11 @@ function isSoloFemale(booking: Booking): boolean {
   return booking.pilgrims[0]?.gender === "female";
 }
 
+/** نقطةٌ بلون الجنس في الكروكي — تربط الحقل بمفتاح الألوان تحته. */
+function GenderDot({ g }: { g: "male" | "female" }) {
+  return <span aria-hidden className="inline-block rounded-full align-middle" style={{ width: 8, height: 8, marginInlineEnd: 6, background: SEAT_TONE[g].fg }} />;
+}
+
 /** للحجوزات التي أُنشئت قبل أن يطلب نموذج الموظف التوزيع. لا نخمن
     الجنس من الاسم أو من المقعد؛ الموظف يثبته مرة واحدة فيختفي الرمادي. */
 function TravellerDistributionFix({ booking, onSave }: { booking: Booking; onSave: (counts: BookingTravellerCounts) => void }) {
@@ -101,102 +113,172 @@ function TravellerDistributionFix({ booking, onSave }: { booking: Booking; onSav
     onSave({ men, women, children: 0 });
     toast.success("حُفظ توزيع المعتمرين في الكروكي.");
   };
-  const input = { width: 62, padding: "7px 8px", textAlign: "center" as const, direction: "ltr" as const, borderColor: B.border, background: "#fff", color: B.black };
+  const num = { textAlign: "center", direction: "ltr" } as const;
   return (
-    <div className="mx-5 mt-3 rounded-xl px-3.5 py-3 flex flex-wrap items-end gap-3" style={{ background: "#FFF9EF", border: "1px solid #E9D7B5" }}>
-      <div className="text-xs font-bold" style={{ color: B.text2 }}>حدّد توزيع هذا الحجز لتلوين المقاعد</div>
-      <label className="text-xs font-bold" style={{ color: "#1E52C7" }}>المعتمرون<NumericInput min={0} max={people - women} value={men} onValueChange={v => setMen(Math.min(Math.max(0, Number(v) || 0), people - women))} className="block mt-1 rounded-lg border" style={input}/></label>
-      <label className="text-xs font-bold" style={{ color: "#B4266E" }}>المعتمرات<NumericInput min={0} max={people - men} value={women} onValueChange={v => setWomen(Math.min(Math.max(0, Number(v) || 0), people - men))} className="block mt-1 rounded-lg border" style={input}/></label>
-      <button type="button" onClick={save} className="rounded-lg px-3 py-2 text-xs font-bold cursor-pointer" style={{ background: B.gold, color: B.black, border: "none" }}>حفظ التوزيع</button>
-      <span className="text-xs" style={{ color: total === people ? "#1E7A44" : "#B4530C" }}>{total} / {people}</span>
+    <div className="rounded-xl p-4" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
+      <div className="text-sm font-bold" style={{ color: B.black }}>توزيع هذا الحجز</div>
+      <div className="ui-hint" style={{ marginTop: 2 }}>حدّده مرّةً واحدة لتُلوَّن مقاعده في الكروكي.</div>
+      <div className="flex flex-wrap items-end gap-3 mt-3">
+        <div style={{ width: 104 }}>
+          <Field label={<><GenderDot g="male" />المعتمرون</>}>
+            <NumericInput min={0} max={people - women} value={men} onValueChange={v => setMen(Math.min(Math.max(0, Number(v) || 0), people - women))} className="ui-input" style={num} />
+          </Field>
+        </div>
+        <div style={{ width: 104 }}>
+          <Field label={<><GenderDot g="female" />المعتمرات</>}>
+            <NumericInput min={0} max={people - men} value={women} onValueChange={v => setWomen(Math.min(Math.max(0, Number(v) || 0), people - men))} className="ui-input" style={num} />
+          </Field>
+        </div>
+        <Button variant="dark" onClick={save}>حفظ التوزيع</Button>
+        <Badge tone={total === people ? "success" : "warn"}>{total} / {people}</Badge>
+      </div>
     </div>
   );
 }
 
 /* ════════ قِطَعٌ صغيرة ════════════════════════════════════════════ */
 
-/** خانةٌ في شبكة الملخّص — عنوانٌ صغير فوق قيمةٍ سميكة.
+/** «معلومة: قيمة» في رأس الطلب — تسميةٌ خافتة فوق قيمةٍ تُقرأ.
 
-    الخطوط حدودٌ على الخليّة نفسها لا فجواتٌ تكشف خلفيةَ الحاوية: الشبكة
-    تلتفّ بعدد أعمدةٍ يختلف بالمقاس، وصفٌّ أخيرٌ ناقص كان يترك شريطاً
-    رمادياً مكان الخلايا الغائبة. والحاوية تقصّ حدَّ العمود الأول بإزاحة
-    بكسلٍ واحد، فلا يظهر خطٌّ طائشٌ عند حافّة البطاقة. */
-function Cell({ label, value, mono, tone, wrap }: { label: string; value: string; mono?: boolean; tone?: string; wrap?: boolean }) {
+    كانت خاناتٍ بحدودٍ على كل خليّة؛ عشرة مربّعاتٍ بوزنٍ واحد لا يُعرف
+    أيّها يُقرأ أولاً. صارت أزواجاً بلا حدود: الفراغ يفصل، والاسم
+    والمبلغ والخطوة يصعدون إلى الرأس. */
+function Fact({ label, children, sub, ltr, className }: { label: string; children: ReactNode; sub?: ReactNode; ltr?: boolean; className?: string }) {
   return (
-    <div className="min-w-0 px-4 py-3"
-      style={{ borderTop: `1px solid ${B.border}`, borderInlineStart: `1px solid ${B.border}` }}>
-      <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>{label}</div>
-      <div className={`font-bold text-sm ${wrap ? "whitespace-normal leading-6" : "truncate"}`} title={value}
-        style={{ color: tone ?? B.black, fontFamily: mono ? "var(--font-app)" : "inherit", direction: mono ? "ltr" : undefined, textAlign: mono ? "right" : undefined }}>
-        {value}
-      </div>
+    <div className={`ts-kv ${className ?? ""}`}>
+      <span className="ts-kv-k">{label}</span>
+      <span className="ts-kv-v" style={ltr ? LTR : undefined}>{children}</span>
+      {sub && <span className="text-xs" style={{ color: B.muted, lineHeight: 1.5 }}>{sub}</span>}
     </div>
   );
 }
 
-/** زرّ عملٍ واحد: مضيءٌ إن كان دوره، ✓ إن تمّ، مطفأٌ إن لم يحن. */
-function WorkButton({ state, label, doneLabel, icon: Icon, busy, onClick }: {
-  state: WorkState; label: string; doneLabel: string;
+/** شارة الخطوة — نفس صياغة وألوان عمود «الخطوة» في جدول الطلبات
+    (StageBadge هناك): من فتح الطلب من الجدول يقرأ هنا ما قرأه هناك. */
+function StageTag({ booking }: { booking: Booking }) {
+  const closed = closedAs(booking.status);
+  if (closed) return <Badge tone={closed === "rejected" ? "danger" : "neutral"} dot>{closed === "rejected" ? "مرفوض" : "ملغى"}</Badge>;
+  const stage = stageOf(booking);
+  const tone = booking.status === "confirmed" || stage === "done" ? "success" : stage === "verify" ? "warn" : stage === "seats" ? "info" : "gold";
+  return <Badge tone={tone} dot>{stageLabel(stage)}</Badge>;
+}
+
+/** زرّ عملٍ واحد: مضيءٌ إن كان دوره، علامة تمامٍ إن تمّ، مقفلٌ إن لم يحن.
+
+    سطران في كل زرّ: الفعل، وتحته سببُ حاله — «بعد التحقق من البيانات»
+    تحت زرٍّ مقفل تُغني عن التخمين لماذا لا يُضغط. والذهبي للزرّ الذي
+    عليه الدور وحده (`primary`)؛ زرٌّ جاهزٌ وليس دوره يبقى أبيض. */
+function WorkButton({ state, primary, label, doneLabel, hint, icon: Icon, busy, onClick }: {
+  state: WorkState; primary?: boolean; label: string; doneLabel: string; hint: string;
   icon: typeof Check; busy?: boolean; onClick: () => void;
 }) {
   const done = state === "done";
   const ready = state === "ready";
+  const box = { width: "100%", height: 60, padding: "0 16px", borderRadius: 14, gap: 12, justifyContent: "flex-start", lineHeight: 1.3 } as const;
+  const inner = (
+    <>
+      <span className="flex items-center justify-center flex-shrink-0" style={{ width: 20 }}>
+        {busy ? <Spinner size={15} color={B.black} track="rgba(27,23,18,0.25)" />
+          : done ? <Check size={18} /> : ready ? <Icon size={18} /> : <Lock size={16} />}
+      </span>
+      <span className="flex flex-col items-start min-w-0 text-start" style={{ gap: 2 }}>
+        <span className="truncate max-w-full" style={{ fontSize: 15, fontWeight: 600 }}>{done ? doneLabel : label}</span>
+        <span className="truncate max-w-full" style={{ fontSize: 12, fontWeight: 400, opacity: ready && primary ? 0.82 : 1 }}>{hint}</span>
+      </span>
+    </>
+  );
+  if (done) {
+    return (
+      <div className="flex items-center" title={`${doneLabel} — ${hint}`}
+        style={{ ...box, background: TONE.success.bg, border: `1px solid ${TONE.success.line}`, color: TONE.success.fg }}>{inner}</div>
+    );
+  }
+  if (!ready) {
+    return (
+      <button type="button" disabled title={`${label} — ${hint}`} className="flex items-center"
+        style={{ ...box, background: B.fill, border: `1px solid ${B.border}`, color: B.text2, fontFamily: "inherit" }}>{inner}</button>
+    );
+  }
   return (
-    <button onClick={() => { if (ready && !busy) onClick(); }} disabled={!ready || busy}
-      title={done ? doneLabel : label}
-      className="inline-flex items-center justify-center gap-2 rounded-xl font-extrabold"
-      style={{
-        padding: "13px 22px", fontSize: 15, border: done ? "1px solid #C4E4CE" : "none",
-        background: done ? "#E3F3E8" : ready ? B.gold : "#F1EFEB",
-        color: done ? "#1E7A44" : ready ? B.black : "#A69D91",
-        cursor: ready && !busy ? "pointer" : "default",
-      }}>
-      {busy ? <Spinner size={14} color={B.black} track="rgba(27,23,18,0.25)" />
-        : done ? <Check size={16} /> : <Icon size={16} />}
-      {done ? doneLabel : label}
-    </button>
+    <button type="button" onClick={() => { if (!busy) onClick(); }} disabled={busy} aria-busy={busy || undefined} title={label}
+      className={`ui-btn ui-btn--${primary ? "primary" : "secondary"}`} style={box}>{inner}</button>
   );
 }
 
-/** زرٌّ صغيرٌ في صفّ التعامل مع العميل. */
-function SmallButton({ icon: Icon, label, onClick, color, bg, href }: {
-  icon: typeof Check; label: string; onClick?: () => void; color?: string; bg?: string; href?: string;
-}) {
-  const style: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 10,
-    fontSize: 13, fontWeight: 700, textDecoration: "none", cursor: "pointer",
-    background: bg ?? "#fff", color: color ?? B.text2, border: `1px solid ${bg ? "transparent" : B.border}`,
-  };
-  return href
-    ? <a href={href} style={style}><Icon size={13} />{label}</a>
-    : <button onClick={onClick} style={style}><Icon size={13} />{label}</button>;
-}
+type MenuItem = { label: string; icon?: typeof Check; danger?: boolean; onClick: () => void };
 
-/** قائمة «⋯» — الرفض والإلغاء والخصم: موجودةٌ ولا تُزاحم. */
-function MoreMenu({ items }: { items: { label: string; danger?: boolean; onClick: () => void }[] }) {
+/** قائمة «⋯» — الرفض والإلغاء والخصم: موجودةٌ ولا تُزاحم.
+
+    تُغلق بالنقر خارجها وبخروج التركيز منها وبـEscape. كانت تُغلق عند
+    خروج التركيز من زرّها وحده — فمن ينتقل بلوحة المفاتيح إلى بندٍ
+    تُغلق القائمة تحته قبل أن يضغطه. */
+function MoreMenu({ items }: { items: MenuItem[] }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
   if (!items.length) return null;
+
+  const move = (dir: 1 | -1) => {
+    const els = Array.from(wrap.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+    if (!els.length) return;
+    const at = els.indexOf(document.activeElement as HTMLButtonElement);
+    els[at < 0 ? (dir === 1 ? 0 : els.length - 1) : (at + dir + els.length) % els.length].focus();
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const dir = e.key === "ArrowDown" ? 1 : -1;
+      if (open) move(dir); else { setOpen(true); setTimeout(() => move(dir)); }
+    }
+  };
+  const firstDanger = items.findIndex(it => it.danger);
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(o => !o)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-        aria-haspopup="menu" aria-expanded={open} aria-label="إجراءات أخرى" title="إجراءات أخرى"
-        className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer flex-shrink-0"
-        style={{ background: "#fff", border: `1px solid ${B.border}`, color: B.text2 }}>
-        <MoreHorizontal size={15} />
-      </button>
+    <div ref={wrap} className="relative flex-shrink-0" onKeyDown={onKeyDown}
+      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}>
+      <IconButton ref={trigger} label="إجراءات أخرى" variant="outline" onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}>
+        <MoreHorizontal size={18} />
+      </IconButton>
       {open && (
-        <div role="menu" className="absolute left-0 mt-1 rounded-xl overflow-hidden z-20"
-          style={{ background: "#fff", border: `1px solid ${B.border}`, boxShadow: "0 8px 24px rgba(27,23,18,0.12)", minWidth: 180 }}>
+        <div id={menuId} role="menu" aria-label="إجراءات أخرى" className="absolute z-30 flex flex-col"
+          style={{ top: "calc(100% + 6px)", insetInlineEnd: 0, minWidth: 216, padding: 4, borderRadius: 12, background: B.surface, border: `1px solid ${B.border}`, boxShadow: ELEV[3] }}>
           {items.map((it, i) => (
-            <button key={it.label} role="menuitem" onMouseDown={e => e.preventDefault()}
-              onClick={() => { setOpen(false); it.onClick(); }}
-              className="w-full text-right px-4 py-2.5 text-xs font-bold cursor-pointer"
-              style={{ background: "none", border: "none", borderTop: i ? `1px solid ${B.border}` : "none", color: it.danger ? "#BE2626" : B.text2 }}>
-              {it.label}
-            </button>
+            <div key={it.label} role="none">
+              {i === firstDanger && i > 0 && <div role="separator" style={{ height: 1, margin: "4px 8px", background: B.border }} />}
+              <button type="button" role="menuitem" onMouseDown={e => e.preventDefault()}
+                onClick={() => { setOpen(false); it.onClick(); }}
+                className={`w-full flex items-center gap-2.5 rounded-lg px-3 text-start text-sm cursor-pointer whitespace-nowrap ${it.danger
+                  ? "hover:bg-[var(--k-danger-bg)] focus-visible:bg-[var(--k-danger-bg)]"
+                  : "hover:bg-[var(--k-fill)] focus-visible:bg-[var(--k-fill)]"}`}
+                style={{ height: 38, fontWeight: 500, fontFamily: "inherit", color: it.danger ? TONE.danger.fg : B.text3, filter: "none", outlineOffset: -2 }}>
+                {it.icon && <it.icon size={16} aria-hidden style={{ flexShrink: 0 }} />}
+                {it.label}
+              </button>
+            </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** لوحةٌ تُفتح في مكانها داخل بطاقة الرأس — التعديل والخصم. */
+function InlinePanel({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: B.bg, border: `1px solid ${B.border}` }}>
+      <div>
+        <div className="text-sm font-bold" style={{ color: B.black }}>{title}</div>
+        {note && <div className="ui-hint" style={{ marginTop: 2 }}>{note}</div>}
+      </div>
+      {children}
     </div>
   );
 }
@@ -206,12 +288,13 @@ function DiscountPanel({ booking, onClose, onDone }: { booking: Booking; onClose
   const [pct, setPct] = useState(String(booking.discountPercent ?? ""));
   const [reason, setReason] = useState(booking.discountReason ?? "");
   const [busy, setBusy] = useState(false);
-  const inp = "w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
-  const ist = { borderColor: B.border, background: "#fff", color: B.black, fontFamily: "inherit" } as const;
+  /* خطأ الإدخال تحت حقله لا في إشعارٍ يزول؛ وردُّ القاعدة يبقى إشعاراً. */
+  const [err, setErr] = useState<{ pct?: string; reason?: string }>({});
   async function save() {
     const p = Number(pct);
-    if (Number.isNaN(p) || p < 0 || p > 100) { toast.error("النسبة بين 0 و100"); return; }
-    if (p > 0 && !reason.trim()) { toast.error("سبب الخصم إلزامي"); return; }
+    if (Number.isNaN(p) || p < 0 || p > 100) { setErr({ pct: "النسبة بين 0 و100" }); return; }
+    if (p > 0 && !reason.trim()) { setErr({ reason: "سبب الخصم إلزامي" }); return; }
+    setErr({});
     setBusy(true);
     const r = await applyDiscount(booking.id, p, reason.trim());
     setBusy(false);
@@ -221,17 +304,26 @@ function DiscountPanel({ booking, onClose, onDone }: { booking: Booking; onClose
     onClose(); await onDone();
   }
   return (
-    <div className="rounded-xl p-4 flex flex-col gap-3 mt-3" style={{ background: "#FFFBF0", border: "1px solid #EBD9A0" }}>
-      <div className="text-xs" style={{ color: B.text2 }}>يُسجَّل باسمك ووقته وسببه ويظهر سطراً في الفاتورة. يُحسب من السعر الأصلي لا من الإجمالي الحالي.</div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div><Field label="النسبة %"><NumericInput min={0} max={100} className={inp} style={{ ...ist, direction: "ltr" }} value={pct} onValueChange={setPct} /></Field></div>
-        <div className="sm:col-span-2"><Field label="السبب"><input className={inp} style={ist} value={reason} placeholder="عميل متكرر · مجموعة · تعويض" onChange={e => setReason(e.target.value)} /></Field></div>
+    <InlinePanel title="خصم موثَّق"
+      note="يُسجَّل باسمك ووقته وسببه ويظهر سطراً في الفاتورة. يُحسب من السعر الأصلي لا من الإجمالي الحالي.">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div>
+          <Field label="النسبة %" error={err.pct}>
+            <NumericInput min={0} max={100} className="ui-input" style={{ direction: "ltr", textAlign: "end" }} value={pct}
+              onValueChange={v => { setPct(v); setErr({}); }} />
+          </Field>
+        </div>
+        <div className="sm:col-span-3">
+          <Field label="السبب" error={err.reason}>
+            <Input value={reason} invalid={!!err.reason} placeholder="عميل متكرر · مجموعة · تعويض" onChange={e => { setReason(e.target.value); setErr({}); }} />
+          </Field>
+        </div>
       </div>
       <div className="flex gap-2">
-        <button onClick={save} disabled={busy} className="px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{ background: B.gold, color: B.black, border: "none" }}>{busy ? "جارٍ الحفظ…" : "اعتماد"}</button>
-        <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer" style={{ background: B.fill, color: B.text2, border: "none" }}>إغلاق</button>
+        <Button variant="dark" loading={busy} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد"}</Button>
+        <Button variant="ghost" disabled={busy} onClick={onClose}>إغلاق</Button>
       </div>
-    </div>
+    </InlinePanel>
   );
 }
 
@@ -253,8 +345,6 @@ function QuickEdit({ booking, onSave, onCancel }: {
   const set = (i: number, k: keyof Pilgrim, v: unknown) =>
     setRows(rs => rs.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
 
-  const inp = "w-full border rounded-lg px-2.5 py-2 text-sm focus:outline-none";
-  const ist = { borderColor: B.gold, background: "#fff", color: B.black, fontFamily: "inherit" } as const;
   const pilgrimsChanged = useMemo(
     () => JSON.stringify(rows) !== JSON.stringify(booking.pilgrims), [rows, booking.pilgrims]);
 
@@ -273,55 +363,62 @@ function QuickEdit({ booking, onSave, onCancel }: {
   };
 
   return (
-    <div className="rounded-xl p-4 mt-3 flex flex-col gap-3.5" style={{ background: B.cream, border: "1px solid #EDE4CF" }}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ maxWidth: 520 }}>
+    <InlinePanel title="تعديل البيانات"
+      note="الباقة والرحلة وعدد المعتمرين لا تُصحَّح هنا — تغييرها يغيّر السعر والمقاعد.">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ maxWidth: 560 }}>
         <div>
-          <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>اسم العميل</div>
-          <input className={inp} style={ist} value={name} onChange={e => { setName(e.target.value); setErr(null); }} />
+          <Field label="اسم العميل">
+            <Input value={name} onChange={e => { setName(e.target.value); setErr(null); }} />
+          </Field>
         </div>
         <div>
-          <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>الجوال</div>
-          <input className={inp} style={{ ...ist, direction: "ltr" }} value={phone} placeholder="05xxxxxxxx"
-            onChange={e => { setPhone(e.target.value); setErr(null); }} />
+          <Field label="الجوال">
+            <Input style={{ direction: "ltr", textAlign: "end" }} value={phone} placeholder="05xxxxxxxx" inputMode="tel"
+              onChange={e => { setPhone(e.target.value); setErr(null); }} />
+          </Field>
         </div>
       </div>
 
       {rows.map((p, i) => (
-        <div key={i} className="grid grid-cols-2 lg:grid-cols-6 gap-2.5 items-end">
-          <div className="col-span-2">
-            <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>معتمر {i + 1}</div>
-            <input className={inp} style={ist} value={p.name ?? ""} placeholder="الاسم الكامل" onChange={e => set(i, "name", e.target.value)} />
+        <fieldset key={i} className="grid grid-cols-2 lg:grid-cols-12 gap-3 m-0 p-0 min-w-0 pt-4"
+          style={{ border: 0, borderTop: `1px solid ${B.border}` }}>
+          <legend className="sr-only">معتمر {i + 1}</legend>
+          <div className="col-span-2 lg:col-span-3">
+            <Field label={`معتمر ${i + 1}`}>
+              <Input value={p.name ?? ""} placeholder="الاسم الكامل" onChange={e => set(i, "name", e.target.value)} />
+            </Field>
           </div>
-          <div>
-            <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>الوثيقة</div>
-            <AppSelect value={p.docType ?? guessDocType(p.idNumber)} onChange={v => set(i, "docType", v)}
-              options={DOC_TYPES.map(d => ({ value: d.value, label: `${d.icon} ${d.label.ar}` }))} />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-2">
+            <Field label="الوثيقة">
+              <AppSelect value={p.docType ?? guessDocType(p.idNumber)} onChange={v => set(i, "docType", v)}
+                options={DOC_TYPES.map(d => ({ value: d.value, label: d.label.ar }))} />
+            </Field>
           </div>
-          <div>
-            <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>{numberLabelOf(p.docType, p.idNumber)}</div>
-            <input className={inp} style={{ ...ist, direction: "ltr" }} value={p.idNumber ?? ""}
-              placeholder={docTypeDef(p.docType).placeholder} onChange={e => set(i, "idNumber", e.target.value)} />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-2">
+            <Field label={numberLabelOf(p.docType, p.idNumber)}>
+              <Input style={{ direction: "ltr", textAlign: "end" }} value={p.idNumber ?? ""}
+                placeholder={docTypeDef(p.docType).placeholder} onChange={e => set(i, "idNumber", e.target.value)} />
+            </Field>
           </div>
-          <div>
-            <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>الجنسية</div>
-            <NationalitySelect value={p.nationality} onChange={v => set(i, "nationality", v)} subInTrigger={false} compact />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-3">
+            <Field label="الجنسية">
+              <NationalitySelect value={p.nationality} onChange={v => set(i, "nationality", v)} subInTrigger={false} compact />
+            </Field>
           </div>
-          <div>
-            <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>الميلاد</div>
-            <input type="date" className={inp} style={{ ...ist, direction: "ltr" }} value={p.birthDate ?? ""} onChange={e => set(i, "birthDate", e.target.value)} />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-2">
+            <Field label="الميلاد">
+              <ArabicDatePicker value={p.birthDate ?? ""} onChange={v => set(i, "birthDate", v)} placeholder="يوم/شهر/سنة" />
+            </Field>
           </div>
-        </div>
+        </fieldset>
       ))}
 
-      {err && <div className="text-xs font-bold" style={{ color: "#BE2626" }}>{err}</div>}
-      <div className="flex gap-2.5 flex-wrap">
-        <button onClick={save} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-          style={{ background: B.gold, color: B.black, border: "none" }}>حفظ</button>
-        <button onClick={onCancel} className="px-4 py-2.5 rounded-xl font-bold text-sm cursor-pointer"
-          style={{ background: "#fff", color: B.text2, border: `1px solid ${B.border}` }}>إلغاء</button>
-        <span className="text-xs self-center" style={{ color: B.muted }}>الباقة والرحلة وعدد المعتمرين لا تُصحَّح هنا — تغييرها يغيّر السعر والمقاعد.</span>
+      {err && <div role="alert" className="ui-error" style={{ marginTop: 0 }}>{err}</div>}
+      <div className="flex gap-2 flex-wrap">
+        <Button variant="dark" onClick={save}>حفظ</Button>
+        <Button variant="secondary" onClick={onCancel}>إلغاء</Button>
       </div>
-    </div>
+    </InlinePanel>
   );
 }
 
@@ -346,6 +443,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const tickets = useStore(s => s.tickets);
   const hotels = useStore(s => s.hotels);
   const beneficiaries = useStore(s => s.beneficiaries);
+  const navigate = useNavigate();
   const staffName = useStore(s => s.currentUser?.name) ?? booking.staff ?? "";
 
   const [busy, setBusy] = useState<null | "seats" | "pay" | "close">(null);
@@ -363,6 +461,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const [loadingDocument, setLoadingDocument] = useState<"invoice" | "ticket" | null>(null);
   const [transferRef, setTransferRef] = useState(booking.txnNo && booking.txnNo !== "—" ? booking.txnNo : "");
 
+  const linkedBeneficiaries = beneficiaries.filter(x => x.bookingIds.includes(booking.id));
   const invoice = payments.find(x => x.bookingId === booking.id);
   const ticket = tickets.find(x => x.bookingId === booking.id);
   const hotel = hotels.find(h => h.id === trip?.hotelId);
@@ -402,7 +501,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
   const flowCtx: FlowCtx = {
     booking, trip, pkg, today,
     hasInvoice: !!invoice, hasTicket: !!ticket,
-    beneficiaryLinked: beneficiaries.some(x => x.bookingIds.includes(booking.id)),
+    beneficiaryLinked: linkedBeneficiaries.length > 0,
   };
   const closed = closedAs(booking.status);
   /* المقعد كما يُقرأ: «باص ٢ · ٣» حين تتعدّد باصات الرحلة، والرقم وحده
@@ -427,7 +526,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
 
   /* ── حال الأفعال الثلاثة ──
      لا شريطَ مراحل ولا حالةٌ تُقرأ: ثلاثة أزرارٍ يقول شكلُها كلَّ شيء —
-     واحدٌ مضيءٌ هو الدور، وما قبله ✓، وما بعده مطفأ. */
+     واحدٌ مضيءٌ هو الدور، وما قبله بعلامة التمام، وما بعده مقفل. */
   const verified = everyVerified(booking.pilgrims);
   /* المقعد مقفولٌ فعلاً لا مجرّد مختار: القفل يمرّ بـaccept_booking
      فينقل الحالة، والحالة وحدها دليلُ أنه لم يعد يُباع لغيره. */
@@ -565,7 +664,7 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
     if (booking.status === "new") onStatusChange(booking.id, "reviewing");
     void logDocEvent("booking", booking.id, "note",
       { note: "تم التحقق من بيانات صاحب الطلب" }).then(bump);
-    toast.success("✓ متحقق — التالي: اختيار المقاعد");
+    toast.success("متحقق — التالي: اختيار المقاعد");
   };
 
   /** القفل والقبول في معاملةٍ واحدة (accept_booking). */
@@ -677,326 +776,403 @@ export function BookingDetail({ booking, trips, packages, allBookings, onBack, o
     void logDocEvent("ticket", ticket.ticketNo, "contact", { note: `بريد إلكتروني: ${email}` }).then(bump);
   };
 
-  const menuItems = [
-    ...(seatsLocked && booking.status === "accepted" ? [{ label: "تغيير المقاعد", onClick: startPicking }] : []),
+  const menuItems: MenuItem[] = [
+    ...(seatsLocked && booking.status === "accepted" ? [{ label: "تغيير المقاعد", icon: Armchair, onClick: startPicking }] : []),
     ...(booking.payToken && !paid
-      ? [{ label: "نسخ رابط التحويل", onClick: () => { copyText(payLinkFor(booking.id, booking.payToken)); toast.success("نُسخ رابط التحويل"); } }]
+      ? [{ label: "نسخ رابط التحويل", icon: Copy, onClick: () => { copyText(payLinkFor(booking.id, booking.payToken)); toast.success("نُسخ رابط التحويل"); } }]
       : []),
-    ...closeActions(flowCtx).map(t => ({ label: t.label, danger: true, onClick: () => setPending(t) })),
+    ...closeActions(flowCtx).map(t => ({ label: t.label, icon: t.to === "rejected" ? Ban : CircleX, danger: true, onClick: () => setPending(t) })),
   ];
 
-  /* ── شبكة الملخّص ──
-     الباقة والفندق ونوع السكن متجاورة: ثلاثتها «الرحلة» عند الموظف،
-     وتفريقها يجعله يبحث عنها في ثلاثة مواضع. */
-  const summary: { l: string; v: string; mono?: boolean; tone?: string; wrap?: boolean }[] = [
-    { l: "اسم العميل", v: booking.clientName },
-    { l: "الجوال", v: booking.clientPhone, mono: true },
-    { l: "الباقة", v: pkg?.name ?? "—" },
-    { l: "الفندق", v: hotel?.name ?? "—" },
-    { l: "نوع السكن", v: booking.roomType || "—", wrap: true },
-    { l: "عدد الأشخاص", v: String(need) },
-    { l: "توزيع المسافرين", v: travellerSummary, wrap: true },
-    { l: "المغادرة", v: `${trip?.departureDate ?? "—"}${trip?.departureTime ? ` · ${trip.departureTime}` : ""}`, mono: true },
-    { l: "العودة", v: trip?.returnDate ?? "—", mono: true },
-    { l: "المبلغ", v: `${sarNumber(booking.total)} ر.س`, mono: true, tone: B.gold },
-    ...(seatsLocked ? [{ l: "المقاعد", v: needsPrivacySeat
-      ? pairText(booking.seats[0], savedPrivacySeats[0])
-      : seatText(booking.seats), mono: !multiBus, wrap: multiBus }] : []),
-    ...(booking.discountPercent ? [{ l: "خصم معتمد", v: `${booking.discountPercent}%`, tone: "#8A6A08" }] : []),
-  ];
+  /* ── الذهبي لزرٍّ واحد ──
+     زرّ الدور هو أوّل جاهزٍ في الصفّ. وحين يُفتح اختيار المقاعد ينتقل
+     الذهبي إلى «قفل المقاعد» في شريط الكروكي، وبعد الدفع لا دور لأحد —
+     فلا يبقى في الصفحة زرّان يتنازعان العين. */
+  const primaryStep = picking || paid || closed ? null
+    : verifyStep === "ready" ? "verify" : seatStep === "ready" ? "seats" : payStep === "ready" ? "pay" : null;
+  const closedHint = "الطلب مغلق";
+  const gapHint = "أكمل البيانات الناقصة أولاً";
+  const verifyHint = verifyStep === "done" ? "روجعت بيانات صاحب الطلب"
+    : verifyStep === "ready" ? "راجع الهويات ثم ثبّت المراجعة"
+    : closed ? closedHint : gapHint;
+  const seatHint = seatStep === "done" ? (needsPrivacySeat ? pairText(booking.seats[0], savedPrivacySeats[0]) : seatText(booking.seats))
+    : seatStep === "ready" ? "من الكروكي أسفل الصفحة"
+    : closed ? closedHint : !verified ? "بعد التحقق من البيانات" : gapHint;
+  const payHint = payStep === "done"
+      ? ([booking.payMethod, booking.payDate && booking.payDate !== "—" ? fmtDateShort(booking.payDate) : ""].filter(Boolean).join(" · ") || "استُلم المبلغ")
+    : payStep === "ready" ? "يؤكّد الحجز ويُصدر الفاتورة والتذكرة"
+    : closed ? closedHint : "بعد قفل المقاعد";
+
+  const stale = isStale(booking, trip, today) && !closed;
+  const detailsId = useId();
+  const transferId = useId();
+  const detailsRef = useRef<HTMLElement>(null);
+  /* «تفاصيل أكثر» في صفّ الأزرار تفتح القسم وتنزل إليه: القسم تحت
+     الكروكي، ومن يفتحه من أعلى الصفحة لا يرى شيئاً تغيّر. */
+  const toggleDetails = (scroll: boolean) => {
+    const next = !details;
+    setDetails(next);
+    if (next && scroll) setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+  const picked = sel.length === seatsNeeded;
+  const sectionTitle = { fontSize: 14, marginBottom: 10 } as const;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex-1 w-full min-w-0 px-4 md:px-8 pb-12 pt-5">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold mb-4 cursor-pointer" style={{ background: "none", border: "none", color: B.text2 }}>
-        <ArrowRight size={14} />عودة للطلبات
-      </button>
-
-      {/* ══ ١ · الملخّص ══ */}
-      <div className="rounded-2xl overflow-hidden" style={{ ...card, maxWidth: SHEET }}>
-        <div className="flex items-center justify-between gap-3 px-5 py-3" style={{ background: B.cream, borderBottom: "1px solid #EDE4CF" }}>
-          <div className="flex items-baseline gap-2.5 flex-wrap min-w-0">
-            <span className="font-extrabold" style={{ fontFamily: "var(--font-app)", fontSize: 16, color: B.black }}>{booking.id}</span>
-            <span className="text-xs" style={{ color: B.muted }}>أُنشئ {booking.createdAt}</span>
-            {isStale(booking, trip, today) && !closed && (
-              <span className="text-xs font-bold" style={{ color: "#B4530C" }}>· مضت رحلته قبل {staleDays(trip, today)} يوماً</span>
-            )}
-            {closed && (
-              <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full" style={{ background: "#FBE6E6", color: "#BE2626" }}>
-                {closed === "rejected" ? "مرفوض" : "ملغى"}
-              </span>
-            )}
-          </div>
-          <MoreMenu items={menuItems} />
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE }}
+      className="flex-1 w-full min-w-0 px-4 md:px-8 pb-12 pt-1">
+      <div className="flex flex-col gap-4" style={{ maxWidth: SHEET }}>
+        <div>
+          <Button variant="ghost" size="sm" icon={<ArrowRight size={15} />} onClick={onBack} style={{ marginInlineStart: -8 }}>عودة للطلبات</Button>
         </div>
 
-        {/* الشبكة */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 overflow-hidden" style={{ marginInlineStart: -1 }}>
-          {summary.map(f => <Cell key={f.l} label={f.l} value={f.v} mono={f.mono} tone={f.tone} wrap={f.wrap} />)}
-        </div>
-
-        {booking.pricing && (
-          <div className="px-5 py-4" style={{ borderTop: `1px solid ${B.border}`, background: "#FDFCFA" }}>
-            <div className="text-xs font-bold mb-2.5" style={{ color: B.text2 }}>ملخص السعر المعتمد عند الحجز</div>
-            <div className="flex flex-col" style={{ gap: 7, maxWidth: 520 }}>
-              <div className="flex items-center justify-between gap-4 text-sm" style={{ color: B.text2 }}>
-                <span>إجمالي المواصلات</span>
-                <b style={{ color: B.black, fontFamily: "var(--font-app)" }}>{sar(booking.pricing.transportTotal)}</b>
+        {/* ══ ١ · رأس الطلب ══ */}
+        <section className="ui-card" aria-label={`الطلب ${booking.id}`}>
+          <div className="flex items-start gap-4 px-5 pt-5">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap text-xs" style={{ color: B.muted }}>
+                <span className="font-bold" style={{ color: B.text2, direction: "ltr", unicodeBidi: "isolate" }}>{booking.id}</span>
+                <span aria-hidden>·</span>
+                <span>أُنشئ {fmtDateTime(booking.createdAt)}</span>
               </div>
-              <div className="flex items-center justify-between gap-4 text-sm" style={{ color: B.text2 }}>
-                <span>إجمالي السكن</span>
-                <b style={{ color: B.black, fontFamily: "var(--font-app)" }}>{sar(booking.pricing.accommodationTotal)}</b>
-              </div>
-              <div className="flex items-center justify-between gap-4 pt-2 text-sm font-extrabold" style={{ borderTop: `1px solid ${B.border}`, color: B.black }}>
-                <span>الإجمالي</span>
-                <span style={{ color: B.gold, fontFamily: "var(--font-app)", fontSize: 17 }}>{sar(booking.total)}</span>
+              <div className="flex items-center gap-x-3 gap-y-2 flex-wrap mt-1.5">
+                <h2 className="font-extrabold" style={{ margin: 0, fontSize: 20, lineHeight: 1.4, color: B.black }}>{booking.clientName}</h2>
+                <StageTag booking={booking} />
+                {stale && <Badge tone="danger">مضت رحلته قبل {staleDays(trip, today)} يوماً</Badge>}
               </div>
             </div>
+            <div className="hidden sm:block text-end flex-shrink-0">
+              <div className="ts-kv-k">الإجمالي</div>
+              <div className="font-extrabold" style={{ fontSize: 22, lineHeight: 1.3, color: B.black, whiteSpace: "nowrap" }}>{sar(booking.total)}</div>
+            </div>
+            <MoreMenu items={menuItems} />
           </div>
-        )}
 
-        {/* ══ ٢ · صفّ التعامل مع العميل ══ */}
-        <div className="flex items-center gap-2 flex-wrap px-5 py-3.5" style={{ borderTop: `1px solid ${B.border}` }}>
-          <SmallButton icon={Pencil} label={editing ? "إغلاق التعديل" : "تعديل البيانات"} onClick={() => setEditing(v => !v)} color="#8a6a08" />
-          <SmallButton icon={Phone} label="اتصال" href={`tel:${booking.clientPhone}`} />
-          <SmallButton icon={Phone} label="واتساب" onClick={sendWhatsApp} bg="#25D366" color="#fff" />
-          <SmallButton icon={FileText} label={details ? "إخفاء التفاصيل" : "تفاصيل أكثر"} onClick={() => setDetails(v => !v)} />
-          {booking.payToken && !paid && <SmallButton icon={Wallet} label="إرسال تعليمات التحويل" onClick={sendWhatsApp} bg="#EAF1FE" color="#2457A6" />}
-          {isAdmin && !paid && !closed && <SmallButton icon={Wallet} label={booking.discountPercent ? "تعديل الخصم الموثق" : "خصم موثق"} onClick={() => setDiscountOpen(v => !v)} bg="#FFF4DE" color="#8A6200" />}
-          {paid && <SmallButton icon={Printer} label={loadingDocument === "invoice" ? "جارٍ فتح الفاتورة…" : "الفاتورة"} onClick={() => void openDocument("invoice")} />}
-          {paid && <SmallButton icon={Printer} label={loadingDocument === "ticket" ? "جارٍ فتح التذكرة…" : "التذكرة"} onClick={() => void openDocument("ticket")} />}
-          {paid && ticket && !!email && <SmallButton icon={Mail} label="بريد" onClick={sendEmail} />}
-        </div>
-
-        {(discountOpen || editing) && (
-          <div className="px-5 pb-1">
-            {discountOpen && <DiscountPanel booking={booking} onClose={() => setDiscountOpen(false)} onDone={async () => { await onRefresh(); bump(); }} />}
-            {editing && (
-              <QuickEdit booking={booking} onCancel={() => setEditing(false)}
-                onSave={(client, pilgrims) => {
-                  if (client) onClientChange(booking.id, client);
-                  if (pilgrims) onPilgrimsChange(booking.id, pilgrims);
-                  void logDocEvent("booking", booking.id, "note", { note: "تصحيح بيانات الطلب" }).then(bump);
-                  setEditing(false);
-                  toast.success("حُفظت التعديلات");
-                }} />
+          {/* الباقة والفندق ونوع السكن متجاورة: ثلاثتها «الرحلة» عند الموظف،
+              وتفريقها يجعله يبحث عنها في ثلاثة مواضع. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 px-5 pt-5 pb-5">
+            <Fact className="sm:hidden" label="الإجمالي">{sar(booking.total)}</Fact>
+            <Fact label="الجوال" ltr>{booking.clientPhone}</Fact>
+            <Fact label="الباقة">{pkg?.name ?? "—"}</Fact>
+            <Fact label="الفندق">{hotel?.name ?? "—"}</Fact>
+            <Fact label="نوع السكن">{booking.roomType || "—"}</Fact>
+            <Fact label="عدد الأشخاص" sub={travellerSummary}>{need}</Fact>
+            <Fact label="المغادرة" sub={trip?.departureTime ? fmtTime(trip.departureTime) : undefined}>{fmtDayDate(trip?.departureDate)}</Fact>
+            <Fact label="العودة">{fmtDayDate(trip?.returnDate)}</Fact>
+            {seatsLocked && (
+              <Fact label="المقاعد">{needsPrivacySeat ? pairText(booking.seats[0], savedPrivacySeats[0]) : seatText(booking.seats)}</Fact>
+            )}
+            {!!booking.discountPercent && (
+              <Fact label="خصم معتمد"><span style={{ color: TONE.warn.fg }}>{booking.discountPercent}%</span></Fact>
             )}
           </div>
-        )}
 
-        {/* ══ ٣ · إجراءات الطلب ══ */}
-        <div className="px-5 py-4" style={{ borderTop: `1px solid ${B.border}`, background: "#FDFCFA" }}>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <WorkButton state={verifyStep} icon={Check} label="تم التحقق" doneLabel="متحقق" onClick={runVerify} />
-            <WorkButton state={seatStep} icon={Armchair} busy={busy === "seats"}
-              label={needsPrivacySeat ? "اختيار مقعدي الخصوصية" : "اختيار المقاعد"}
-              doneLabel={needsPrivacySeat
-                ? `مقعدها ${pairText(booking.seats[0], savedPrivacySeats[0])}`
-                : `المقاعد ${seatText(booking.seats)}`}
-              onClick={startPicking} />
+          {booking.pricing && (
+            <div className="flex items-center gap-x-6 gap-y-1.5 flex-wrap px-5 py-3 text-sm" style={{ borderTop: `1px solid ${B.border}`, background: B.bg, color: B.text2 }}>
+              <span className="text-xs font-bold" style={{ color: B.muted }}>السعر المعتمد عند الحجز</span>
+              <span>إجمالي المواصلات <b style={{ color: B.black }}>{sar(booking.pricing.transportTotal)}</b></span>
+              <span>إجمالي السكن <b style={{ color: B.black }}>{sar(booking.pricing.accommodationTotal)}</b></span>
+              <span>الإجمالي <b style={{ color: B.black }}>{sar(booking.total)}</b></span>
+            </div>
+          )}
+
+          {/* ══ ٢ · صفّ التعامل مع العميل ══ */}
+          <div className="flex items-center gap-2 flex-wrap px-5 py-3" style={{ borderTop: `1px solid ${B.border}` }}>
+            <Button size="sm" icon={<Pencil size={14} />} aria-expanded={editing} onClick={() => setEditing(v => !v)}>{editing ? "إغلاق التعديل" : "تعديل البيانات"}</Button>
+            <a href={`tel:${booking.clientPhone}`} className="ui-btn ui-btn--secondary ui-btn--sm"><Phone size={14} />اتصال</a>
+            <Button size="sm" icon={<MessageCircle size={14} />} onClick={sendWhatsApp}>واتساب</Button>
+            {booking.payToken && !paid && <Button size="sm" icon={<Send size={14} />} onClick={sendWhatsApp}>إرسال تعليمات التحويل</Button>}
+            {isAdmin && !paid && !closed && (
+              <Button size="sm" icon={<Percent size={14} />} aria-expanded={discountOpen} onClick={() => setDiscountOpen(v => !v)}>
+                {booking.discountPercent ? "تعديل الخصم الموثق" : "خصم موثق"}
+              </Button>
+            )}
+            {paid && <Button size="sm" icon={<FileText size={14} />} loading={loadingDocument === "invoice"} onClick={() => void openDocument("invoice")}>{loadingDocument === "invoice" ? "جارٍ فتح الفاتورة…" : "الفاتورة"}</Button>}
+            {paid && <Button size="sm" icon={<Ticket size={14} />} loading={loadingDocument === "ticket"} onClick={() => void openDocument("ticket")}>{loadingDocument === "ticket" ? "جارٍ فتح التذكرة…" : "التذكرة"}</Button>}
+            {paid && ticket && !!email && <Button size="sm" icon={<Mail size={14} />} onClick={sendEmail}>بريد</Button>}
+            {linkedBeneficiaries.map(beneficiary => (
+              <Button key={beneficiary.id} size="sm" icon={<UserRound size={14} />}
+                onClick={() => navigate(`/admin/beneficiaries?beneficiary=${encodeURIComponent(beneficiary.id)}`)}>
+                ملف المستفيد: {beneficiary.name}
+              </Button>
+            ))}
+            <Button size="sm" variant="ghost" className="sm:ms-auto" aria-expanded={details} aria-controls={detailsId}
+              iconEnd={<ChevronDown size={14} style={{ transform: details ? "rotate(180deg)" : undefined }} />}
+              onClick={() => toggleDetails(true)}>{details ? "إخفاء التفاصيل" : "تفاصيل أكثر"}</Button>
+          </div>
+
+          {(discountOpen || editing) && (
+            <div className="px-5 pb-5 flex flex-col gap-3">
+              {discountOpen && <DiscountPanel booking={booking} onClose={() => setDiscountOpen(false)} onDone={async () => { await onRefresh(); bump(); }} />}
+              {editing && (
+                <QuickEdit booking={booking} onCancel={() => setEditing(false)}
+                  onSave={(client, pilgrims) => {
+                    if (client) onClientChange(booking.id, client);
+                    if (pilgrims) onPilgrimsChange(booking.id, pilgrims);
+                    void logDocEvent("booking", booking.id, "note", { note: "تصحيح بيانات الطلب" }).then(bump);
+                    setEditing(false);
+                    toast.success("حُفظت التعديلات");
+                  }} />
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ══ ٣ · إجراءات الطلب ══
+            ثلاثة أزرارٍ في صفٍّ واحد لا شريطُ مراحل (قرارٌ سابق): الموظف
+            يسأل «وش أسوي الآن؟» وجوابه الزرّ الذهبي الوحيد. */}
+        <section className="ui-card @container" aria-label="إجراءات الطلب">
+          {/* شبكةٌ واحدة تحمل السطر الإرشادي والأزرار وحقل المرجع: الحقل فوق
+              زرّ الدفع في عموده، والإرشاد يملأ ما فوق الزرّين الآخرين — فلا
+              فراغَ معلّق. وعلى الشاشة الضيقة يصير عموداً واحداً والحقل قبل
+              زرّه مباشرة (order). */}
+          <div className="grid grid-cols-1 @[680px]:grid-cols-3 gap-3 items-end p-5">
+            <div className={`order-1 self-start flex items-start gap-2.5 ${payStep === "ready" ? "@[680px]:col-span-2" : "@[680px]:col-span-3"}`}>
+              {blockLine
+                ? <AlertTriangle size={16} aria-hidden style={{ color: TONE.warn.fg, flexShrink: 0, marginTop: 3 }} />
+                : <Info size={16} aria-hidden style={{ color: B.muted, flexShrink: 0, marginTop: 3 }} />}
+              <p className="text-sm" style={{ margin: 0, lineHeight: 1.6, color: blockLine ? TONE.warn.fg : B.text3, fontWeight: blockLine ? 600 : 500 }}>{nextLine}</p>
+            </div>
             {payStep === "ready" && (
-              <div style={{ width: 220 }}>
-                <input value={transferRef} onChange={e => setTransferRef(e.target.value)} placeholder="مرجع التحويل أو رقم الإيصال"
-                  aria-label="مرجع التحويل أو رقم الإيصال" className="w-full rounded-xl border px-3 py-2 text-xs focus:outline-none"
-                  style={{ borderColor: B.border, color: B.black, direction: "ltr", fontFamily: "var(--font-app)" }} />
+              <div className="order-4 @[680px]:order-2 min-w-0">
+                <label className="ui-label" htmlFor={transferId}>مرجع التحويل أو رقم الإيصال<span className="ui-req">*</span></label>
+                <Input id={transferId} value={transferRef} onChange={e => setTransferRef(e.target.value)} placeholder="TRF-000000"
+                  style={{ direction: "ltr", textAlign: "end" }} />
               </div>
             )}
-            <WorkButton state={payStep} icon={Wallet} busy={busy === "pay"}
-              label={`تم استلام ${sarNumber(booking.total)} ر.س`} doneLabel="مدفوع" onClick={recordPayment} />
-          </div>
-          <div className="text-xs mt-2.5" style={{ color: blockLine ? "#B4530C" : B.muted, fontWeight: blockLine ? 700 : 500 }}>{nextLine}</div>
-        </div>
-      </div>
-
-      {/* ══ ٤ · كروكي المقاعد ══ */}
-      <div ref={croquisRef} className="rounded-2xl overflow-hidden mt-3" style={{ ...card, maxWidth: SHEET }}>
-        <div className="flex items-center justify-between gap-3 px-5 py-3 flex-wrap" style={{ borderBottom: `1px solid ${B.border}` }}>
-          <div className="font-bold text-sm flex items-center gap-2" style={{ color: B.black }}>
-            <Armchair size={15} style={{ color: B.gold }} />كروكي المقاعد
-          </div>
-          {/* تبويبات الرحلات — لا تظهر إلا إن وُجدت رحلةٌ ثانية فعلاً */}
-          {croquisTrips.length > 1 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {croquisTrips.map(t => {
-                const on = t.id === shownTrip?.id;
-                return (
-                  <button key={t.id} onClick={() => { if (!picking) setTabId(t.id); }} disabled={picking}
-                    title={picking ? "أنهِ اختيار المقاعد أولاً" : `رحلة ${t.departureDate}`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                    style={{
-                      background: on ? B.gold : "#fff", color: on ? B.black : B.text2,
-                      border: `1px solid ${on ? B.gold : B.border}`, fontFamily: "var(--font-app)",
-                      cursor: picking ? "not-allowed" : "pointer", opacity: picking && !on ? 0.5 : 1,
-                    }}>
-                    {t.departureDate}{t.id === trip?.id ? " ★" : ""}
-                  </button>
-                );
-              })}
+            <div className="order-2 @[680px]:order-3 min-w-0">
+              <WorkButton state={verifyStep} primary={primaryStep === "verify"} icon={Check} label="تم التحقق" doneLabel="متحقق" hint={verifyHint} onClick={runVerify} />
             </div>
-          )}
-        </div>
-
-        {!shownTrip || !seatStats ? (
-          <div className="px-5 py-10 text-center text-sm" style={{ color: B.muted }}>الطلب بلا رحلة — لا كروكي.</div>
-        ) : (
-          <>
-            {/* ملخّص السعة */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 overflow-hidden"
-              style={{ marginInlineStart: -1, borderBottom: `1px solid ${B.border}` }}>
-              {[
-                { l: "إجمالي المقاعد", v: String(seatStats.capacity), tone: B.black },
-                { l: "المحجوز", v: String(seatStats.booked), tone: "#8A6A08" },
-                { l: "المتبقي", v: String(seatStats.available), tone: seatStats.available > 0 ? "#1E7A44" : "#BE2626" },
-                { l: "توزيع الحجوزات", v: `${seatStats.m} ذكور · ${seatStats.f} إناث${seatStats.children ? ` · ${seatStats.children} أطفال` : ""}`, tone: B.text2 },
-              ].map(s => (
-                <div key={s.l} className="px-4 py-3" style={{ borderInlineStart: `1px solid ${B.border}` }}>
-                  <div className="text-xs font-semibold mb-1" style={{ color: B.muted }}>{s.l}</div>
-                  <div className="font-extrabold" style={{ color: s.tone, fontSize: 18, fontFamily: "var(--font-app)" }}>{s.v}</div>
-                </div>
-              ))}
+            <div className="order-3 @[680px]:order-4 min-w-0">
+              <WorkButton state={seatStep} primary={primaryStep === "seats"} icon={Armchair} busy={busy === "seats"}
+                label={needsPrivacySeat ? "اختيار مقعدي الخصوصية" : "اختيار المقاعد"}
+                doneLabel={needsPrivacySeat ? "مقعدها مقفول" : "المقاعد مقفولة"} hint={seatHint}
+                onClick={startPicking} />
             </div>
-            {/* قد يأتي حجزٌ قديم، أو طلب داخلي قبل حفظ التوزيع. لا نخمن
-                جنس المقعد من ترتيب المقاعد أو من جنس صاحب الطلب. */}
-            {seatStats.unknown > 0 && (
-              <div className="px-5 pt-3 text-xs" style={{ color: "#B4530C" }}>
-                {seatStats.unknown} مقعد محجوز بحاجة إلى تحديد نوع المسافر؛ يظهر رمادياً حتى يُحدَّث التوزيع.
-              </div>
-            )}
-            {isOwnTrip && seatStats.unknown > 0 && <TravellerDistributionFix booking={booking} onSave={counts => onTravellerCountsChange(booking.id, counts)} />}
-
-            <div className="p-5">
-              {isOwnTrip && needsPrivacySeat && (
-                <div className="mb-4 rounded-xl px-3.5 py-3 text-xs font-bold" style={{ background: "#F3EAFE", border: "1px solid #D9C4F3", color: "#6F3AA8" }}>
-                  هذه معتمرة منفردة: اختر مقعدين متجاورين. الأول لها، والثاني يُفرّغ للخصوصية ولا يُباع لراكب آخر.
-                </div>
-              )}
-              {isOwnTrip && savedCounts && savedCountTotal === need && (
-                <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold" style={{ color: B.text2 }}>
-                  <span>رتّب المقاعد بالترتيب: <b style={{ color: "#1E52C7" }}>{savedCounts.men} ذكور</b> أولاً، ثم <b style={{ color: "#B4266E" }}>{savedCounts.women} إناث</b>.</span>
-                  <span style={{ color: B.muted }}>الأزرق ذكر · الوردي أنثى</span>
-                </div>
-              )}
-              <BusSeatGrid key={shownTrip?.id}
-                capacity={seatStats.capacity}
-                buses={shownTrip ? busCountOf(shownTrip) : 1}
-                occupied={occupancy.seats}
-                /* الطلب الملغى حُرِّرت مقاعده فعلاً: إبرازها ذهبيةً يقول
-                   إنها محجوزةٌ له وهي معروضةٌ للبيع. */
-                selected={picking ? sel : (isOwnTrip && !closed ? [...booking.seats, ...savedPrivacySeats] : [])}
-                need={seatsNeeded}
-                onToggle={toggleSeat}
-                occGender={n => occupancy.genders.get(n) ?? null}
-                privacySeats={occupancy.privacy}
-                selectedPrivacySeats={needsPrivacySeat
-                  ? new Set([picking ? sel[1] : savedPrivacySeats[0]].filter((s): s is number => s != null))
-                  : undefined}
-                selGender={n => {
-                  const list = picking ? sel : booking.seats;
-                  return bookedSeatGender(booking, list.indexOf(n));
-                }}
-              />
-            </div>
-
-            {/* شريط الاختيار — يظهر وقت الاختيار وحده */}
-            {picking && (
-              <div className="flex items-center gap-3 flex-wrap px-5 py-3.5" style={{ borderTop: `1px solid ${B.border}`, background: B.cream }}>
-                <span className="text-sm font-bold" style={{ color: B.black }}>
-                  {sel.length ? `المقاعد ${seatText(sel)}` : "اضغط على مقعدٍ متاح"}
-                </span>
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold"
-                  style={{ background: sel.length === seatsNeeded ? "#E3F3E8" : "#fff", color: sel.length === seatsNeeded ? "#1E7A44" : B.muted, border: `1px solid ${sel.length === seatsNeeded ? "#C4E4CE" : B.border}` }}>
-                  {sel.length} / {seatsNeeded}
-                </span>
-                <div className="flex items-center gap-2 mr-auto">
-                  <button onClick={() => { setPicking(false); setSel([]); }}
-                    className="px-4 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-                    style={{ background: "#fff", color: B.text2, border: `1px solid ${B.border}` }}>إلغاء</button>
-                  <button onClick={() => void lockSeats()} disabled={sel.length !== seatsNeeded || !!busy}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold"
-                    style={{
-                      background: sel.length === seatsNeeded ? B.gold : "#EEECEA", color: sel.length === seatsNeeded ? B.black : B.muted,
-                      border: "none", cursor: sel.length === seatsNeeded && !busy ? "pointer" : "not-allowed",
-                    }}>
-                    {busy === "seats" ? <Spinner size={13} color={B.black} track="rgba(27,23,18,0.25)" /> : <Check size={14} />}
-                    {seatsLocked ? "حفظ المقاعد" : "قفل المقاعد"}
-                  </button>
-                </div>
-              </div>
-            )}
-            {!picking && !isOwnTrip && (
-              <div className="px-5 pb-4 text-xs" style={{ color: B.muted }}>
-                عرضٌ للسعة فقط — مقاعد هذا الطلب على رحلة <b style={{ fontFamily: "var(--font-app)", color: B.text2 }}>{trip?.departureDate}</b>.
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* ══ ٥ · تفاصيل أكثر ══ */}
-      {details && (
-        <div className="rounded-2xl p-5 mt-3 flex flex-col gap-5" style={{ ...card, maxWidth: SHEET }}>
-          <div>
-            <div className="text-xs font-bold mb-2.5" style={{ color: B.text2 }}>بيانات صاحب الطلب</div>
-            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${B.border}` }}>
-              {booking.pilgrims.map((pg, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2.5"
-                  style={{ borderTop: i ? `1px solid ${B.border}` : "none", background: i % 2 ? "#FDFCFA" : "#fff" }}>
-                  <span className="font-bold text-sm" style={{ color: B.black, minWidth: 150 }}>{pg.name || `معتمر ${i + 1}`}</span>
-                  <span className="text-xs" style={{ color: B.text2, fontFamily: "var(--font-app)" }}>
-                    {numberLabelOf(pg.docType, pg.idNumber)}: {pg.idNumber || "—"}
-                  </span>
-                  <span className="text-xs" style={{ color: B.text2 }}>{pg.nationality || "—"}</span>
-                  <span className="text-xs" style={{ color: B.text2, fontFamily: "var(--font-app)" }}>{pg.birthDate || "—"}</span>
-                  <span className="text-xs" style={{ color: B.text2 }}>{pg.gender === "female" ? "أنثى" : "ذكر"}</span>
-                  {booking.seats[i] != null && <span className="text-xs font-bold" style={{ color: "#8a6a08" }}>مقعد {booking.seats[i]}</span>}
-                  {verifyState(pg) === "stale" && <span className="text-xs font-bold" style={{ color: "#B4530C" }}>عُدِّلت بعد التحقق</span>}
-                </div>
-              ))}
-              {!booking.pilgrims.length && <div className="px-4 py-3 text-sm" style={{ color: B.muted }}>لا بيانات معتمرين في هذا الطلب.</div>}
+            <div className="order-5 min-w-0">
+              <WorkButton state={payStep} primary={primaryStep === "pay"} icon={Wallet} busy={busy === "pay"}
+                label={`تم استلام ${sar(booking.total)}`} doneLabel="مدفوع" hint={payHint} onClick={recordPayment} />
             </div>
           </div>
+        </section>
 
-          <div>
-            <div className="text-xs font-bold mb-2.5" style={{ color: B.text2 }}>نقطة الانطلاق والغرف</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { l: "نقطة الانطلاق", v: trip?.departurePoint || "—" },
-                { l: "مدينة الانطلاق", v: trip?.departureCity || "—" },
-                { l: "الباص", v: [trip?.busCode, trip?.busPlate].filter(Boolean).join(" · ") || "—" },
-                { l: "مصدر الطلب", v: booking.source === "internal" ? `داخلي · ${booking.staff || "—"}` : "من التطبيق" },
-              ].map(f => (
-                <div key={f.l} className="min-w-0">
-                  <div className="text-xs font-semibold mb-0.5" style={{ color: B.muted }}>{f.l}</div>
-                  <div className="font-bold text-sm truncate" style={{ color: B.black }}>{f.v}</div>
-                </div>
-              ))}
-            </div>
-            {!!booking.rooms?.length && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {booking.rooms.map((r, i) => (
-                  <span key={i} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
-                    غرفة {i + 1} · {r.type} · سعة {r.persons} · <b style={{ fontFamily: "var(--font-app)", color: B.black }}>{sar(r.perNight)}</b> لليلة
-                  </span>
+        {/* ══ ٤ · كروكي المقاعد ══ */}
+        <section ref={croquisRef} className="ui-card" aria-label="كروكي المقاعد" style={{ scrollMarginTop: 132 }}>
+          <div className="ui-card-head flex-wrap">
+            <h3 className="ui-card-title flex items-center gap-2"><Armchair size={16} aria-hidden style={{ color: B.muted }} />كروكي المقاعد</h3>
+            {/* تبويبات الرحلات — لا تظهر إلا إن وُجدت رحلةٌ ثانية فعلاً */}
+            {croquisTrips.length > 1 && (
+              <div role="group" aria-label="رحلات الباقة" className="ui-seg flex-wrap" style={{ maxWidth: "100%" }}>
+                {croquisTrips.map(t => {
+                  const on = t.id === shownTrip?.id;
+                  return (
+                    <button key={t.id} type="button" aria-pressed={on} onClick={() => { if (!picking) setTabId(t.id); }} disabled={picking}
+                      title={picking ? "أنهِ اختيار المقاعد أولاً" : `رحلة ${fmtDate(t.departureDate)}${t.id === trip?.id ? " — رحلة هذا الطلب" : ""}`}
+                      className="ui-seg-item" style={{ opacity: picking && !on ? 0.5 : 1 }}>
+                      {t.id === trip?.id && <Star size={12} aria-label="رحلة الطلب" fill="currentColor" style={{ color: B.gold }} />}
+                      {fmtDateShort(t.departureDate)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {!shownTrip || !seatStats ? (
+            <div className="px-5 py-12 text-center text-sm" style={{ color: B.muted }}>الطلب بلا رحلة — لا كروكي.</div>
+          ) : (
+            <>
+              {/* ملخّص السعة */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 px-5 py-4" style={{ borderBottom: `1px solid ${B.border}` }}>
+                {[
+                  { l: "إجمالي المقاعد", v: String(seatStats.capacity) },
+                  { l: "المحجوز", v: String(seatStats.booked) },
+                  { l: "المتبقي", v: String(seatStats.available), tone: seatStats.available > 0 ? undefined : TONE.danger.fg },
+                ].map(s => (
+                  <div key={s.l} className="ts-kv">
+                    <span className="ts-kv-k">{s.l}</span>
+                    <span className="font-extrabold" style={{ fontSize: 20, lineHeight: 1.3, color: s.tone ?? B.black }}>{s.v}</span>
+                  </div>
                 ))}
+                <div className="ts-kv">
+                  <span className="ts-kv-k">توزيع الحجوزات</span>
+                  <span className="ts-kv-v" style={{ lineHeight: "26px" }}>{seatStats.m} ذكور · {seatStats.f} إناث{seatStats.children ? ` · ${seatStats.children} أطفال` : ""}</span>
+                </div>
               </div>
-            )}
-          </div>
 
-          {invoice && (
-            <div className="flex flex-wrap items-center gap-4 rounded-xl px-4 py-3" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
-              <span className="text-xs font-bold" style={{ color: B.text2 }}>الفاتورة <span style={{ fontFamily: "var(--font-app)", color: B.black }}>{invoice.id}</span></span>
-              <span className="text-xs" style={{ color: B.text2 }}>الإجمالي <b style={{ fontFamily: "var(--font-app)", color: B.black }}>{sar(invoice.total)}</b></span>
-              {booking.payMethod && <span className="text-xs" style={{ color: B.text2 }}>{booking.payMethod}{booking.payDate ? ` · ${booking.payDate}` : ""}</span>}
-              <button onClick={() => setInvoiceOpen(true)} className="text-xs font-bold cursor-pointer mr-auto"
-                style={{ background: "none", border: "none", color: B.text2, textDecoration: "underline" }}>فتح الفاتورة</button>
+              <div className="p-5 flex flex-col gap-4">
+                {/* قد يأتي حجزٌ قديم، أو طلب داخلي قبل حفظ التوزيع. لا نخمن
+                    جنس المقعد من ترتيب المقاعد أو من جنس صاحب الطلب. */}
+                {seatStats.unknown > 0 && (
+                  <Note tone="warn" icon={<AlertTriangle size={15} />}>
+                    {seatStats.unknown} مقعد محجوز بحاجة إلى تحديد نوع المسافر؛ يظهر رمادياً حتى يُحدَّث التوزيع.
+                  </Note>
+                )}
+                {isOwnTrip && seatStats.unknown > 0 && <TravellerDistributionFix booking={booking} onSave={counts => onTravellerCountsChange(booking.id, counts)} />}
+                {isOwnTrip && needsPrivacySeat && (
+                  <div className="ui-note" style={{ background: SEAT_TONE.privacy.bg, borderColor: SEAT_TONE.privacy.line, color: SEAT_TONE.privacy.fg }}>
+                    <Lock size={15} aria-hidden />
+                    <div className="min-w-0 flex-1">هذه معتمرة منفردة: اختر مقعدين متجاورين. الأول لها، والثاني يُفرّغ للخصوصية ولا يُباع لراكب آخر.</div>
+                  </div>
+                )}
+                {isOwnTrip && savedCounts && savedCountTotal === need && (
+                  <div className="text-sm" style={{ color: B.text2 }}>
+                    رتّب المقاعد بالترتيب: <b style={{ color: SEAT_TONE.male.fg }}>{savedCounts.men} ذكور</b> أولاً، ثم <b style={{ color: SEAT_TONE.female.fg }}>{savedCounts.women} إناث</b>.
+                  </div>
+                )}
+                <BusSeatGrid key={shownTrip?.id}
+                  capacity={seatStats.capacity}
+                  buses={shownTrip ? busCountOf(shownTrip) : 1}
+                  occupied={occupancy.seats}
+                  /* الطلب الملغى حُرِّرت مقاعده فعلاً: إبرازها ذهبيةً يقول
+                     إنها محجوزةٌ له وهي معروضةٌ للبيع. */
+                  selected={picking ? sel : (isOwnTrip && !closed ? [...booking.seats, ...savedPrivacySeats] : [])}
+                  need={seatsNeeded}
+                  onToggle={toggleSeat}
+                  occGender={n => occupancy.genders.get(n) ?? null}
+                  privacySeats={occupancy.privacy}
+                  selectedPrivacySeats={needsPrivacySeat
+                    ? new Set([picking ? sel[1] : savedPrivacySeats[0]].filter((s): s is number => s != null))
+                    : undefined}
+                  selGender={n => {
+                    const list = picking ? sel : booking.seats;
+                    return bookedSeatGender(booking, list.indexOf(n));
+                  }}
+                />
+                {!picking && !isOwnTrip && (
+                  <div className="text-xs" style={{ color: B.muted }}>
+                    عرضٌ للسعة فقط — مقاعد هذا الطلب على رحلة <b style={{ color: B.text2 }}>{fmtDate(trip?.departureDate)}</b>.
+                  </div>
+                )}
+              </div>
+
+              {/* شريط الاختيار — يظهر وقت الاختيار وحده، ويلتصق بأسفل الشاشة:
+                  الكروكي أطول من الشاشة، ومن يختار من الصفوف الأولى لا ينزل
+                  ليبحث عن زرّ القفل. */}
+              {picking && (
+                <div className="flex items-center gap-3 flex-wrap" role="group" aria-label="اختيار المقاعد"
+                  style={{ position: "sticky", bottom: 12, zIndex: 5, margin: "0 12px 12px", padding: "10px 14px", borderRadius: 14, background: B.surface, border: `1px solid ${B.borderStrong}`, boxShadow: ELEV[3] }}>
+                  <span className="text-sm font-bold" style={{ color: B.black }}>
+                    {sel.length ? `المقاعد ${seatText(sel)}` : "اضغط على مقعدٍ متاح"}
+                  </span>
+                  <Badge tone={picked ? "success" : "neutral"}>{sel.length} / {seatsNeeded}</Badge>
+                  <div className="flex items-center gap-2 ms-auto">
+                    <Button variant="secondary" onClick={() => { setPicking(false); setSel([]); }}>إلغاء</Button>
+                    <Button variant="primary" icon={<Check size={16} />} loading={busy === "seats"} disabled={!picked || !!busy} onClick={() => void lockSeats()}>
+                      {seatsLocked ? "حفظ المقاعد" : "قفل المقاعد"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* ══ ٥ · تفاصيل أكثر ══ */}
+        <section ref={detailsRef} className="ui-card" style={{ scrollMarginTop: 132 }}>
+          <button type="button" onClick={() => toggleDetails(false)} aria-expanded={details} aria-controls={detailsId}
+            className="w-full flex items-center justify-between gap-3 px-5 py-4 text-start cursor-pointer hover:bg-[var(--k-cream)]"
+            style={{ borderRadius: details ? "16px 16px 0 0" : 16, fontFamily: "inherit", filter: "none" }}>
+            <span className="min-w-0">
+              <span className="ui-card-title block">تفاصيل الطلب</span>
+              <span className="ui-card-sub block">الهويات والمواليد والجنسيات · نقطة الانطلاق والغرف · الفاتورة · سجلّ الطلب</span>
+            </span>
+            <ChevronDown size={18} aria-hidden style={{ color: B.muted, flexShrink: 0, transform: details ? "rotate(180deg)" : undefined, transition: `transform ${DUR.base}s ease` }} />
+          </button>
+          {details && (
+            <div id={detailsId} className="p-5 flex flex-col gap-6" style={{ borderTop: `1px solid ${B.border}` }}>
+              <div>
+                <h4 className="ts-section-title" style={sectionTitle}>بيانات صاحب الطلب</h4>
+                {!booking.pilgrims.length ? (
+                  <div className="rounded-xl px-4 py-5 text-sm text-center" style={{ border: `1px dashed ${B.borderStrong}`, color: B.muted }}>لا بيانات معتمرين في هذا الطلب.</div>
+                ) : (
+                  <>
+                    <div className="hidden md:block ui-table-wrap" style={{ boxShadow: "none", borderRadius: 12 }}>
+                      <div className="ui-table-scroll">
+                        <table className="ui-table" style={{ minWidth: 640 }}>
+                          <thead>
+                            <tr><th>الاسم</th><th>الوثيقة</th><th>الجنسية</th><th>الميلاد</th><th>الجنس</th><th>المقعد</th></tr>
+                          </thead>
+                          <tbody>
+                            {booking.pilgrims.map((pg, i) => (
+                              <tr key={i}>
+                                <td>
+                                  <div className="cell-main nowrap">{pg.name || `معتمر ${i + 1}`}</div>
+                                  {verifyState(pg) === "stale" && <div className="cell-sub" style={{ color: TONE.warn.fg, fontWeight: 600 }}>عُدِّلت بعد التحقق</div>}
+                                </td>
+                                <td className="nowrap">
+                                  <div style={{ direction: "ltr", unicodeBidi: "isolate", textAlign: "end" }}>{pg.idNumber || "—"}</div>
+                                  <div className="cell-sub">{numberLabelOf(pg.docType, pg.idNumber)}</div>
+                                </td>
+                                <td className="nowrap" style={{ color: B.text3 }}>{pg.nationality || "—"}</td>
+                                <td className="nowrap" style={{ color: B.text3 }}>{fmtDate(pg.birthDate)}</td>
+                                <td className="nowrap" style={{ color: B.text3 }}>{pg.gender === "female" ? "أنثى" : "ذكر"}</td>
+                                <td className="nowrap">{booking.seats[i] != null ? oneSeat(booking.seats[i]) : "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div className="md:hidden flex flex-col gap-2.5">
+                      {booking.pilgrims.map((pg, i) => (
+                        <div key={i} className="rounded-xl p-4" style={{ border: `1px solid ${B.border}` }}>
+                          <div className="font-bold" style={{ color: B.black, fontSize: 15 }}>{pg.name || `معتمر ${i + 1}`}</div>
+                          {verifyState(pg) === "stale" && <div className="text-xs font-bold mt-0.5" style={{ color: TONE.warn.fg }}>عُدِّلت بعد التحقق</div>}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-3">
+                            <Fact label={numberLabelOf(pg.docType, pg.idNumber)} ltr>{pg.idNumber || "—"}</Fact>
+                            <Fact label="الجنسية">{pg.nationality || "—"}</Fact>
+                            <Fact label="الميلاد">{fmtDate(pg.birthDate)}</Fact>
+                            <Fact label="الجنس">{pg.gender === "female" ? "أنثى" : "ذكر"}</Fact>
+                            {booking.seats[i] != null && <Fact label="المقعد">{oneSeat(booking.seats[i])}</Fact>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <h4 className="ts-section-title" style={sectionTitle}>نقطة الانطلاق والغرف</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+                  <Fact label="نقطة الانطلاق">{trip?.departurePoint || "—"}</Fact>
+                  <Fact label="مدينة الانطلاق">{trip?.departureCity || "—"}</Fact>
+                  <Fact label="الباص">{[trip?.busCode, trip?.busPlate].filter(Boolean).join(" · ") || "—"}</Fact>
+                  <Fact label="مصدر الطلب">{booking.source === "internal" ? `داخلي · ${booking.staff || "—"}` : "من التطبيق"}</Fact>
+                </div>
+                {!!booking.rooms?.length && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {booking.rooms.map((r, i) => (
+                      <span key={i} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: B.fill, border: `1px solid ${B.border}`, color: B.text2 }}>
+                        غرفة {i + 1} · {r.type} · سعة {r.persons} · <b style={{ color: B.black }}>{sar(r.perNight)}</b> لليلة
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {invoice && (
+                <div>
+                  <h4 className="ts-section-title" style={sectionTitle}>الفاتورة</h4>
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl px-4 py-3" style={{ background: B.fill, border: `1px solid ${B.border}` }}>
+                    <Fact label="رقم الفاتورة" ltr>{invoice.id}</Fact>
+                    <Fact label="الإجمالي">{sar(invoice.total)}</Fact>
+                    {booking.payMethod && (
+                      <Fact label="طريقة الدفع">{booking.payMethod}{booking.payDate && booking.payDate !== "—" ? ` · ${fmtDate(booking.payDate)}` : ""}</Fact>
+                    )}
+                    <Button size="sm" className="ms-auto" icon={<FileText size={14} />} onClick={() => setInvoiceOpen(true)}>فتح الفاتورة</Button>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="ts-section-title" style={sectionTitle}>سجلّ الطلب</h4>
+                <EventTimeline docType="booking" docId={booking.id} title="" flat outcomes={SEND_OUTCOMES} reloadKey={evKey} />
+              </div>
             </div>
           )}
-
-          <div>
-            <div className="text-xs font-bold mb-2.5" style={{ color: B.text2 }}>سجلّ الطلب</div>
-            <EventTimeline docType="booking" docId={booking.id} title="" flat outcomes={SEND_OUTCOMES} reloadKey={evKey} />
-          </div>
-        </div>
-      )}
+        </section>
+      </div>
 
       <AnimatePresence>
         {pending && (

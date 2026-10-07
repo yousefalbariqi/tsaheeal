@@ -1,12 +1,13 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useId, useRef, useState, type CSSProperties, type ChangeEventHandler, type ReactNode } from "react";
 import {
-  Building2, MapPin, Star, Plus, Pencil, Trash2, X, Check,
-  ImagePlus, ArrowRight, ChevronUp, ChevronDown, Film, FileUp,
+  Building2, MapPin, Star, Plus, Trash2, X, Check, CircleCheck,
+  ImagePlus, ArrowRight, ArrowLeft, ChevronUp, ChevronDown, Film, FileUp,
+  ExternalLink, SearchX, MessageSquareText,
 } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, TONE, ELEV } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
-import { EntityGate } from "@/components/States";
+import { EntityGate, EmptyState } from "@/components/States";
+import { Badge, Button, IconButton, Input, Textarea, Modal, Segmented } from "@/components/ui";
 import type { MediaKind, HotelFeature, HotelReview, HotelMedia, Hotel } from "@/types";
 import { uid, newId} from "@/lib/utils";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -61,85 +62,124 @@ function importHotelReviewsCsv(source: string): Omit<HotelReview, "id">[] {
   return reviews;
 }
 
-function HotelCardHero({name,city,stars,status,cover}:{name:string;city:string;stars:number;status:string;cover?:string}) {
+/* التصنيف نجومٌ مرسومة لا حروف «★»: الحرف يتبع خطّ النظام فيتبدّل حجمه
+   ولونه من جهازٍ لآخر، وقارئ الشاشة يقرؤه «نجمة سوداء» خمس مرّات. هنا
+   صورةٌ واحدة باسمٍ واحد: «4 من 5 نجوم». */
+function Stars({n,size=14,muted=false}:{n:number;size?:number;muted?:boolean}) {
   return (
-    <div className="relative overflow-hidden" style={{height:160,background:B.primaryDeep}}>
-      {cover
-        ? <><img src={cover} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}}/>
-            <div className="absolute inset-0" style={{background:"linear-gradient(180deg,rgba(14,12,11,0.15) 0%,rgba(14,12,11,0.55) 100%)"}}/></>
-        : <>
-            <div className="absolute inset-0" style={{backgroundImage:`repeating-linear-gradient(45deg,rgba(192,134,44,0.045) 0px,rgba(192,134,44,0.045) 1px,transparent 1px,transparent 18px),repeating-linear-gradient(-45deg,rgba(192,134,44,0.045) 0px,rgba(192,134,44,0.045) 1px,transparent 1px,transparent 18px)`}}/>
-            <div className="absolute inset-0" style={{background:"radial-gradient(ellipse at 30% 50%,rgba(60,40,10,0.5) 0%,rgba(21,76,72,0.92) 70%)"}}/>
-            <div className="absolute inset-0 flex items-center justify-center" style={{userSelect:"none"}}>
-              <span style={{fontFamily:"var(--font-app)",fontSize:88,fontWeight:800,color:"rgba(192,134,44,0.1)",lineHeight:1}}>{name.charAt(0)}</span>
-            </div>
-          </>}
-      <div className="absolute top-0 inset-x-0" style={{height:3,background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-      <div className="absolute top-3 right-3"><StatusBadge status={status} entity="hotel"/></div>
-      <div className="absolute top-3 left-3">
-        <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
-          style={{background:"rgba(14,12,11,0.7)",color:B.cream,border:"1px solid rgba(255,255,255,0.08)"}}>
-          {city==="مكة"?"🕋":"🕌"} {city}
-        </span>
-      </div>
-      <div className="absolute bottom-0 inset-x-0 flex items-end justify-between px-4 pb-3">
-        <div className="flex items-center gap-0.5">
-          {Array.from({length:5},(_,i)=><Star key={i} size={12} fill={i<stars?B.gold:"none"} stroke={i<stars?B.gold:"rgba(255,255,255,0.2)"}/>)}
-        </div>
-        <span className="text-xs font-bold" style={{color:"rgba(192,134,44,0.85)"}}>{stars} نجوم</span>
-      </div>
-    </div>
+    <span role="img" aria-label={`${n} من 5 نجوم`} className="inline-flex items-center gap-0.5 flex-shrink-0">
+      {Array.from({length:5},(_,i)=>{
+        const on=i<n; const c=on?(muted?B.muted:B.gold):B.borderStrong;
+        return <Star key={i} aria-hidden size={size} fill={on?c:"none"} stroke={c} strokeWidth={1.75}/>;
+      })}
+    </span>
   );
 }
 
-function HotelCard({hotel,onEdit,actions}:{hotel:Hotel;onEdit:()=>void;actions?:React.ReactNode}) {
+const starsWord=(n:number)=>`${n} ${n>=3&&n<=10?"نجوم":"نجمة"}`;
+const hotelsWord=(n:number)=>`${n} ${n>=3&&n<=10?"فنادق":"فندق"}`;
+
+/* وسم المرفق على البطاقة — للقراءة لا للضغط، فليس شريحة ترشيح. */
+const featureTag:CSSProperties={display:"inline-flex",alignItems:"center",gap:6,height:26,padding:"0 10px",borderRadius:999,
+  background:B.fill,border:`1px solid ${B.border}`,color:B.text3,fontSize:12,fontWeight:500,whiteSpace:"nowrap",maxWidth:"100%"};
+
+function HotelCard({hotel,actions}:{hotel:Hotel;actions?:ReactNode}) {
   /* ما ينقص يُقرأ من القائمة لا بفتح كل فندق. سطرٌ هادئ لا صندوق إنذار:
      النقص هنا لم يعد يمنع شيئاً بعد أن انتقل البيع إلى الباقة. */
   const missing = hotelReadiness(hotel).missing;
+  const cover = hotelCover(hotel);
+  /* المتوقف يَبهت ولا يختفي: سطحه لون الصفحة وصورته بلا ألوان، فتقع العين
+     على النشط أولاً — وأزراره تبقى بوضوحها لأن «تفعيل» هو المخرج منه. */
+  const paused = hotel.status!=="active";
+  const place = [hotel.district,hotel.city].filter(Boolean).join(" · ");
   return (
-    <motion.div layout initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} exit={{opacity:0,scale:0.95}}
-      whileHover={{y:-4}} transition={{duration:0.2}}
-      className="rounded-2xl overflow-hidden flex flex-col"
-      style={{background:"#fff",border:`1px solid ${B.border}`,boxShadow:"0 2px 12px -4px rgba(21,76,72,0.08)",transition:"box-shadow 0.2s"}}>
-      <HotelCardHero name={cleanHotelName(hotel.name)} city={hotel.city} stars={hotel.stars} status={hotel.status}
-        cover={hotelCover(hotel)}/>
-      <div className="flex flex-col flex-1 px-5 pt-4 pb-4 gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-extrabold leading-snug" style={{color:B.black,fontSize:15,fontFamily:"var(--font-app)"}}>{hotelDisplayName(hotel.name)}</h3>
-            <div className="flex items-center gap-1.5 mt-1 text-xs" style={{color:B.text2}}>
-              <MapPin size={11} style={{color:B.gold}}/>
-              <span>{hotel.district||"—"}</span>
-            </div>
+    <article className={`ui-card ui-card--hover overflow-hidden flex flex-col${paused?" ui-card--flat":""}`}
+      style={paused?{background:B.bg}:undefined}>
+      <div className="relative" style={{aspectRatio:"2 / 1",background:B.fill,borderBottom:`1px solid ${B.border}`}}>
+        {cover
+          ? <img src={cover} alt="" loading="lazy"
+              style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",...(paused?{filter:"grayscale(1)",opacity:0.6}:null)}}/>
+          : <span aria-hidden className="absolute inset-0 flex items-center justify-center" style={{color:B.borderStrong}}>
+              <Building2 size={44} strokeWidth={1.25}/>
+            </span>}
+        {/* الشارة فوق أرضيةٍ بيضاء: حشوتها الباهتة تضيع على الصورة وعلى الغائر. */}
+        <span className="absolute inline-flex rounded-full" style={{top:12,insetInlineStart:12,background:B.surface,boxShadow:ELEV[1]}}>
+          <StatusBadge status={hotel.status} entity="hotel"/>
+        </span>
+      </div>
+      <div className="flex flex-col flex-1 p-4 gap-3">
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="ui-card-title min-w-0" style={paused?{color:B.text2}:undefined}>{hotelDisplayName(hotel.name)}</h3>
+            <span dir="ltr" className="flex-shrink-0" style={{fontSize:12,color:B.muted,lineHeight:"21px"}}>{hotel.id}</span>
           </div>
-          <span className="text-xs font-mono flex-shrink-0 px-2 py-0.5 rounded-lg mt-0.5"
-            style={{background:B.fill,color:B.muted,border:`1px solid ${B.border}`,fontSize:10}}>{hotel.id}</span>
+          <div className="flex items-center gap-1.5 mt-1 min-w-0" style={{fontSize:13,color:B.text2}}>
+            <MapPin size={14} style={{color:B.muted,flexShrink:0}}/>
+            <span className="truncate">{place||"—"}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Stars n={hotel.stars} muted={paused}/>
+          <span aria-hidden style={{fontSize:12,color:B.muted}}>{starsWord(hotel.stars)}</span>
         </div>
         {hotel.features.length>0 && (
           <div className="flex flex-wrap gap-1.5">
             {hotel.features.slice(0,3).map(f=>{const Icon=hotelFeatureIcon(f.icon);return(
-              <span key={f.id} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text3}}>
-                <Icon size={9} style={{color:B.gold}}/>{f.text}
+              <span key={f.id} style={featureTag}>
+                <Icon size={14} style={{color:B.muted,flexShrink:0}}/><span className="truncate">{f.text}</span>
               </span>
             );})}
-            {hotel.features.length>3&&<span className="text-xs px-2.5 py-1 rounded-full" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.muted}}>+{hotel.features.length-3}</span>}
+            {hotel.features.length>3&&<span dir="ltr" style={{...featureTag,color:B.muted}} title={hotel.features.slice(3).map(f=>f.text).filter(Boolean).join(" · ")}>+{hotel.features.length-3}</span>}
           </div>
         )}
         {missing.length>0&&(
-          <div className="flex items-center gap-1.5 text-xs" style={{color:"#8A6A08"}}>
-            <span aria-hidden className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:"#D9A93A"}}/>
+          <div className="flex items-start gap-2" style={{fontSize:12,lineHeight:1.6,color:TONE.warn.fg}}>
+            <span aria-hidden className="rounded-full flex-shrink-0" style={{width:6,height:6,marginTop:7,background:"currentColor"}}/>
             <span>ينقصه: {missing.map(m=>m.label).join(" · ")}</span>
           </div>
         )}
-        <div className="mt-auto pt-3" style={{borderTop:`1px solid ${B.border}`}}>
-          {actions ?? (
-            <button onClick={onEdit} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none"}}><Pencil size={13}/>تعديل</button>
-          )}
-        </div>
+        {actions&&<div className="mt-auto pt-3" style={{borderTop:`1px solid ${B.border}`}}>{actions}</div>}
       </div>
-    </motion.div>
+    </article>
+  );
+}
+
+/* قسمٌ معنون داخل النموذج: عنوانٌ وسطرُ شرحٍ وفعلُ القسم عند طرفه. */
+function FormSection({title,sub,aside,first=false,children}:{title:ReactNode;sub?:ReactNode;aside?:ReactNode;first?:boolean;children:ReactNode}) {
+  return (
+    <section className="flex flex-col gap-3.5" style={first?undefined:{borderTop:`1px solid ${B.border}`,marginTop:24,paddingTop:20}}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        {/* العنوان ينكمش وسطرُ شرحه يلتفّ، فتبقى أفعال القسم بجانبه ما اتّسع السطر. */}
+        <div className="min-w-0 flex-1" style={{flexBasis:220}}>
+          <h3 className="ts-section-title flex items-center gap-2">{title}</h3>
+          {sub&&<p className="ui-card-sub" style={{margin:"2px 0 0"}}>{sub}</p>}
+        </div>
+        {aside&&<div className="flex items-center gap-2 flex-wrap flex-shrink-0">{aside}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* فراغ قسمٍ داخل النموذج — سطرٌ هادئ لا لوحة: فراغ القائمة الكبير (EmptyState)
+   يأكل نصف النافذة إن تكرّر في كل قسم. */
+function FormEmpty({icon,children}:{icon:ReactNode;children:ReactNode}) {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-xl text-center" style={{border:`1.5px dashed ${B.border}`,padding:"18px 16px",fontSize:13,lineHeight:1.6,color:B.muted}}>
+      <span aria-hidden className="flex-shrink-0">{icon}</span><span>{children}</span>
+    </div>
+  );
+}
+
+/* زرّ اختيار ملف بهيئة الزرّ الثانوي. الحقل مخفيٌّ عن العين لا عن لوحة
+   المفاتيح (sr-only لا hidden): يُبلَغ بـTab وتظهر حلقة التركيز على الزرّ. */
+const pickRing="relative has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--k-gold)]";
+function FileButton({accept,onChange,icon,variant="secondary",children}:{accept:string;onChange:ChangeEventHandler<HTMLInputElement>;icon?:ReactNode;variant?:"secondary"|"ghost";children:ReactNode}) {
+  return (
+    <label className={`ui-btn ui-btn--${variant} ui-btn--sm ${pickRing}`}>
+      {icon}{children}
+      <input type="file" accept={accept} className="sr-only" onChange={onChange}/>
+    </label>
   );
 }
 
@@ -210,238 +250,195 @@ function HotelModal({initial,onSave,onClose}:{initial:Hotel|null;onSave:(h:Hotel
   const nameError = hasHotelPrefix(form.name) ? "كلمة «فندق» تُضاف تلقائياً عند العرض — اكتب الاسم مجرَّداً" : null;
 
   /* حفظٌ بلا حرّاس: الاسم يُنظَّف، والباقي اختياريٌّ يُكمَل متى توفّر.
-     ما يمنع العميل من رؤية شيءٍ ناقص هو حالة الباقة لا حالة الفندق. */
+     ما يمنع العميل من رؤية شيءٍ ناقص هو حالة الباقة لا حالة الفندق.
+     والاسم الفارغ يُقال تحت حقله ويُعاد إليه التركيز — لا في إشعارٍ عابر
+     يزول والحقل خارج الشاشة في نموذجٍ بهذا الطول. */
+  const [nameMissing,setNameMissing]=useState(false);
+  const nameRef=useRef<HTMLInputElement>(null);
+  const mapId=useId();
   const submit = () => {
     const name = cleanHotelName(form.name);
-    if (!name) { toast.error("اسم الفندق مطلوب"); return; }
+    if (!name) { setNameMissing(true); nameRef.current?.focus(); return; }
     onSave({ ...form, name });
   };
+  const showNameMissing=nameMissing&&!cleanHotelName(form.name);
+  const mediaFull=media.length>=HOTEL_MEDIA_MAX;
 
-  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all";
-  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"};
-  const tinyBtn=(tone:"neutral"|"gold"|"danger",off=false):React.CSSProperties=>({
-    width:28,height:28,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",
-    cursor:off?"not-allowed":"pointer",opacity:off?0.4:1,
-    ...(tone==="gold"?{background:"#FBF3D6",border:"1px solid #EBD9A0",color:"#8A6A08"}
-      :tone==="danger"?{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}
-      :{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}),
-  });
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{background:"rgba(14,12,11,0.78)",backdropFilter:"blur(4px)"}}>
-      <motion.div initial={{opacity:0,y:40}} animate={{opacity:1,y:0}} exit={{opacity:0,y:40}}
-        transition={{type:"spring",damping:30,stiffness:400}}
-        className="w-full sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{maxWidth:620,maxHeight:"92vh",background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5 flex-shrink-0" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:"rgba(192,134,44,0.15)",border:"1px solid rgba(192,134,44,0.3)"}}>
-                <Building2 size={18} style={{color:B.gold}}/>
-              </div>
-              <div>
-                <h2 className="font-extrabold text-white" style={{fontSize:17,fontFamily:"var(--font-app)"}}>{isEdit?"تعديل الفندق":"إضافة فندق جديد"}</h2>
-                <div className="text-xs mt-0.5" style={{color:B.muted}}>{isEdit?form.id:"معرّف تلقائي"}</div>
-              </div>
-            </div>
-            <button onClick={requestClose} aria-label="إغلاق النافذة" title="إغلاق" className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-              style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",color:"#7a7068"}}><X size={15}/></button>
+    <Modal open onClose={requestClose} width={760}
+      title={isEdit?"تعديل الفندق":"إضافة فندق"}
+      sub={isEdit?<span dir="ltr">{form.id}</span>:"الاسم وحده مطلوب، والباقي يُكمَل متى توفّر."}
+      footer={<>
+        <Button variant="primary" icon={<Check size={16}/>} onClick={submit}>حفظ الفندق</Button>
+        <Button variant="secondary" onClick={requestClose}>إلغاء</Button>
+      </>}>
+
+      {/* ── بيانات الفندق ── */}
+      <FormSection first title="بيانات الفندق">
+        <div>
+          <Field label={<>اسم الفندق<span className="ui-req">*</span></>}
+            error={showNameMissing?"اسم الفندق مطلوب":undefined}
+            hint={nameError
+              ? <span style={{color:TONE.warn.fg,fontWeight:600}}>{nameError}</span>
+              : form.name.trim()
+                ? <>يظهر للعميل: <b style={{color:B.text3,fontWeight:600}}>{hotelDisplayName(form.name)}</b></>
+                : "اكتبه بلا كلمة «فندق» — تُضاف تلقائياً عند العرض."}>
+            <Input ref={nameRef} invalid={showNameMissing} value={form.name} placeholder="مثال: دار الإيمان جراند"
+              onChange={e=>set("name",e.target.value)} onBlur={()=>set("name",cleanHotelName(form.name))}/>
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div><Field label="المدينة">
+                 <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"مكة"},{value:"المدينة",label:"المدينة"}]}/>
+               </Field></div>
+          <div><Field label="الحي">
+                 <Input value={form.district} placeholder="أجياد" onChange={e=>set("district",e.target.value)}/>
+               </Field></div>
+          <div><Field label="التصنيف">
+                 <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])}
+                   options={[5,4,3,2].map(n=>({value:String(n),label:<span className="flex items-center gap-2"><Stars n={n}/><span aria-hidden>{starsWord(n)}</span></span>}))}/>
+               </Field></div>
+        </div>
+        <div>
+          <label className="ui-label" htmlFor={mapId}>رابط الموقع في خرائط Google</label>
+          {/* الرابط لاتينيّ: الحقل وأيقونته في اتجاهٍ واحد، فلا تقع الأيقونة فوق آخر النصّ. */}
+          <div className="relative" dir="ltr">
+            <MapPin size={16} style={{color:B.muted,position:"absolute",top:"50%",insetInlineStart:13,transform:"translateY(-50%)",pointerEvents:"none"}}/>
+            <Input id={mapId} type="url" inputMode="url" style={{paddingInlineStart:38}} value={form.mapUrl} placeholder="https://maps.google.com/..." onChange={e=>set("mapUrl",e.target.value)}/>
           </div>
+          {form.mapUrl&&<a href={form.mapUrl} target="_blank" rel="noreferrer" className="ui-btn ui-btn--link" style={{marginTop:8,fontSize:13}}>فتح الموقع في خرائط Google<ExternalLink size={14}/></a>}
         </div>
+      </FormSection>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5" style={{scrollbarWidth:"none"}}>
-
-          {/* ── بيانات الفندق ── */}
-          <section className="flex flex-col gap-3.5">
-            <h3 className="font-extrabold m-0" style={{color:B.black,fontSize:14,fontFamily:"var(--font-app)"}}>بيانات الفندق</h3>
-            <div>
-              <Field label={<>اسم الفندق <span style={{color:B.gold}}>*</span> <span className="font-normal" style={{color:B.muted}}>(بلا كلمة «فندق»)</span></>}>
-                <input className={inp} style={ist} value={form.name} placeholder="مثال: دار الإيمان جراند"
-                  onChange={e=>set("name",e.target.value)} onBlur={()=>set("name",cleanHotelName(form.name))}/>
-              </Field>
-              {nameError
-                ? <div className="text-xs font-bold mt-1.5" style={{color:"#B4530C"}}>{nameError}</div>
-                : form.name.trim()&&<div className="text-xs mt-1.5" style={{color:B.muted}}>يظهر للعميل: <b style={{color:B.text3}}>{hotelDisplayName(form.name)}</b></div>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Field label="المدينة">
-                     <AppSelect value={form.city} onChange={v=>set("city",v as Hotel["city"])} options={[{value:"مكة",label:"🕋 مكة"},{value:"المدينة",label:"🕌 المدينة"}]}/>
-                   </Field></div>
-              <div><Field label="التصنيف">
-                     <AppSelect value={String(form.stars)} onChange={v=>set("stars",Number(v) as Hotel["stars"])} options={[{value:"5",label:"★★★★★"},{value:"4",label:"★★★★☆"},{value:"3",label:"★★★☆☆"},{value:"2",label:"★★☆☆☆"}]}/>
-                   </Field></div>
-            </div>
-            <div><Field label="الحي">
-                   <input className={inp} style={ist} value={form.district} placeholder="أجياد" onChange={e=>set("district",e.target.value)}/>
-                 </Field></div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>رابط الموقع في خرائط Google</label>
-              <div className="relative">
-                <MapPin size={15} style={{color:B.gold,position:"absolute",top:"50%",insetInlineStart:12,transform:"translateY(-50%)",pointerEvents:"none"}}/>
-                <input className={inp} style={{...ist,direction:"ltr",textAlign:"left",paddingInlineStart:36}} value={form.mapUrl} placeholder="https://maps.google.com/..." onChange={e=>set("mapUrl",e.target.value)}/>
-              </div>
-              {form.mapUrl&&<a href={form.mapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold mt-1.5" style={{color:B.gold}}>فتح الموقع في خرائط Google<ArrowRight size={11}/></a>}
-            </div>
-          </section>
-
-          {/* ── المرافق ── */}
-          <section className="flex flex-col gap-3 pt-5" style={{borderTop:`1px solid ${B.border}`}}>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <h3 className="font-extrabold m-0" style={{color:B.black,fontSize:14,fontFamily:"var(--font-app)"}}>المرافق</h3>
-                <p className="text-xs mt-1" style={{color:B.muted}}>ما يظهر للعميل في بطاقة الفندق.</p>
-              </div>
-              <button type="button" onClick={()=>{setFeatureIconTarget(null);setShowFeatIcons(v=>!v);}}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0"
-                style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}>
-                {galleryOpen&&!featureIconTarget?<><X size={12}/>إغلاق المعرض</>:<><Plus size={12}/>إضافة مرفق</>}
-              </button>
-            </div>
-            {/* معرض الرموز يُطوى: عشرون رمزاً مفتوحةً دائماً تجعل النموذج
-                يبدو لوحة إعدادات، وهي لا تُستعمل إلّا لحظة الإضافة. */}
-            {galleryOpen&&(
-              <div className="grid gap-2 rounded-xl p-2.5" style={{gridTemplateColumns:"repeat(auto-fill, minmax(42px, 1fr))",background:B.fill,border:`1px solid ${B.border}`}}>
-                {HOTEL_FEATURE_CATALOG.map(({id,label,Icon})=>(
-                  <button key={id} type="button" aria-label={label} title={label} onClick={()=>{
-                    if(featureIconTarget) { chooseFeatIcon(featureIconTarget,id); setFeatureIconTarget(null); }
-                    else addFeat(id);
-                  }}
-                    className="aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all"
-                    style={{background:"#fff",color:B.text2,border:`1.5px solid ${B.border}`}}><Icon size={18}/></button>
-                ))}
-              </div>
-            )}
-            {featureIconTarget&&<p className="text-xs font-bold -mt-1" style={{color:"#8A6A08"}}>اختر الرمز الجديد من المعرض أعلاه.</p>}
-            <AnimatePresence>{form.features.map(f=>(
-              <motion.div key={f.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}} className="flex gap-2 items-center rounded-xl p-2" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-                {(()=>{ const Icon=hotelFeatureIcon(f.icon); const picking=featureIconTarget===f.id; return <button type="button" aria-label="تغيير رمز المرفق" title="تغيير الرمز" onClick={()=>setFeatureIconTarget(picking?null:f.id)} className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer" style={{background:picking?B.gold:"#FBF3D6",border:`1px solid ${picking?B.gold:"#EBD9A0"}`,color:picking?B.black:"#8A6A08"}}><Icon size={18}/></button>; })()}
-                <input className={`${inp} flex-1`} style={ist} value={f.text} placeholder="مثال: إفطار مجاني" onChange={e=>updFeat(f.id,"text",e.target.value)}/>
-                <div className="flex flex-col gap-1">
-                  <button aria-label="تقديم المرفق" title="تقديم" onClick={()=>moveFeat(f.id,-1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronUp size={12}/></button>
-                  <button aria-label="تأخير المرفق" title="تأخير" onClick={()=>moveFeat(f.id,1)} className="w-7 h-5 rounded flex items-center justify-center cursor-pointer" style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}><ChevronDown size={12}/></button>
-                </div>
-                <button aria-label="حذف المرفق" title="حذف المرفق" onClick={()=>delFeat(f.id)} className="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-                  style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={13}/></button>
-              </motion.div>
-            ))}</AnimatePresence>
-          </section>
-
-          {/* ── الصور ── */}
-          <section className="flex flex-col gap-3 pt-5" style={{borderTop:`1px solid ${B.border}`}}>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-extrabold m-0 flex items-center gap-2" style={{color:B.black,fontSize:14,fontFamily:"var(--font-app)"}}>
-                  صور الفندق
-                  <span className="px-2 py-0.5 rounded-md text-xs font-bold" style={{background:media.length>=HOTEL_MEDIA_MAX?"#FBE6E6":B.fill,color:media.length>=HOTEL_MEDIA_MAX?"#BE2626":B.muted,border:`1px solid ${media.length>=HOTEL_MEDIA_MAX?"#F3C9C9":B.border}`}}>{media.length} / {HOTEL_MEDIA_MAX}</span>
-                </h3>
-                <p className="text-xs mt-1" style={{color:B.muted}}>الصورة الموسومة «الغلاف» هي التي يراها العميل أولاً.</p>
-              </div>
-              {media.length<HOTEL_MEDIA_MAX&&(
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex-shrink-0"
-                  style={{background:B.fill,border:`1px solid ${B.border}`,color:"#1E52C7"}}>
-                  <Film size={12}/>إضافة فيديو
-                  <input type="file" accept="video/*" className="hidden" onChange={onPickMedia("hotels",url=>appendMedia("video",url))}/>
-                </label>
-              )}
-            </div>
-            <div className="grid gap-2.5" style={{gridTemplateColumns:"repeat(auto-fill,minmax(132px,1fr))"}}>
-              {media.map((m,idx)=>(
-                <div key={m.id} className="rounded-xl overflow-hidden flex flex-col"
-                  style={{border:`1.5px solid ${m.primary?B.gold:B.border}`,background:"#fff"}}>
-                  <div className="relative" style={{aspectRatio:"4 / 3",background:B.fill}}>
-                    {m.url
-                      ? (m.kind==="image"
-                          ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                          : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
-                      /* صفٌّ قديم بلا رابط — يبقى قابلاً للإصلاح لا معطوباً. */
-                      : <label className="absolute inset-0 flex flex-col items-center justify-center gap-1 cursor-pointer" style={{color:B.muted}}>
-                          {m.kind==="image"?<ImagePlus size={18}/>:<Film size={18}/>}<span style={{fontSize:10}}>اختر ملفاً</span>
-                          <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="hidden" onChange={onPickMedia("hotels",url=>updMedia(m.id,"url",url))}/>
-                        </label>}
-                    {m.primary&&<span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-xs font-bold" style={{background:B.gold,color:B.black}}>الغلاف</span>}
-                    {m.kind==="video"&&<span className="absolute top-1.5 right-1.5 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-bold" style={{background:"rgba(14,12,11,0.72)",color:B.cream}}><Film size={10}/>فيديو</span>}
-                  </div>
-                  <div className="flex items-center gap-1 p-1.5" style={{borderTop:`1px solid ${B.border}`}}>
-                    {m.kind==="image"&&(
-                      <button type="button" onClick={()=>setPrimaryMedia(m.id)} disabled={m.primary}
-                        title={m.primary?"هذه هي صورة الغلاف":"اجعلها الغلاف"} aria-label={m.primary?"صورة الغلاف":"اجعلها الغلاف"}
-                        style={tinyBtn("gold",m.primary)}><Star size={13}/></button>
-                    )}
-                    <button type="button" onClick={()=>moveMedia(m.id,-1)} disabled={idx===0} title="تقديم" aria-label="تقديم في الترتيب"
-                      style={tinyBtn("neutral",idx===0)}><ChevronUp size={13}/></button>
-                    <button type="button" onClick={()=>moveMedia(m.id,1)} disabled={idx===media.length-1} title="تأخير" aria-label="تأخير في الترتيب"
-                      style={tinyBtn("neutral",idx===media.length-1)}><ChevronDown size={13}/></button>
-                    <button type="button" onClick={()=>delMedia(m.id)} title="حذف" aria-label="حذف الملف"
-                      className="ms-auto" style={tinyBtn("danger")}><Trash2 size={13}/></button>
-                  </div>
-                </div>
+      {/* ── المرافق ── */}
+      <FormSection title="المرافق" sub="ما يظهر للعميل في بطاقة الفندق."
+        aside={
+          <Button size="sm" variant="secondary" icon={galleryOpen&&!featureIconTarget?<X size={14}/>:<Plus size={14}/>}
+            onClick={()=>{setFeatureIconTarget(null);setShowFeatIcons(v=>!v);}}>
+            {galleryOpen&&!featureIconTarget?"إغلاق المعرض":"إضافة مرفق"}
+          </Button>}>
+        {/* معرض الرموز يُطوى: عشرون رمزاً مفتوحةً دائماً تجعل النموذج
+            يبدو لوحة إعدادات، وهي لا تُستعمل إلّا لحظة الإضافة. */}
+        {galleryOpen&&(
+          <div className="rounded-xl p-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+            <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:featureIconTarget?B.text3:B.muted,fontWeight:featureIconTarget?600:400}}>
+              {featureIconTarget?"اختر الرمز الجديد لهذا المرفق.":"اختر رمزاً ليُضاف سطرٌ تكتب فيه اسم المرفق."}
+            </p>
+            <div className="grid gap-1.5" style={{gridTemplateColumns:"repeat(auto-fill, minmax(40px, 1fr))"}}>
+              {HOTEL_FEATURE_CATALOG.map(({id,label,Icon})=>(
+                <IconButton key={id} variant="outline" label={label} style={{width:"100%",height:40}} onClick={()=>{
+                  if(featureIconTarget) { chooseFeatIcon(featureIconTarget,id); setFeatureIconTarget(null); }
+                  else addFeat(id);
+                }}><Icon size={18}/></IconButton>
               ))}
-              {media.length<HOTEL_MEDIA_MAX&&(
-                <label className="rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer"
-                  style={{border:`2px dashed ${B.border}`,background:B.fill,color:B.muted,minHeight:132}}>
-                  <ImagePlus size={20}/><span className="text-xs font-bold">إضافة صورة</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("hotels",url=>appendMedia("image",url))}/>
-                </label>
-              )}
             </div>
-          </section>
-
-          {/* ── الآراء ── */}
-          <section className="flex flex-col gap-3 pt-5" style={{borderTop:`1px solid ${B.border}`}}>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <h3 className="font-extrabold m-0" style={{color:B.black,fontSize:14,fontFamily:"var(--font-app)"}}>آراء النزلاء</h3>
-                <p className="text-xs mt-1" style={{color:B.muted}}>استيراد CSV بعمودين: <b>الاسم، الرأي</b>.</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{background:B.fill,border:`1px solid ${B.border}`,color:B.text2}}>
-                  <FileUp size={12}/>استيراد CSV
-                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={event=>{ importReviews(event.target.files?.[0]); event.currentTarget.value=""; }}/>
-                </label>
-                <button onClick={addReview} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
-                  style={{background:B.fill,border:`1px solid ${B.border}`,color:"#8a6a08"}}><Plus size={12}/>إضافة رأي</button>
-              </div>
-            </div>
-            <AnimatePresence>{form.reviews.map(rv=>(
-              <motion.div key={rv.id} initial={{opacity:0,height:0}} animate={{opacity:1,height:"auto"}} exit={{opacity:0,height:0}}
-                className="rounded-2xl p-3 flex gap-3" style={{border:`1px solid ${B.border}`}}>
-                <div className="flex-1 flex flex-col gap-2 min-w-0">
-                  <input className={inp} style={ist} value={rv.name} placeholder="الاسم الأول" onChange={e=>updReview(rv.id,"name",e.target.value)}/>
-                  <textarea className={inp} style={{...ist,resize:"vertical"}} rows={2} value={rv.text} placeholder="ماذا قال؟" onChange={e=>updReview(rv.id,"text",e.target.value)}/>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {rv.image&&(
-                      <div className="relative rounded-lg overflow-hidden flex-shrink-0" style={{border:`1px solid ${B.border}`,width:44,height:44}}>
-                        <img src={rv.image} alt="صورة مرفقة" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                        <button aria-label="إزالة صورة الرأي" title="إزالة صورة الرأي" onClick={()=>updReview(rv.id,"image",undefined)} className="absolute top-0 left-0 w-5 h-5 flex items-center justify-center cursor-pointer"
-                          style={{background:"rgba(190,38,38,0.92)",color:"#fff",border:"none",borderBottomRightRadius:8}}><X size={10}/></button>
-                      </div>
-                    )}
-                    <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer"
-                      style={{background:B.fill,color:"#8a6a08",border:`1px solid ${B.border}`}}>
-                      <ImagePlus size={12}/>{rv.image?"تغيير الصورة":"صورة — اختياري"}
-                      <input type="file" accept="image/*" className="hidden" onChange={onPickMedia("hotel-reviews",url=>updReview(rv.id,"image",url))}/>
-                    </label>
-                  </div>
+          </div>
+        )}
+        {form.features.length>0&&(
+          <div className="flex flex-col gap-2">
+            {form.features.map((f,idx)=>{ const Icon=hotelFeatureIcon(f.icon); const picking=featureIconTarget===f.id; return (
+              <div key={f.id} className="flex gap-2 items-center">
+                {/* المحدَّد أسودُ لا ذهبي: هو موضع التبديل لا فعلٌ يُضغط. */}
+                <button type="button" aria-label="تغيير رمز المرفق" title="تغيير الرمز" aria-pressed={picking}
+                  onClick={()=>setFeatureIconTarget(picking?null:f.id)} className="ui-iconbtn ui-iconbtn--outline"
+                  style={{width:42,height:42,...(picking?{background:B.ink,borderColor:B.ink,color:B.onInk}:{background:B.fill,color:B.text3})}}><Icon size={18}/></button>
+                <Input className="flex-1 min-w-0" value={f.text} placeholder="مثال: إفطار مجاني" aria-label="اسم المرفق" onChange={e=>updFeat(f.id,"text",e.target.value)}/>
+                <div className="flex items-center flex-shrink-0">
+                  <IconButton size="sm" label="تقديم المرفق" disabled={idx===0} onClick={()=>moveFeat(f.id,-1)}><ChevronUp size={16}/></IconButton>
+                  <IconButton size="sm" label="تأخير المرفق" disabled={idx===form.features.length-1} onClick={()=>moveFeat(f.id,1)}><ChevronDown size={16}/></IconButton>
+                  <IconButton size="sm" variant="danger" label="حذف المرفق" onClick={()=>delFeat(f.id)}><Trash2 size={15}/></IconButton>
                 </div>
-                <button aria-label="حذف الرأي" title="حذف الرأي" onClick={()=>delReview(rv.id)} className="w-8 h-8 rounded-xl flex items-center justify-center cursor-pointer flex-shrink-0"
-                  style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}><X size={12}/></button>
-              </motion.div>
-            ))}</AnimatePresence>
-            {form.reviews.length===0&&<div className="flex flex-col items-center py-8 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Star size={24} style={{opacity:0.3,marginBottom:6}}/><p className="text-sm m-0">لا توجد آراء بعد</p></div>}
-          </section>
-        </div>
+              </div>
+            );})}
+          </div>
+        )}
+        {form.features.length===0&&!galleryOpen&&(
+          <FormEmpty icon={<CircleCheck size={18}/>}>لا مرافق بعد — أضف ما يميّز الفندق: إفطار، نقل للحرم، واي فاي…</FormEmpty>
+        )}
+      </FormSection>
 
-        <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{borderTop:`1px solid ${B.border}`}}>
-          <button onClick={submit} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.gold,color:B.black,border:"none"}}><Check size={14}/>حفظ الفندق</button>
-          <button onClick={requestClose} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer"
-            style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
+      {/* ── الصور ── */}
+      <FormSection
+        title={<>صور الفندق<Badge tone={mediaFull?"danger":"neutral"}><span dir="ltr">{media.length} / {HOTEL_MEDIA_MAX}</span></Badge></>}
+        sub="الصورة الموسومة «الغلاف» هي التي يراها العميل أولاً."
+        aside={!mediaFull&&(
+          <FileButton accept="video/*" icon={<Film size={14}/>} onChange={onPickMedia("hotels",url=>appendMedia("video",url))}>إضافة فيديو</FileButton>
+        )}>
+        <div className="grid gap-3" style={{gridTemplateColumns:"repeat(auto-fill,minmax(148px,1fr))"}}>
+          {media.map((m,idx)=>(
+            <div key={m.id} className="ui-card ui-card--flat overflow-hidden flex flex-col">
+              <div className="relative" style={{aspectRatio:"4 / 3",background:B.fill}}>
+                {m.url
+                  ? (m.kind==="image"
+                      ? <img src={m.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      : <video src={m.url} style={{width:"100%",height:"100%",objectFit:"cover"}}/>)
+                  /* صفٌّ قديم بلا رابط — يبقى قابلاً للإصلاح لا معطوباً. */
+                  : <label className={`absolute inset-0 flex flex-col items-center justify-center gap-1 cursor-pointer ${pickRing}`} style={{color:B.muted}}>
+                      {m.kind==="image"?<ImagePlus size={18}/>:<Film size={18}/>}<span style={{fontSize:12}}>اختر ملفاً</span>
+                      <input type="file" accept={m.kind==="image"?"image/*":"video/*"} className="sr-only" onChange={onPickMedia("hotels",url=>updMedia(m.id,"url",url))}/>
+                    </label>}
+                {(m.primary||m.kind==="video")&&(
+                  <span className="absolute inline-flex" style={{top:6,insetInlineStart:6}}>
+                    <Badge style={{background:B.ink,color:B.onInk}}>{m.kind==="video"?<><Film size={12}/>فيديو</>:"الغلاف"}</Badge>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center p-1" style={{borderTop:`1px solid ${B.border}`}}>
+                {m.kind==="image"&&(
+                  <IconButton size="sm" aria-pressed={m.primary} label={m.primary?"صورة الغلاف":"اجعلها الغلاف"} onClick={()=>setPrimaryMedia(m.id)}>
+                    <Star size={15} fill={m.primary?B.gold:"none"} stroke={m.primary?B.gold:"currentColor"}/>
+                  </IconButton>
+                )}
+                {/* الشبكة تُقرأ من اليمين: «تقديم» يحرّك الصورة يميناً نحو الأولى. */}
+                <IconButton size="sm" label="تقديم في الترتيب" disabled={idx===0} onClick={()=>moveMedia(m.id,-1)}><ArrowRight size={15}/></IconButton>
+                <IconButton size="sm" label="تأخير في الترتيب" disabled={idx===media.length-1} onClick={()=>moveMedia(m.id,1)}><ArrowLeft size={15}/></IconButton>
+                <IconButton size="sm" variant="danger" className="ms-auto" label="حذف الملف" onClick={()=>delMedia(m.id)}><Trash2 size={15}/></IconButton>
+              </div>
+            </div>
+          ))}
+          {!mediaFull&&(
+            <label className={`flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer rounded-2xl border-[1.5px] border-dashed border-[var(--k-border-strong)] bg-[var(--k-fill)] hover:bg-[var(--k-surface)] hover:border-[var(--k-muted)] transition-colors ${pickRing}`}
+              style={{color:B.text2,padding:16,minHeight:media.length?undefined:136,gridColumn:media.length?undefined:"1 / -1"}}>
+              <ImagePlus size={22} style={{color:B.muted}}/>
+              <span style={{fontSize:13,fontWeight:600}}>{media.length?"إضافة صورة":"أضف صور الفندق"}</span>
+              {media.length===0&&<span style={{fontSize:12,color:B.muted}}>أول صورةٍ تصير الغلاف — حتى {HOTEL_MEDIA_MAX} ملفات.</span>}
+              <input type="file" accept="image/*" className="sr-only" onChange={onPickMedia("hotels",url=>appendMedia("image",url))}/>
+            </label>
+          )}
         </div>
-      </motion.div>
-    </motion.div>
+      </FormSection>
+
+      {/* ── الآراء ── */}
+      <FormSection title="آراء النزلاء" sub={<>استيراد CSV بعمودين: <b style={{color:B.text3,fontWeight:600}}>الاسم، الرأي</b>.</>}
+        aside={<>
+          <FileButton accept=".csv,text/csv" icon={<FileUp size={14}/>} onChange={event=>{ importReviews(event.target.files?.[0]); event.currentTarget.value=""; }}>استيراد CSV</FileButton>
+          <Button size="sm" variant="secondary" icon={<Plus size={14}/>} onClick={addReview}>إضافة رأي</Button>
+        </>}>
+        {form.reviews.map((rv,idx)=>(
+          <div key={rv.id} className="ui-card ui-card--flat p-3 flex gap-2 items-start">
+            <div className="flex-1 flex flex-col gap-2 min-w-0">
+              <Input value={rv.name} placeholder="الاسم الأول" aria-label={`اسم صاحب الرأي ${idx+1}`} onChange={e=>updReview(rv.id,"name",e.target.value)}/>
+              <Textarea rows={2} value={rv.text} placeholder="ماذا قال؟" aria-label={`نصّ الرأي ${idx+1}`} style={{minHeight:68}} onChange={e=>updReview(rv.id,"text",e.target.value)}/>
+              <div className="flex items-center gap-2 flex-wrap">
+                {rv.image&&(
+                  <div className="relative rounded-lg overflow-hidden flex-shrink-0" style={{border:`1px solid ${B.border}`,width:44,height:44}}>
+                    <img src={rv.image} alt="صورة مرفقة" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  </div>
+                )}
+                <FileButton variant="ghost" accept="image/*" icon={<ImagePlus size={14}/>} onChange={onPickMedia("hotel-reviews",url=>updReview(rv.id,"image",url))}>
+                  {rv.image?"تغيير الصورة":"صورة — اختياري"}
+                </FileButton>
+                {rv.image&&<Button size="sm" variant="ghost" icon={<X size={14}/>} onClick={()=>updReview(rv.id,"image",undefined)}>إزالة الصورة</Button>}
+              </div>
+            </div>
+            <IconButton size="sm" variant="danger" label="حذف الرأي" onClick={()=>delReview(rv.id)}><Trash2 size={15}/></IconButton>
+          </div>
+        ))}
+        {form.reviews.length===0&&(
+          <FormEmpty icon={<MessageSquareText size={18}/>}>لا آراء بعد — أضف رأياً يدوياً أو استورد ملف CSV.</FormEmpty>
+        )}
+      </FormSection>
+    </Modal>
   );
 }
 
@@ -488,53 +485,48 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
     madinah:hotels.filter(h=>h.city==="المدينة").length,
   };
   function handleSave(h:Hotel){setHotels(p=>editTarget?p.map(x=>x.id===h.id?h:x):[h,...p]);setShowModal(false);}
-  const fb=(on:boolean)=>({padding:"6px 14px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s"});
+  const clearFilters=()=>{setSearch("");setCityFilter("all");setStatusFilter("all");};
+  /* «لا شيء بعد» غير «لا شيء يطابق»: الأول يُخرَج منه بالإضافة، والثاني بإزالة المرشّحات. */
+  const filteredOut=hotels.length>0;
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="الفنادق" crumb="إدارة الفنادق" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
+      {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
+      <PageHeader title="الفنادق" crumb="إدارة الفنادق" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        actions={mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{openForm(null);}}>
+          <span className="hidden sm:inline">إضافة فندق</span><span className="sm:hidden">إضافة</span>
+        </Button>}/>
+      <div className="px-4 md:px-8 pt-1">
+        {/* كل بطاقةٍ تُرشِّح القائمة بما تعدّه، فلا يُكرَّر العدّ على شرائح الترشيح. */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="إجمالي الفنادق" value={stats.total} sub="في النظام" accent/>
-          <StatCard label="نشطة" value={stats.active} sub={`${stats.total-stats.active} متوقفة`}/>
-          <StatCard label="🕋 مكة" value={stats.mecca} sub="مسجّلة"/>
-          <StatCard label="🕌 المدينة" value={stats.madinah} sub="مسجّلة"/>
+          <StatCard label="كل الفنادق" value={stats.total} sub="في النظام" accent icon={<Building2 size={15}/>} onClick={clearFilters}/>
+          <StatCard label="نشطة" value={stats.active} sub={`${stats.total-stats.active} متوقفة`} icon={<CircleCheck size={15}/>} onClick={()=>setStatusFilter("active")}/>
+          <StatCard label="مكة" value={stats.mecca} sub="مسجّلة" icon={<MapPin size={15}/>} onClick={()=>setCityFilter("مكة")}/>
+          <StatCard label="المدينة" value={stats.madinah} sub="مسجّلة" icon={<MapPin size={15}/>} onClick={()=>setCityFilter("المدينة")}/>
         </div>
-        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button style={fb(statusFilter==="all")} onClick={()=>setStatusFilter("all")}>الكل</button>
-              <button style={fb(statusFilter==="active")} onClick={()=>setStatusFilter("active")}>نشط</button>
-              <button style={fb(statusFilter==="inactive")} onClick={()=>setStatusFilter("inactive")}>متوقف</button>
-            </div>
-            <div className="flex items-center gap-1 p-1 rounded-xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <button style={fb(cityFilter==="all")} onClick={()=>setCityFilter("all")}>كل المدن</button>
-              <button style={fb(cityFilter==="مكة")} onClick={()=>setCityFilter("مكة")}>🕋 مكة</button>
-              <button style={fb(cityFilter==="المدينة")} onClick={()=>setCityFilter("المدينة")}>🕌 المدينة</button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm" style={{color:B.muted}}><b style={{color:B.black}}>{filtered.length}</b> / {hotels.length}</span>
-            {/* زرّ الإضافة يُخفى لا يُعطَّل: زرٌّ مرئي يعد بعملٍ لا يُنجَز. */}
-            {mayWrite && (
-            <button onClick={()=>{openForm(null);}} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-              style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.35)"}}>
-              <Plus size={15}/>إضافة فندق
-            </button>
-            )}
-          </div>
+        <div className="ts-toolbar">
+          <Segmented<"all"|"active"|"inactive"> label="حالة الفندق" value={statusFilter} onChange={setStatusFilter}
+            options={[{value:"all",label:"الكل"},{value:"active",label:"نشط"},{value:"inactive",label:"متوقف"}]}/>
+          <Segmented<"all"|"مكة"|"المدينة"> label="المدينة" value={cityFilter} onChange={setCityFilter}
+            options={[{value:"all",label:"كل المدن"},{value:"مكة",label:"مكة"},{value:"المدينة",label:"المدينة"}]}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">
+            {filtered.length===hotels.length?hotelsWord(hotels.length):`${filtered.length} من ${hotels.length}`}
+          </span>
         </div>
-        <div className="mt-5" style={{height:1,background:B.border}}/>
       </div>
-      <main className="flex-1 px-4 md:px-8 pb-10 pt-6">
+      <main className="flex-1 px-4 md:px-8 pb-8">
         <EntityGate entity="hotels" label="الفنادق" skeleton="cards">
         {filtered.length===0
-          ?<motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col items-center justify-center py-24 rounded-2xl" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-            <Building2 size={44} style={{opacity:0.2,color:B.gold,marginBottom:12}}/><p className="font-bold" style={{color:B.black}}>لا توجد فنادق مطابقة</p>
-          </motion.div>
-          :<motion.div layout className="grid gap-5" style={{gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
-            <AnimatePresence>{filtered.map(h=>(
-              <HotelCard key={h.id} hotel={h} onEdit={()=>{openForm(h);}}
-                actions={
+          ?<EmptyState
+              icon={filteredOut?<SearchX size={22}/>:<Building2 size={22}/>}
+              title={filteredOut?"لا فنادق تطابق البحث":"لا فنادق بعد"}
+              note={filteredOut?"جرّب كلمةً أخرى أو أزل المرشّحات.":"أضف الفنادق التي تتعامل معها لتُربط بالباقات."}
+              action={filteredOut
+                ? <Button variant="secondary" onClick={clearFilters}>إزالة المرشّحات</Button>
+                : mayWrite&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>{openForm(null);}}>إضافة فندق</Button>}/>
+          :<div className="grid gap-4" style={{gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,300px),1fr))"}}>
+            {filtered.map(h=>(
+              <HotelCard key={h.id} hotel={h}
+                actions={mayWrite&&(
                   /* إجراءان تشغيليان لا أربعة — كما في المواصلات: إيقاف أو
                      حذف نهائي. الإخفاء برمز العين والأرشفة أُسقطا: ثلاثة
                      أزرارٍ تعني «احجبه» فرّقت الموظف بلا فارقٍ حقيقي. */
@@ -555,15 +547,13 @@ export function HotelsPage({onMenuOpen}:{onMenuOpen?:()=>void}={}) {
                       writeLocalOnly(()=>setHotels(p=>p.filter(x=>x.id!==h.id)));
                     }}
                   />
-                }/>
-            ))}</AnimatePresence>
-          </motion.div>
+                )}/>
+            ))}
+          </div>
         }
         </EntityGate>
       </main>
-      <AnimatePresence>
-        {showModal&&<HotelModal initial={editTarget} onSave={handleSave} onClose={()=>setShowModal(false)}/>}
-      </AnimatePresence>
+      {showModal&&<HotelModal initial={editTarget} onSave={handleSave} onClose={()=>setShowModal(false)}/>}
     </div>
   );
 }

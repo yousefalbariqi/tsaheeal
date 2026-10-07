@@ -1,11 +1,9 @@
-import { useState } from "react";
-import { motion } from "motion/react";
-import { ShieldCheck, LogIn } from "lucide-react";
-import { B } from "@/lib/theme";
-import { TasaheelMark } from "@/components/TasaheelMark";
-import { Spinner } from "@/components/Spinner";
+import { useState, type FormEvent } from "react";
+import { AlertCircle, LogIn } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { Field } from "@/components/Field";
+import { Button, Note } from "@/components/ui";
+import { AuthShell, PasswordInput } from "./AuthShell";
 
 export function LoginPage() {
   const signIn = useStore((s) => s.signIn);
@@ -14,63 +12,48 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
     if (!email.trim() || !password || busy) return;
     setBusy(true); setError("");
     const { error } = await signIn(email.trim(), password);
-    if (error) { setError(error === "Invalid login credentials" ? "بيانات الدخول غير صحيحة" : error); setBusy(false); }
+    /* رسالة المزوّد لا تُعرض كما هي: «Invalid login credentials» تُترجم، وما
+       عداها (شبكة، حدّ محاولات) يُقال بلغة الموظف مع ما يفعله بعدها. */
+    if (error) {
+      setError(error === "Invalid login credentials"
+        ? "البريد أو كلمة المرور غير صحيحة."
+        : /rate|too many/i.test(error) ? "محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة."
+        : "تعذّر الدخول. تحقّق من الاتصال ثم أعد المحاولة.");
+      setBusy(false);
+    }
     // عند النجاح يتحدّث المخزن عبر onAuthStateChange وتُعرض الواجهة تلقائياً
   };
 
   return (
-    <div dir="rtl" lang="ar" className="min-h-screen flex items-center justify-center p-4"
-      style={{ fontFamily: "var(--font-app)", background: `linear-gradient(160deg,${B.primaryDeep} 0%,${B.primary} 55%,${B.black} 100%)` }}>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full" style={{ maxWidth: 400 }}>
-        <div className="flex flex-col items-center mb-6">
-          <TasaheelMark size={76} />
-          <div className="mt-3" style={{ fontFamily: "var(--font-app)", fontSize: 22, fontWeight: 800, color: "#fff" }}>تساهيل العمرة</div>
-          <div style={{ fontSize: 10, color: B.gold, letterSpacing: 1, marginTop: 2 }}>لوحة الإدارة · دخول آمن</div>
+    <AuthShell title="تسجيل الدخول" sub="أدخل بريدك وكلمة المرور للوصول إلى لوحة الإدارة.">
+      <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
+        <div>
+          <Field label="البريد الإلكتروني">
+            <input type="email" name="email" autoComplete="username" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com" autoFocus dir="ltr"
+              className="ui-input" style={{ height: 46, textAlign: "left" }} />
+          </Field>
         </div>
-
-        <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: "#fff" }}>
-          <div>
-            <div className="font-extrabold text-lg" style={{ color: B.black, fontFamily: "var(--font-app)" }}>تسجيل الدخول</div>
-            <div className="text-xs mt-0.5" style={{ color: B.muted }}>أدخل بريدك وكلمة المرور للوصول إلى لوحة التحكم.</div>
-          </div>
-
-          <div>
-            <Field label="البريد الإلكتروني" labelStyle={{ color: B.text3, textAlign: "right", direction: "rtl" }}>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
-                placeholder="you@example.com" autoFocus
-                className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-                style={{ borderColor: B.border, color: B.black, direction: "ltr", textAlign: "right", fontFamily: "var(--font-app)" }} />
-            </Field>
-          </div>
-          <div>
-            <label className="block text-xs font-bold mb-1.5" style={{ color: B.text3, textAlign: "right", direction: "rtl" }}>كلمة المرور</label>
+        <div>
+          <Field label="كلمة المرور">
             {/* لا نقاط توضيحية: في حقل كلمة المرور تُرسَم النقاط نفسها للقيمة
-                الحقيقية، فثماني نقاط تبدو كلمة مرور مكتوبة سلفاً — وهي أشدّ
-                حالات إيهام النصّ التوضيحي بأنه بيانات. */}
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="أدخل كلمة المرور"
-              className="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none"
-              style={{ borderColor: B.border, color: B.black, direction: "rtl", textAlign: "right" }} />
-          </div>
-
-          {error && <div className="text-xs font-bold rounded-lg px-3 py-2" style={{ background: "#FBE6E6", color: "#BE2626", border: "1px solid #F3C9C9" }}>{error}</div>}
-
-          <button onClick={submit} disabled={busy || !email.trim() || !password}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-extrabold text-sm"
-            style={{ background: busy || !email.trim() || !password ? "#EEECEA" : B.gold, color: busy || !email.trim() || !password ? B.muted : B.black, border: "none", cursor: busy || !email.trim() || !password ? "not-allowed" : "pointer" }}>
-            {busy
-              ? <><Spinner size={15} track="rgba(27,23,18,0.15)" color={B.muted} />جارٍ الدخول…</>
-              : <><LogIn size={16} />دخول</>}
-          </button>
-          <div className="flex items-center justify-center gap-1.5 text-xs" style={{ color: B.muted }}>
-            <ShieldCheck size={12} />اتصال آمن ومشفّر عبر Supabase
-          </div>
+                الحقيقية، فثماني نقاط تبدو كلمة مرور مكتوبة سلفاً. */}
+            <PasswordInput name="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
         </div>
-      </motion.div>
-    </div>
+
+        {error && <Note tone="danger" icon={<AlertCircle size={16} />}>{error}</Note>}
+
+        <Button type="submit" variant="primary" size="lg" block loading={busy} disabled={!email.trim() || !password}
+          icon={<LogIn size={17} />}>
+          {busy ? "جارٍ الدخول…" : "دخول"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

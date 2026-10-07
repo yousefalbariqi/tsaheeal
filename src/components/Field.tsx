@@ -11,7 +11,6 @@
    يعيد شِقّاً (fragment) لا صندوقاً: النداءات القائمة داخل <div> يحمل
    تنسيق الشبكة، وإضافة صندوق ثانٍ تكسر التخطيط. */
 import { cloneElement, isValidElement, useId, type CSSProperties, type ReactElement, type ReactNode } from "react";
-import { B } from "@/lib/theme";
 
 export interface FieldProps {
   label: ReactNode;
@@ -24,7 +23,7 @@ export interface FieldProps {
   children: ReactNode;
 }
 
-const DEFAULT_LABEL_CLASS = "block text-xs font-bold mb-1.5";
+const DEFAULT_LABEL_CLASS = "ui-label";
 
 export function Field({ label, hint, error, labelClass, labelStyle, children }: FieldProps) {
   const auto = useId();
@@ -40,11 +39,11 @@ export function Field({ label, hint, error, labelClass, labelStyle, children }: 
     <>
       <label htmlFor={forId}
         className={labelClass ?? DEFAULT_LABEL_CLASS}
-        style={labelStyle ?? { color: B.text3 }}>{label}</label>
+        style={labelStyle}>{label}</label>
       {child}
       {error
-        ? <div className="text-xs font-bold mt-1" style={{ color: "#BE2626" }}>{error}</div>
-        : hint ? <div className="text-xs mt-1" style={{ color: B.muted }}>{hint}</div> : null}
+        ? <div role="alert" className="ui-error">{error}</div>
+        : hint ? <div className="ui-hint">{hint}</div> : null}
     </>
   );
 }

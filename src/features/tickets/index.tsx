@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Ticket } from "lucide-react";
-import { B } from "@/lib/theme";
+import { Eye, SearchX, Ticket } from "lucide-react";
+import { B, ELEV, SCRIM, type ToneName } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
+import { useDialogA11y } from "@/lib/useDialogA11y";
 import type { TicketEntry } from "@/types";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,13 +11,28 @@ import { useStore } from "@/store/useStore";
 import { Pager, usePaged, type Paged } from "@/components/Pager";
 import { useServerPagedSearch } from "@/lib/useServerSearch";
 import { sar } from "@/lib/money";
-import { EntityGate } from "@/components/States";
+import { fmtDateShort, fmtTime } from "@/lib/dates";
+import { EntityGate, EmptyState } from "@/components/States";
 import { OrgLine } from "@/components/OrgLine";
 import { QRBlock } from "@/components/QRBlock";
 import { invVerifyUrl } from "@/lib/utils";
 import { DocActions } from "@/features/docs/DocActions";
 import { ticketPhase, TICKET_PHASE_LABEL, TICKET_PHASE_TONE, docFileName } from "@/lib/docPhase";
 import type { TicketPhase } from "@/types";
+import { Badge, Button, FilterChips, IconButton, SortTh, useSort, type ChipOption } from "@/components/ui";
+
+/* لون الطور في القائمة من ألوان المعنى في اللوحة (TONE). الورقة المطبوعة
+   تبقى على ألوان lib/docPhase كما هي. */
+const PHASE_TONE: Record<TicketPhase, ToneName> = { valid:"success", used:"info", cancelled:"danger", expired:"neutral" };
+const PhaseBadge = ({t}:{t:TicketEntry}) => { const ph=ticketPhase(t); return <Badge dot tone={PHASE_TONE[ph]}>{TICKET_PHASE_LABEL[ph]}</Badge>; };
+const PHASES: TicketPhase[] = ["valid","used","expired","cancelled"];
+
+/* مفاتيح الفرز — للقائمة المحلية وحدها؛ بحث القاعدة يرتّب صفحته بنفسه. */
+type SortKey = "no"|"client"|"pkg"|"persons"|"trip"|"phase";
+const SORT_GET: Record<SortKey,(t:TicketEntry)=>string|number|null|undefined> = {
+  no: t=>t.ticketNo, client: t=>t.clientName, pkg: t=>t.packageName, persons: t=>t.persons,
+  trip: t=>`${t.tripDate} ${t.tripTime}`, phase: t=>TICKET_PHASE_LABEL[ticketPhase(t)],
+};
 
 /* ─── Ticket Print View ─── */
 export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPrint?:boolean;onClose:()=>void}) {
@@ -49,11 +65,16 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
 
   /* geometric tile SVG as data URL */
   const geoBg = `repeating-linear-gradient(45deg,rgba(192,134,44,.06) 0px,rgba(192,134,44,.06) 1px,transparent 1px,transparent 22px),repeating-linear-gradient(-45deg,rgba(192,134,44,.06) 0px,rgba(192,134,44,.06) 1px,transparent 1px,transparent 22px)`;
+  /* ليست <Modal> المشتركة لسبب الفاتورة نفسه (features/payments): قاعدة
+     الطباعة تُثبّت الورقة على أقرب سلفٍ متموضع، وهو هذه الخلفية بعرض
+     الصفحة؛ داخل `.ui-modal` كانت ستُقصّ. البنية باقية والمظهر موحَّد. */
+  const a11y = useDialogA11y({ open:true, onClose });
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(14,12,11,.75)"}}>
-      <div className="w-full max-w-2xl flex flex-col gap-3 my-4" onClick={e=>e.stopPropagation()}>
+      className="ts-admin fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 overflow-auto" dir="rtl"
+      style={{background:SCRIM}}>
+      <div ref={a11y.ref} {...a11y.panelProps} aria-label={`تذكرة ${ticket.ticketNo}`}
+        className="w-full max-w-2xl flex flex-col gap-3 my-2 sm:my-4" style={{outline:"none"}} onClick={e=>e.stopPropagation()}>
         {/* نطاق الطباعة — كان ناقصاً هنا وحده: زرّ «طباعة» في التذكرة
             يطبع الصفحة كلها (القائمة الجانبية والجدول خلف النافذة) لا
             التذكرة. نفس القاعدة المستعملة في الفاتورة. */}
@@ -70,7 +91,7 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
           onClose={onClose}
         />
         {/* ticket body */}
-        <div id="ticket-sheet" className="rounded-2xl overflow-hidden" style={{background:"#fff",boxShadow:"0 24px 64px -12px rgba(14,12,11,.5)"}}>
+        <div id="ticket-sheet" className="overflow-hidden" style={{background:"#fff",borderRadius:20,boxShadow:ELEV[4]}}>
           {/* Hero band */}
           <div className="relative px-8 py-7" style={{background:B.primaryDeep,backgroundImage:geoBg}}>
             <div className="absolute top-0 inset-x-0 h-1.5" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2},${B.gold})`}}/>
@@ -83,7 +104,7 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
                     كلمةٌ تُقرأ التزاماً. الآن تُذكر واقعةٌ يسندها عمود:
                     تاريخ الإصدار. ومن أرادها «معتمدة» يعرّف الاعتماد
                     أولاً — من يملكه وبأي شرط. */}
-                <div className="mt-4 text-xs" style={{color:"#86A8A4"}}>
+                <div className="mt-4 text-xs" style={{color:"#A39A8B"}}>
                   {ticket.issuedAt
                     ? `تذكرة سفر — صادرة ${new Date(ticket.issuedAt).toISOString().slice(0,10)}`
                     : "تذكرة سفر"}
@@ -97,9 +118,9 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
                 </div>
               </div>
               <div className="text-left">
-                <div className="text-xs font-bold mb-1" style={{color:"#86A8A4"}}>رقم التذكرة</div>
+                <div className="text-xs font-bold mb-1" style={{color:"#A39A8B"}}>رقم التذكرة</div>
                 <div style={{fontFamily:"var(--font-app)",fontSize:24,fontWeight:800,color:B.gold}}>{ticket.ticketNo}</div>
-                <div className="text-xs mt-1" style={{color:"#86A8A4"}}>حجز: <span style={{fontFamily:"var(--font-app)"}}>{ticket.bookingId}</span></div>
+                <div className="text-xs mt-1" style={{color:"#A39A8B"}}>حجز: <span style={{fontFamily:"var(--font-app)"}}>{ticket.bookingId}</span></div>
               </div>
             </div>
           </div>
@@ -178,8 +199,8 @@ export function TicketCard({ticket,autoPrint,onClose}:{ticket:TicketEntry;autoPr
 
           {/* Dashed perforated separator */}
           <div className="relative flex items-center">
-            <div className="absolute -right-3 w-6 h-6 rounded-full" style={{background:"rgba(14,12,11,.75)",zIndex:1}}/>
-            <div className="absolute -left-3 w-6 h-6 rounded-full" style={{background:"rgba(14,12,11,.75)",zIndex:1}}/>
+            <div className="absolute -right-3 w-6 h-6 rounded-full" style={{background:SCRIM,zIndex:1}}/>
+            <div className="absolute -left-3 w-6 h-6 rounded-full" style={{background:SCRIM,zIndex:1}}/>
             <div className="flex-1 border-t-2 border-dashed mx-4" style={{borderColor:B.border}}/>
           </div>
 
@@ -269,7 +290,8 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
   /* ترقيم الصفحات — الرسم على الصفحة الحالية وحدها. المفتاح يُعيد
      للصفحة الأولى عند تغيّر البحث أو المرشّح: من كان في الصفحة الخامسة
      ثم بحث عن اسم يجب أن يرى أول النتائج لا صفحتها الخامسة. */
-  const pg = usePaged(filtered, `${query}|${phaseFilter}`);
+  const sorter = useSort<TicketEntry,SortKey>(filtered, SORT_GET);
+  const pg = usePaged(sorter.rows, `${query}|${phaseFilter}`);
 
   /* في Supabase لا نبحث في العناصر المحمّلة: admin_search_tickets تفلتر
      وتُرقّم في PostgreSQL. وإن غاب الإجراء (ترحيلٌ لم يُشغَّل) تُطفئ
@@ -289,112 +311,126 @@ export function TicketsPage({onMenuOpen}:{onMenuOpen?:()=>void}) {
     ? { ...base, rows: base.rows.filter(phaseOk) }
     : base;
 
+  const countOf = (ph:TicketPhase) => tickets.filter(t=>ticketPhase(t)===ph).length;
+  const phaseChips: ChipOption<"all"|TicketPhase>[] = [
+    { value:"all", label:"الكل", count:tickets.length },
+    ...PHASES.map(ph=>({ value:ph, label:TICKET_PHASE_LABEL[ph], count:countOf(ph) })),
+  ];
+  const open = (no:string) => setTicketId(no);
+  const filteredOut = tickets.length>0;
+  /* الفرز للقائمة المحلية وحدها — صفحة القاعدة مرتّبةٌ هناك. */
+  const Th = ({k,children,...rest}:{k:SortKey;children:React.ReactNode;style?:React.CSSProperties}) =>
+    srv.supported ? <th {...rest}>{children}</th> : <SortTh k={k} sorter={sorter} {...rest}>{children}</SortTh>;
+
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
       <PageHeader title="التذاكر" crumb="تذاكر السفر" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
-      {/* Stats */}
-      <div className="px-4 md:px-8 pt-4 md:pt-5">
+      <div className="px-4 md:px-8 pt-1">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="إجمالي التذاكر" value={tickets.length} sub="صادرة" accent/>
+          <StatCard label="كل التذاكر" value={tickets.length} sub="صادرة" accent onClick={()=>setPhaseFilter("all")}/>
           {/* الإحصاء بالطور لا بالوجهة: «كم تذكرة صالحة اليوم؟» سؤالٌ
               تشغيليّ، و«كم تذكرة لمكة؟» يُعرف من المرشّح. */}
-          <StatCard label="صالحة" value={tickets.filter(t=>ticketPhase(t)==="valid").length} sub="قابلة للاستخدام"/>
-          <StatCard label="مستخدمة" value={tickets.filter(t=>ticketPhase(t)==="used").length} sub="مُسحت على الباب"/>
-          <StatCard label="منتهية أو ملغاة" value={tickets.filter(t=>["expired","cancelled"].includes(ticketPhase(t))).length} sub="خارج الخدمة"/>
+          <StatCard label="صالحة" value={countOf("valid")} sub="قابلة للاستخدام" onClick={()=>setPhaseFilter("valid")}/>
+          <StatCard label="مستخدمة" value={countOf("used")} sub="مُسحت على الباب" onClick={()=>setPhaseFilter("used")}/>
+          <StatCard label="منتهية أو ملغاة" value={countOf("expired")+countOf("cancelled")} sub="خارج الخدمة"/>
         </div>
-        <div className="flex items-center gap-2 mt-5 flex-wrap">
-          {([["all","الكل"],["valid","صالحة"],["used","مستخدمة"],["expired","منتهية"],["cancelled","ملغاة"]] as [string,string][]).map(([v,l])=>(
-            <button key={v} onClick={()=>setPhaseFilter(v as "all"|TicketPhase)}
-              style={{padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer",
-                border:`1px solid ${phaseFilter===v?B.gold:B.border}`,
-                background:phaseFilter===v?B.gold:"#fff",
-                color:phaseFilter===v?B.black:B.text2,whiteSpace:"nowrap"}}>{l}</button>
-          ))}
-          <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{serverSearching?"جارِ البحث…":`${activePg.total} / ${tickets.length}`}</span>
+        <div className="ts-toolbar">
+          <FilterChips label="حالة التذكرة" options={phaseChips} value={phaseFilter} onChange={v=>setPhaseFilter(v)}/>
+          <span className="ts-toolbar-end ts-count" aria-live="polite">
+            {serverSearching?"جارٍ البحث…":activePg.total===tickets.length?`${tickets.length} تذكرة`:`${activePg.total} من ${tickets.length}`}
+          </span>
         </div>
-        <div className="mt-4" style={{height:1,background:B.border}}/>
       </div>
-      {/* Table */}
-      <main className="flex-1 px-4 md:px-8 py-6">
-        <EntityGate entity="tickets" label="التذاكر" cols={8}>
-        {/* Desktop */}
-        <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-          <div className="tbl-scroll tbl-wide">
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+      <main className="flex-1 px-4 md:px-8 pb-8">
+        <EntityGate entity="tickets" label="التذاكر" cols={7}>
+        {/* على صفوف الصفحة لا على العدد الكلي: مرشّح الطور قد يُفرغ الصفحة والعدّ من الخادم غير فارغ. */}
+        {!serverSearching&&activePg.rows.length===0 ? (
+          <EmptyState
+            icon={filteredOut?<SearchX size={22}/>:<Ticket size={22}/>}
+            title={filteredOut?"لا تذاكر تطابق البحث":"لا تذاكر بعد"}
+            note={filteredOut?"جرّب كلمةً أخرى أو أزل المرشّح.":"تصدر التذكرة بعد تأكيد الطلب وتظهر هنا."}
+            action={filteredOut&&<Button variant="secondary" onClick={()=>{setSearch("");setPhaseFilter("all");}}>إزالة المرشّحات</Button>}/>
+        ) : <>
+        <div className="hidden md:block ui-table-wrap" style={{opacity:serverSearching?0.55:1,transition:"opacity .15s"}}>
+          <div className="ui-table-scroll">
+          <table className="ui-table" style={{minWidth:860}}>
             <thead>
-              <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                {["رقم التذكرة","رقم الحجز","العميل","الجوال","الباقة","تاريخ الرحلة","الحالة","إجراء"].map(h=>(
-                  <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
-                ))}
+              <tr>
+                {/* «رقم الحجز» و«الجوال» و«نوع السكن» ووقت الانطلاق صارت
+                    أسطراً ثانية تحت جيرانها: المعلومة باقية والأعمدة ستّة. */}
+                <Th k="no">التذكرة</Th>
+                <Th k="client">العميل</Th>
+                <Th k="pkg">الباقة</Th>
+                <Th k="persons" style={{textAlign:"center"}}>المعتمرون</Th>
+                <Th k="trip">الرحلة</Th>
+                {/* ── الحالة ──
+                    «القائمة الآن لا تعرض الحالة» — فتذكرة رحلةٍ راحت
+                    وتذكرةٌ لغدٍ تبدوان سواءً. */}
+                <Th k="phase">الحالة</Th>
+                <th className="col-action"><span className="sr-only">إجراء</span></th>
               </tr>
             </thead>
             <tbody>
-              {activePg.rows.map((t,i)=>(
-                <tr key={t.ticketNo} style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA"}}>
-                  <td style={{padding:"14px 16px",fontWeight:800,fontFamily:"var(--font-app)",color:B.gold}}>{t.ticketNo}</td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13}}>{t.bookingId}</td>
-                  <td style={{padding:"14px 16px"}}>
-                    <div className="font-bold text-sm" style={{color:B.black}}>{t.clientName}</div>
-                    <div className="text-xs" style={{color:B.muted}}>{t.persons} معتمر</div>
+              {activePg.rows.map(t=>(
+                <tr key={t.ticketNo} className="is-clickable" tabIndex={0} aria-label={`عرض التذكرة ${t.ticketNo}`}
+                  onClick={()=>open(t.ticketNo)}
+                  onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) open(t.ticketNo); }}>
+                  <td className="nowrap">
+                    <div className="cell-main num">{t.ticketNo}</div>
+                    <div className="cell-sub">الطلب <span className="num">{t.bookingId}</span></div>
                   </td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text2,fontSize:13,direction:"ltr"}}>{t.clientPhone}</td>
-                  <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>
-                    {t.packageName}
-                    <div style={{color:B.muted,fontSize:11}}>{t.roomType}</div>
+                  <td>
+                    <div className="cell-main nowrap">{t.clientName}</div>
+                    <div className="cell-sub num">{t.clientPhone}</div>
                   </td>
-                  <td style={{padding:"14px 16px",fontFamily:"var(--font-app)",color:B.text3,fontSize:13}}>{t.tripDate} · {t.tripTime}</td>
-                  {/* ── الحالة ──
-                      «القائمة الآن لا تعرض الحالة» — فتذكرة رحلةٍ راحت
-                      وتذكرةٌ لغدٍ تبدوان سواءً. */}
-                  <td style={{padding:"14px 16px"}}>{(()=>{
-                    const ph=ticketPhase(t); const tn=TICKET_PHASE_TONE[ph];
-                    return (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
-                        style={{background:tn.bg,color:tn.fg}}>
-                        <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{background:tn.fg}}/>
-                        {TICKET_PHASE_LABEL[ph]}
-                      </span>
-                    ); })()}</td>
-                  <td className="col-action" style={{padding:"14px 16px"}}>
-                    <div className="flex gap-2">
-                      <button onClick={()=>setTicketId(t.ticketNo)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                        style={{background:B.gold,color:B.black,border:"none"}}>عرض التذكرة</button>
+                  <td>
+                    <div className="nowrap" style={{color:B.text3}}>{t.packageName}</div>
+                    <div className="cell-sub nowrap">{t.roomType}</div>
+                  </td>
+                  <td style={{textAlign:"center",color:B.text3}}>{t.persons}</td>
+                  <td className="nowrap">
+                    <div style={{color:B.text3}}>{fmtDateShort(t.tripDate)}</div>
+                    <div className="cell-sub">{fmtTime(t.tripTime)}</div>
+                  </td>
+                  <td><PhaseBadge t={t}/></td>
+                  <td className="col-action" onClick={e=>e.stopPropagation()}>
+                    <div className="row-actions">
+                      <IconButton size="sm" label={`عرض التذكرة ${t.ticketNo}`} onClick={()=>open(t.ticketNo)}><Eye size={15}/></IconButton>
                     </div>
                   </td>
                 </tr>
               ))}
-              {serverSearching&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>جارِ البحث في السجل…</td></tr>}
-              {/* على صفوف الصفحة لا على العدد الكلي: مرشّح الطور قد يُفرغ الصفحة والعدّ من الخادم غير فارغ. */}
-              {!serverSearching&&activePg.rows.length===0&&<tr><td colSpan={8} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد تذاكر مطابقة</td></tr>}
+              {serverSearching&&activePg.rows.length===0&&<tr><td colSpan={7} style={{padding:"48px 16px",textAlign:"center",color:B.muted}}>جارٍ البحث في السجلّ…</td></tr>}
             </tbody>
           </table>
           </div>
         </div>
         {/* Mobile cards */}
-        <div className="md:hidden flex flex-col gap-3">
+        <div className="md:hidden flex flex-col gap-2.5" style={{opacity:serverSearching?0.55:1}}>
           {activePg.rows.map(t=>(
-            <motion.div key={t.ticketNo} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}}
-              className="rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="px-4 py-3 flex items-center justify-between" style={{background:B.primaryDeep}}>
-                <span style={{fontFamily:"var(--font-app)",fontWeight:800,fontSize:15,color:B.gold}}>{t.ticketNo}</span>
-                <span style={{fontFamily:"var(--font-app)",fontSize:12,color:"#9DBAB6"}}>{t.bookingId}</span>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <div className="font-bold text-sm" style={{color:B.black}}>{t.clientName}</div>
-                  {(()=>{ const ph=ticketPhase(t); const tn=TICKET_PHASE_TONE[ph];
-                    return <span className="px-2 py-0.5 rounded-full text-xs font-bold"
-                      style={{background:tn.bg,color:tn.fg}}>{TICKET_PHASE_LABEL[ph]}</span>; })()}
+            <div key={t.ticketNo} role="button" tabIndex={0} aria-label={`عرض التذكرة ${t.ticketNo}`} onClick={()=>open(t.ticketNo)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) open(t.ticketNo); }}
+              className="ui-card ui-card--hover p-4" style={{cursor:"pointer"}}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-bold truncate" style={{color:B.black,fontSize:15}}>{t.clientName}</div>
+                  <div className="text-xs mt-0.5" style={{color:B.muted}}>{t.ticketNo} · الطلب {t.bookingId}</div>
                 </div>
-                <div className="text-xs mb-3" style={{color:B.muted}}>{t.packageName} · {t.persons} معتمر · {t.tripDate}</div>
-                <button onClick={()=>setTicketId(t.ticketNo)} className="w-full py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-                  style={{background:B.gold,color:B.black,border:"none"}}>عرض التذكرة</button>
+                <PhaseBadge t={t}/>
               </div>
-            </motion.div>
+              <div className="text-sm mt-3" style={{color:B.text2}}>{t.packageName} · {t.persons} معتمر</div>
+              <div className="text-xs mt-0.5" style={{color:B.muted}}>{t.roomType}</div>
+              <div className="flex items-center justify-between mt-3 pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+                <div className="text-sm" style={{color:B.text3}}>الرحلة {fmtDateShort(t.tripDate)} · {fmtTime(t.tripTime)}</div>
+                <span onClick={e=>e.stopPropagation()}>
+                  <IconButton size="sm" variant="outline" label={`عرض التذكرة ${t.ticketNo}`} onClick={()=>open(t.ticketNo)}><Eye size={15}/></IconButton>
+                </span>
+              </div>
+            </div>
           ))}
-          {serverSearching&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><span className="text-sm font-medium">جارِ البحث في السجل…</span></div>}
-          {!serverSearching&&activePg.rows.length===0&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><Ticket size={28} style={{opacity:.3,marginBottom:8}}/><p className="text-sm">لا توجد تذاكر مطابقة</p></div>}
+          {serverSearching&&activePg.rows.length===0&&<div className="ui-card ui-card--flat text-sm text-center py-12" style={{color:B.muted}}>جارٍ البحث في السجلّ…</div>}
         </div>
+        </>}
         </EntityGate>
         <Pager p={activePg} unit="تذكرة"/>
       </main>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { useNavigate } from "react-router";
-import { B } from "@/lib/theme";
+import { B, ELEV } from "@/lib/theme";
 import { isSupabaseEnabled, supabase } from "@/supabase/client";
 import { useStore } from "@/store/useStore";
 
@@ -62,19 +62,18 @@ export function NotificationsMenu() {
 
   return (
     <div className="relative">
-      <button onClick={toggle} aria-label={unread ? `التنبيهات، ${unread} غير مقروءة` : "التنبيهات"}
-        title="التنبيهات" className="relative w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer"
-        style={{ background: B.primaryDeep, border: "none" }}>
-        <BellRing size={15} style={{ color: B.gold }} />
-        {unread > 0 && <span aria-hidden="true" className="absolute -top-1 -left-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center font-bold"
-          style={{ background: B.gold, color: B.black, fontSize: 9 }}>{unread > 99 ? "99+" : unread}</span>}
+      <button onClick={toggle} aria-label={unread ? `التنبيهات، ${unread} غير مقروءة` : "التنبيهات"} aria-expanded={open}
+        title="التنبيهات" className="ui-iconbtn ui-iconbtn--outline relative" style={{ width: 40, height: 40 }}>
+        <Bell size={18} />
+        {unread > 0 && <span aria-hidden="true" className="absolute flex items-center justify-center"
+          style={{ top: -5, insetInlineEnd: -5, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: B.gold, color: B.ink, fontSize: 10, fontWeight: 700, boxShadow: `0 0 0 2px ${B.bg}` }}>{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && <>
         <button aria-label="إغلاق قائمة التنبيهات" className="fixed inset-0 z-20 cursor-default" style={{ background: "transparent", border: "none" }} onClick={() => setOpen(false)} />
-        <section role="dialog" aria-label="التنبيهات" className="absolute left-0 mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden"
-          style={{ background: "#fff", border: `1px solid ${B.border}`, boxShadow: "0 16px 36px rgba(18,34,31,.18)" }}>
+        <section role="dialog" aria-label="التنبيهات" className="absolute mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden"
+          style={{ insetInlineEnd: 0, background: "#fff", border: `1px solid ${B.border}`, boxShadow: ELEV[3] }}>
           <header className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${B.border}` }}>
-            <BellRing size={15} style={{ color: B.gold }} />
+            <Bell size={15} style={{ color: B.text2 }} />
             <strong className="text-sm flex-1" style={{ color: B.black }}>التنبيهات</strong>
             <span className="text-xs" style={{ color: B.muted }}>{rows.length ? "تم تعليمها كمقروءة" : "لا توجد تنبيهات"}</span>
           </header>
@@ -82,7 +81,7 @@ export function NotificationsMenu() {
             ? <div className="px-4 py-8 text-center text-sm" style={{ color: B.muted }}>لا توجد تنبيهات جديدة</div>
             : <div className="max-h-96 overflow-y-auto">
               {rows.map(n => <button key={n.id} onClick={() => { setOpen(false); if (n.href) navigate(n.href); }}
-                className="w-full text-right px-4 py-3.5 cursor-pointer" style={{ background: "#fff", border: "none", borderBottom: `1px solid ${B.border}` }}>
+                className="w-full text-start px-4 py-3.5 cursor-pointer" style={{ background: "#fff", border: "none", borderBottom: `1px solid ${B.border}` }}>
                 <span className="block text-sm font-bold" style={{ color: B.black }}>{n.title}</span>
                 {n.body && <span className="block mt-0.5 text-xs leading-5" style={{ color: B.text2 }}>{n.body}</span>}
                 <span className="block mt-1 text-xs" style={{ color: B.muted }}>{relativeTime(n.created_at)}</span>

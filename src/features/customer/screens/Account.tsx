@@ -7,9 +7,14 @@
    البنية صفوف قراءة أولاً والتحرير في أوراق سفلية: الصفحة تُقرأ في نظرة
    ولا تتحوّل إلى نموذج طويل، والتعديل يبقى مقصوداً لا عرضياً. */
 import { useEffect, useState } from "react";
-import { ChevronLeft, Plus, Pencil, Trash2, Check, LogOut, Globe, Ticket, UserRound } from "lucide-react";
-import { C, T, R, SPACE, LTR, flipRTL } from "../ui/tokens";
-import { Sheet, CTAButton, GrayButton, OutlineButton, useDir } from "../ui/kit";
+import {
+  ChevronLeft, Plus, Pencil, Trash2, Check, LogOut, Globe, Ticket, UserRound, Users,
+  CircleAlert, BadgeCheck, BookUser,
+} from "lucide-react";
+import { toast } from "sonner";
+import { fmtDate } from "@/lib/dates";
+import { C, T, SPACE, LTR, flipRTL } from "../ui/tokens";
+import { Sheet, CTAButton, GrayButton, useDir } from "../ui/kit";
 import { InputStack, StackField, PhoneField, Labeled } from "../ui/FlowScreen";
 import { BirthDateSelect } from "@/components/BirthDateSelect";
 import { NationalitySelect } from "@/components/NationalitySelect";
@@ -25,9 +30,35 @@ import {
 } from "../travellers";
 import { LANGS, type Lang } from "../i18n";
 
-const validPhone = (p: string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
+/* الصفر الأول اختياري: الحقل يعرض «+966» ويقترح «5X XXX XXXX»، فمن كتب كما
+   يُقترح عليه كان يبقى زرّه معطّلاً. مطابقٌ لتحقّق شاشة الحجز وللخادم. */
+const validPhone = (p: string) => /^(0?5\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s/g, ""));
 const validName  = (s: string) => s.trim().split(/\s+/).filter(Boolean).length >= 2 && s.trim().length >= 5;
 const initial = (s: string) => s.trim().charAt(0) || "؟";
+
+/* تاريخ الميلاد كان يُعرض كما يُخزَّن («1990-04-12»). العربية من lib/dates،
+   والإنجليزية بالتقويم الميلادي نفسه وأرقامٍ لاتينية. */
+const enDate = new Intl.DateTimeFormat("en-GB-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
+function dateText(iso: string, lang: string): string {
+  if (lang !== "en") return fmtDate(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? enDate.format(new Date(+m[1], +m[2] - 1, +m[3], 12)) : iso;
+}
+
+/* ما يرميه حفظ المعتمر نصٌّ للمطوّر (`auth_required` أو رسالة PostgREST)؛
+   يُسجَّل في الطرفية ويُقال للعميل ما يفعله. النصّان هنا لا في i18n.ts
+   لأن الملف ليس من ملفّات هذه الشاشة. */
+function travellerSaveError(e: unknown, lang: string): string {
+  console.error("[Account] تعذّر حفظ المعتمر:", e);
+  const raw = String((e as { message?: string })?.message ?? "");
+  const en = lang === "en";
+  if (raw === "auth_required" || /jwt|not authenticated|401/i.test(raw)) {
+    return en ? "Your session has ended. Sign in again, then save."
+              : "انتهت جلستك. سجّل الدخول من جديد ثم أعد الحفظ.";
+  }
+  return en ? "We couldn't save the details. Check your connection and try again."
+            : "تعذّر حفظ البيانات. تحقّق من الاتصال ثم حاول مرة أخرى.";
+}
 
 /* ── لبنات العرض ─────────────────────────────────────────────────── */
 
@@ -35,50 +66,58 @@ function SectionCard({ title, action, children }: {
   title: string; action?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col" style={{ gap: 10 }}>
-      <div className="flex items-center justify-between" style={{ gap: 8 }}>
-        <h2 style={{ ...T.h3, color: C.ink, margin: 0 }}>{title}</h2>
+    <section className="ac-section">
+      <div className="ac-section-head">
+        <h2>{title}</h2>
         {action}
       </div>
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: R.card, background: C.white, overflow: "hidden" }}>
-        {children}
-      </div>
+      <div className="ac-card">{children}</div>
     </section>
   );
 }
 
+/** إجراء القسم — نصٌّ ذهبيٌّ هادئ بمساحة لمس ٤٤. الزرّ ذو الإطار الأسود
+    كان أثقل من عنوان القسم نفسه، وثلاثةٌ منه في الصفحة تتنازع النظر. */
+function LinkAction({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return <button type="button" className="ac-link" onClick={onClick}>{children}</button>;
+}
+
 /** صفّ «تسمية ← قيمة» مع إجراء اختياري على الحافّة. */
-function Row({ label, value, action, first }: {
-  label: string; value: React.ReactNode; action?: React.ReactNode; first?: boolean;
+function Row({ label, value, action, empty }: {
+  label: string; value: React.ReactNode; action?: React.ReactNode;
+  /** قيمة غير مدخلة — تُخفَّت حتى لا تُقرأ «غير محدّد» كأنها بيان. */
+  empty?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between"
-      style={{ gap: 12, padding: "12px 14px", borderTop: first ? "none" : `1px solid ${C.line}` }}>
-      <span style={{ ...T.meta, color: C.ink2, flexShrink: 0 }}>{label}</span>
-      <span className="flex items-center min-w-0" style={{ gap: 10 }}>
-        <span className="truncate" style={{ ...T.body, color: C.ink, textAlign: "end" }}>{value}</span>
+    <div className="ac-row">
+      <span className="ac-row-label">{label}</span>
+      <span className="ac-row-value" data-empty={empty ? "" : undefined}>
+        <span>{value}</span>
         {action}
       </span>
     </div>
   );
 }
 
-function NavRow({ icon, label, onClick, first }: {
-  icon: React.ReactNode; label: string; onClick: () => void; first?: boolean;
+function NavRow({ icon, label, onClick }: {
+  icon: React.ReactNode; label: string; onClick: () => void;
 }) {
   const dir = useDir();
   return (
-    <button onClick={onClick} className="flex items-center w-full"
-      style={{
-        gap: 10, padding: "14px", borderTop: first ? "none" : `1px solid ${C.line}`,
-        background: "none", border: "none", cursor: "pointer", textAlign: "start",
-      }}>
-      <span style={{ color: C.green, display: "flex", flexShrink: 0 }}>{icon}</span>
-      <span className="flex-1" style={{ ...T.body, color: C.ink }}>{label}</span>
-      <ChevronLeft size={17} style={{ color: C.ink3, flexShrink: 0, ...flipRTL(dir) }} />
+    <button type="button" onClick={onClick} className="ac-nav">
+      {icon}
+      <span>{label}</span>
+      <ChevronLeft size={18} style={flipRTL(dir)} />
     </button>
   );
 }
+
+function ErrorNote({ children }: { children: React.ReactNode }) {
+  return <div className="ac-error" role="alert"><CircleAlert size={16} aria-hidden /><span>{children}</span></div>;
+}
+
+/** دوّارة داخل الزرّ الذهبي — حبرٌ على ذهب لا أبيض (كانت لا تُرى). */
+const BtnSpinner = () => <Spinner size={15} />;
 
 /* ── الصفحة ──────────────────────────────────────────────────────── */
 
@@ -98,7 +137,6 @@ export function Account(p: AccountProps) {
 
   const [travellers, setTravellers] = useState<Traveller[]>([]);
   const [loadingTr, setLoadingTr] = useState(false);
-  const [toast, setToast] = useState("");
 
   useEffect(() => {
     if (!session) { setTravellers([]); return; }
@@ -110,23 +148,25 @@ export function Account(p: AccountProps) {
     return () => { alive = false; };
   }, [session?.userId]);
 
-  /* رسالة نجاح قصيرة بدل ورقة تأكيد: الحفظ نجح والصفحة تُظهر أثره سلفاً. */
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(""), 2600); };
+  /* رسالة نجاح قصيرة بدل ورقة تأكيد: الحفظ نجح والصفحة تُظهر أثره سلفاً.
+     عبر Toaster التطبيق (sonner) لا شريطٍ محلي — كان للصفحة توستٌ ثانٍ
+     بشكلٍ وموضعٍ يخالفان بقية الشاشات. */
+  const flash = (m: string) => { toast.success(m); };
 
   const fullName = [session?.profile?.firstName, session?.profile?.lastName].filter(Boolean).join(" ");
 
   if (!session) {
+    const en = lang === "en";
     return (
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: SPACE.page, gap: 14 }}>
-        <span className="flex items-center justify-center"
-          style={{ width: 64, height: 64, borderRadius: R.pill, background: C.greenTint, color: C.green }}>
-          <UserRound size={28} />
-        </span>
-        <div className="text-center">
-          <div style={{ ...T.h3, color: C.ink }}>{t("guestAccount")}</div>
-          <div style={{ ...T.meta, color: C.ink2, marginTop: 4 }}>{t("guestAccountHint")}</div>
-        </div>
-        <div style={{ width: "100%", maxWidth: 280 }}>
+      <div className="ac-guest">
+        <span className="ac-guest-mark" aria-hidden><UserRound size={36} strokeWidth={1.6} /></span>
+        <h1>{t("guestAccount")}</h1>
+        <p>{t("guestAccountHint")}</p>
+        <ul className="ac-guest-list">
+          <li><span aria-hidden><Ticket size={18} /></span>{en ? "Follow your bookings and tickets" : "تابع حجوزاتك وتذاكرك"}</li>
+          <li><span aria-hidden><Users size={18} /></span>{en ? "Save pilgrims' details for next time" : "احفظ بيانات المعتمرين للمرة القادمة"}</li>
+        </ul>
+        <div className="ac-guest-cta">
           <CTAButton full onClick={p.onLogin}>{t("login")}</CTAButton>
         </div>
       </div>
@@ -134,23 +174,15 @@ export function Account(p: AccountProps) {
   }
 
   return (
-    <div className="ts-account-shell flex-1 flex flex-col" style={{ padding: SPACE.page, gap: 22 }}>
+    <div className="ts-account-shell flex-1 flex flex-col" style={{ padding: SPACE.page, gap: 24 }}>
       {/* ── الهوية ── */}
-      <div className="flex items-center" style={{ gap: 12 }}>
-        <span className="flex items-center justify-center flex-shrink-0"
-          style={{ width: 56, height: 56, borderRadius: R.pill, background: C.greenTint, color: C.green, ...T.h2 }}>
-          {initial(fullName || session.phoneLocal)}
-        </span>
+      <div className="ac-id">
+        <span className="ac-avatar" data-size="lg" aria-hidden>{initial(fullName || session.phoneLocal)}</span>
         <div className="min-w-0">
-          <div className="truncate" style={{ ...T.h2, color: C.ink }}>{fullName || t("notSet")}</div>
-          <div className="flex items-center" style={{ gap: 7, marginTop: 3 }}>
-            <span style={{ ...T.meta, color: C.ink2, ...LTR }}>{session.phoneLocal}</span>
-            <span className="flex items-center" style={{
-              ...T.small, fontWeight: 600, gap: 3, background: C.greenTint, color: C.green,
-              borderRadius: R.pill, padding: "2px 8px",
-            }}>
-              <Check size={11} />{t("verifiedBadge")}
-            </span>
+          <div className="ac-id-name">{fullName || t("notSet")}</div>
+          <div className="ac-id-meta">
+            <span style={LTR}>{session.phoneLocal}</span>
+            <span className="ac-badge"><BadgeCheck size={13} />{t("verifiedBadge")}</span>
           </div>
         </div>
       </div>
@@ -163,23 +195,19 @@ export function Account(p: AccountProps) {
       />
 
       <SectionCard title={t("settings")}>
-        <NavRow first icon={<Ticket size={17} />} label={t("myBookings")} onClick={p.onBookings} />
-        <div style={{ padding: 14, borderTop: `1px solid ${C.line}` }}>
-          <div className="flex items-center" style={{ gap: 10, marginBottom: 10 }}>
-            <Globe size={17} style={{ color: C.green }} />
-            <span style={{ ...T.body, color: C.ink }}>{t("language")}</span>
+        <NavRow icon={<Ticket size={19} />} label={t("myBookings")} onClick={p.onBookings} />
+        <div className="ac-lang">
+          <div className="ac-lang-head">
+            <Globe size={19} />
+            <span>{t("language")}</span>
           </div>
-          <div className="flex" style={{ gap: 8 }}>
+          <div className="ac-seg" role="radiogroup" aria-label={t("language")}>
             {LANGS.map(l => {
               const on = lang === l.code;
               return (
-                <button key={l.code} onClick={() => p.setLang(l.code)}
-                  style={{
-                    flex: 1, padding: "9px 6px", borderRadius: R.button, cursor: "pointer",
-                    ...T.meta, fontWeight: on ? 600 : 400, fontFamily: "inherit",
-                    border: `1px solid ${on ? C.green : C.border}`,
-                    background: on ? C.greenTint : C.white, color: on ? C.green : C.ink,
-                  }}>
+                <button key={l.code} type="button" role="radio" aria-checked={on}
+                  data-on={on ? "" : undefined} onClick={() => p.setLang(l.code)}>
+                  {on && <Check size={15} strokeWidth={2.6} aria-hidden />}
                   {l.label}
                 </button>
               );
@@ -188,25 +216,9 @@ export function Account(p: AccountProps) {
         </div>
       </SectionCard>
 
-      <button onClick={p.onLogout} className="flex items-center justify-center"
-        style={{
-          gap: 8, padding: "13px", borderRadius: R.card, cursor: "pointer",
-          border: `1px solid ${C.border}`, background: C.white, color: C.danger,
-          ...T.body, fontWeight: 600, fontFamily: "inherit",
-        }}>
-        <LogOut size={16} />{t("logout")}
+      <button type="button" onClick={p.onLogout} className="ac-logout">
+        <LogOut size={17} />{t("logout")}
       </button>
-
-      {/* شريط نجاح عائم — لا يزيح المحتوى ولا يطلب إغلاقاً */}
-      {toast && (
-        <div style={{
-          position: "fixed", insetInline: SPACE.page, bottom: 96, zIndex: 40,
-          background: C.greenDeep, color: C.white, borderRadius: R.card,
-          padding: "12px 14px", ...T.meta, textAlign: "center",
-        }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }
@@ -250,25 +262,29 @@ function ProfileSection({ session, onSession, t, lang, onSaved }:
     onSaved(t("accountSaved"));
   }
 
+  const legalName = [pr?.firstName, pr?.lastName].filter(Boolean).join(" ");
+
   return (
     <>
       <SectionCard
         title={t("myDetails")}
-        action={<OutlineButton onClick={openSheet}>{t("editDetails")}</OutlineButton>}>
-        <Row first label={t("legalName")} value={[pr?.firstName, pr?.lastName].filter(Boolean).join(" ") || t("notSet")} />
-        <Row label={t("birthDate")} value={pr?.birthDate ? <span style={LTR}>{pr.birthDate}</span> : t("notSet")} />
-        <Row label={t("email")} value={pr?.email || t("notSet")} />
+        action={<LinkAction onClick={openSheet}><Pencil size={15} />{t("editDetails")}</LinkAction>}>
+        <Row label={t("legalName")} empty={!legalName} value={legalName || t("notSet")} />
+        <Row label={t("birthDate")} empty={!pr?.birthDate}
+          value={pr?.birthDate ? dateText(pr.birthDate, lang) : t("notSet")} />
+        <Row label={t("email")} empty={!pr?.email}
+          value={pr?.email ? <span style={LTR}>{pr.email}</span> : t("notSet")} />
         <Row
           label={t("phone")}
           value={<span style={LTR}>{session!.phoneLocal}</span>}
-          action={<OutlineButton onClick={() => setPhoneOpen(true)}>{t("changePhone")}</OutlineButton>}
+          action={<LinkAction onClick={() => setPhoneOpen(true)}>{t("changePhone")}</LinkAction>}
         />
       </SectionCard>
 
       <Sheet open={open} onClose={() => setOpen(false)} title={t("editDetails")}
         footer={
           <CTAButton full onClick={submit} disabled={busy || !valid}>
-            {busy ? <Spinner size={15} track="rgba(255,255,255,.35)" color={C.white} /> : null}
+            {busy ? <BtnSpinner /> : null}
             {t("save")}
           </CTAButton>
         }>
@@ -290,7 +306,7 @@ function ProfileSection({ session, onSession, t, lang, onSaved }:
                 type="email" inputMode="email" placeholder="name@example.com" />
             </InputStack>
           </Labeled>
-          {err && <div style={{ ...T.meta, color: C.danger }}>{err}</div>}
+          {err && <ErrorNote>{err}</ErrorNote>}
         </div>
       </Sheet>
 
@@ -357,18 +373,17 @@ function PhoneChangeSheet({ open, onClose, session, onSession, t, onDone }: {
       footer={
         step === "phone"
           ? <CTAButton full onClick={send} disabled={busy || !canSend}>
-              {busy ? <Spinner size={15} track="rgba(255,255,255,.35)" color={C.white} /> : null}
+              {busy ? <BtnSpinner /> : null}
               {t("sendCode")}
             </CTAButton>
           : <CTAButton full onClick={confirm} disabled={busy || !canConfirm}>
-              {busy ? <Spinner size={15} track="rgba(255,255,255,.35)" color={C.white} /> : null}
+              {busy ? <BtnSpinner /> : null}
               {t("verifyNewPhone")}
             </CTAButton>
       }>
       <div className="flex flex-col" style={{ gap: 16 }}>
         {/* الرقم الحالي معروض لا مخفيّ: التغيير قرار يُقارَن فيه */}
-        <div className="flex items-center justify-between"
-          style={{ padding: "12px 14px", borderRadius: R.card, background: C.fill }}>
+        <div className="ac-current">
           <span style={{ ...T.meta, color: C.ink2 }}>{t("phone")}</span>
           <span style={{ ...T.body, color: C.ink, ...LTR }}>{session.phoneLocal}</span>
         </div>
@@ -386,7 +401,7 @@ function PhoneChangeSheet({ open, onClose, session, onSession, t, onDone }: {
           </Labeled>
         )}
 
-        {err && <div style={{ ...T.meta, color: C.danger }}>{err}</div>}
+        {err && <ErrorNote>{err}</ErrorNote>}
       </div>
     </Sheet>
   );
@@ -402,54 +417,69 @@ function TravellersSection({ t, lang, dir, rows, loading, onChange, onFlash }: {
   const [edit, setEdit] = useState<Traveller | null>(null);
   const [del, setDel] = useState<Traveller | null>(null);
 
+  const [delBusy, setDelBusy] = useState(false);
+  const [delErr, setDelErr] = useState("");
+  /* فشل الحذف كان رفضاً غير ملتقَط: الورقة تبقى مفتوحة بلا كلمة والمعتمر في
+     القائمة. الآن يُقال، والصفّ لا يُزال إلا بعد نجاح الحذف. */
   async function remove() {
-    if (!del) return;
-    await deleteTraveller(del.id);
-    onChange(rows.filter(r => r.id !== del.id));
-    setDel(null);
-    onFlash(t("accountSaved"));
+    if (!del || delBusy) return;
+    setDelBusy(true); setDelErr("");
+    try {
+      await deleteTraveller(del.id);
+      onChange(rows.filter(r => r.id !== del.id));
+      setDel(null);
+      onFlash(t("accountSaved"));
+    } catch (e) {
+      console.error("[deleteTraveller]", e);
+      setDelErr(lang === "en" ? "Couldn't delete. Check your connection and try again." : "تعذّر الحذف. تحقّق من اتصالك وأعد المحاولة.");
+    } finally { setDelBusy(false); }
   }
 
   return (
     <>
       <SectionCard
         title={rows.length ? `${t("travellers")} (${rows.length})` : t("travellers")}
-        action={
-          <OutlineButton onClick={() => setEdit(emptyTraveller())}>
-            <span className="flex items-center" style={{ gap: 4 }}><Plus size={13} />{t("addTraveller")}</span>
-          </OutlineButton>
-        }>
+        action={rows.length > 0 && (
+          <LinkAction onClick={() => setEdit(emptyTraveller())}><Plus size={16} />{t("addTraveller")}</LinkAction>
+        )}>
         {loading ? (
-          <div className="flex items-center justify-center" style={{ padding: 24 }}>
-            <Spinner size={18} />
-          </div>
+          /* هيكلٌ بشكل الصفّ نفسه — الدوّارة وحدها تجعل البطاقة تقفز حين تصل الصفوف */
+          [0, 1].map(i => (
+            <div key={i} className="ac-trav" aria-hidden>
+              <span className="ac-skel" style={{ width: 44, height: 44, borderRadius: "50%" }} />
+              <span className="ac-trav-copy" style={{ gap: 8 }}>
+                <span className="ac-skel" style={{ width: "55%", height: 14 }} />
+                <span className="ac-skel" style={{ width: "38%", height: 12 }} />
+              </span>
+            </div>
+          ))
         ) : rows.length === 0 ? (
-          <div style={{ padding: 18 }}>
-            <div style={{ ...T.body, color: C.ink }}>{t("noTravellers")}</div>
-            <div style={{ ...T.meta, color: C.ink2, marginTop: 4 }}>{t("noTravellersHint")}</div>
+          <div className="ac-empty">
+            <span aria-hidden><BookUser size={24} /></span>
+            <b>{t("noTravellers")}</b>
+            <p>{t("noTravellersHint")}</p>
+            <button type="button" onClick={() => setEdit(emptyTraveller())}>
+              <Plus size={16} />{t("addTraveller")}
+            </button>
           </div>
         ) : (
-          rows.map((r, i) => (
-            <div key={r.id} className="flex items-center"
-              style={{ gap: 11, padding: "12px 14px", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-              <span className="flex items-center justify-center flex-shrink-0"
-                style={{ width: 38, height: 38, borderRadius: R.pill, background: C.greenTint, color: C.green, ...T.body, fontWeight: 600 }}>
-                {initial(r.name)}
-              </span>
-              <span className="flex-1 min-w-0 flex flex-col">
-                <span className="truncate" style={{ ...T.body, color: C.ink }}>{r.name || t("notSet")}</span>
-                <span className="truncate" style={{ ...T.small, color: C.ink2 }}>
+          rows.map(r => (
+            <div key={r.id} className="ac-trav">
+              <span className="ac-avatar" data-size="sm" aria-hidden>{initial(r.name)}</span>
+              <span className="ac-trav-copy">
+                <b>{r.name || t("notSet")}</b>
+                <small>
                   {r.docType ? docText(docTypeDef(r.docType).label, lang) : t("notSet")}
                   {r.idNumber && <> · <span style={LTR}>{r.idNumber}</span></>}
-                </span>
+                </small>
               </span>
-              <button onClick={() => setEdit(r)} aria-label={t("editTraveller")}
-                style={{ background: "none", border: "none", cursor: "pointer", color: C.ink2, padding: 6, flexShrink: 0 }}>
-                <Pencil size={15} />
+              <button type="button" className="ac-icon" onClick={() => setEdit(r)}
+                aria-label={`${t("editTraveller")} — ${r.name}`} title={t("editTraveller")}>
+                <Pencil size={18} />
               </button>
-              <button onClick={() => setDel(r)} aria-label={t("deleteTraveller")}
-                style={{ background: "none", border: "none", cursor: "pointer", color: C.danger, padding: 6, flexShrink: 0 }}>
-                <Trash2 size={15} />
+              <button type="button" className="ac-icon" data-danger="" onClick={() => setDel(r)}
+                aria-label={`${t("deleteTraveller")} — ${r.name}`} title={t("deleteTraveller")}>
+                <Trash2 size={18} />
               </button>
             </div>
           ))
@@ -468,23 +498,20 @@ function TravellersSection({ t, lang, dir, rows, loading, onChange, onFlash }: {
       />
 
       {/* الحذف يُسأل عنه لأنه لا يُستردّ — ويُطمأن أنه لا يمسّ الحجوزات */}
-      <Sheet open={!!del} onClose={() => setDel(null)} title={t("deleteTraveller")}
+      <Sheet open={!!del} onClose={() => { setDel(null); setDelErr(""); }} title={t("deleteTraveller")}
         footer={
           <div className="flex" style={{ gap: 10 }}>
-            <GrayButton full onClick={() => setDel(null)}>{t("cancel")}</GrayButton>
-            <button onClick={remove}
-              style={{
-                flex: 1, padding: "14px", borderRadius: R.pill, border: "none", cursor: "pointer",
-                background: C.danger, color: C.white, ...T.body, fontWeight: 600, fontFamily: "inherit",
-              }}>
-              {t("delete")}
-            </button>
+            <GrayButton full onClick={() => setDel(null)} style={{ flex: 1, height: 50, borderRadius: 999 }}>
+              {t("cancel")}
+            </GrayButton>
+            <button type="button" onClick={remove} disabled={delBusy} className="ac-danger-btn" style={delBusy ? { opacity: .6 } : undefined}>{t("delete")}</button>
           </div>
         }>
         <div style={{ ...T.body, color: C.ink }}>
           {t("deleteTravellerAsk").replace("{name}", del?.name || "")}
         </div>
         <div style={{ ...T.meta, color: C.ink2, marginTop: 6 }}>{t("deleteTravellerNote")}</div>
+        {delErr && <div role="alert" style={{ ...T.meta, color: C.danger, background: C.dangerTint, borderRadius: 12, padding: "10px 12px", marginTop: 12 }}>{delErr}</div>}
       </Sheet>
     </>
   );
@@ -521,7 +548,7 @@ function TravellerSheet({ row, t, lang, dir, onClose, onSaved }: {
     if (!valid || busy) return;
     setBusy(true);
     try { onSaved(await saveTraveller(f)); }
-    catch (e) { setErr((e as { message?: string })?.message || t("errUnknown")); }
+    catch (e) { setErr(travellerSaveError(e, lang)); }
     finally { setBusy(false); }
   }
 
@@ -530,7 +557,7 @@ function TravellerSheet({ row, t, lang, dir, onClose, onSaved }: {
       title={row?.id ? t("editTraveller") : t("addTraveller")}
       footer={
         <CTAButton full onClick={submit} disabled={busy}>
-          {busy ? <Spinner size={15} track="rgba(255,255,255,.35)" color={C.white} /> : null}
+          {busy ? <BtnSpinner /> : null}
           {t("save")}
         </CTAButton>
       }>
@@ -572,17 +599,13 @@ function TravellerSheet({ row, t, lang, dir, onClose, onSaved }: {
         </Labeled>
 
         <Labeled label={t("gender")}>
-          <div className="flex" style={{ gap: 8 }}>
+          <div className="ac-seg" data-tall="" role="radiogroup" aria-label={t("gender")}>
             {([["male", t("male")], ["female", t("female")]] as const).map(([v, lbl]) => {
               const on = f.gender === v;
               return (
-                <button key={v} onClick={() => set("gender", v)}
-                  style={{
-                    flex: 1, padding: "11px 6px", borderRadius: R.button, cursor: "pointer",
-                    ...T.body, fontWeight: on ? 600 : 400, fontFamily: "inherit",
-                    border: `1px solid ${on ? C.green : C.border}`,
-                    background: on ? C.greenTint : C.white, color: on ? C.green : C.ink,
-                  }}>
+                <button key={v} type="button" role="radio" aria-checked={on}
+                  data-on={on ? "" : undefined} onClick={() => set("gender", v)}>
+                  {on && <Check size={16} strokeWidth={2.6} aria-hidden />}
                   {lbl}
                 </button>
               );
@@ -596,7 +619,7 @@ function TravellerSheet({ row, t, lang, dir, onClose, onSaved }: {
             error={show("phone") ? " " : undefined} />
         </Labeled>
 
-        {err && <div style={{ ...T.meta, color: C.danger }}>{err}</div>}
+        {err && <ErrorNote>{err}</ErrorNote>}
       </div>
     </Sheet>
   );

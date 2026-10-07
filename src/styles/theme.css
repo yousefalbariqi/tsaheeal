@@ -9,55 +9,103 @@
    و--ts-card بنّيٌّ داكن (#8C6423) باسم «بطاقة» بينما كل بطاقةٍ بيضاء. */
 :root {
   --font-size: 16px;
-  --background: #FAF8F4;
-  --foreground: #1B1712;
+
+  /* ── لوحة «الكسوة» ── مرآة src/lib/theme.ts — يُحدَّثان معاً. */
+  --k-ink: #14110E;          /* سطح البنية الداكن */
+  --k-ink-2: #211C17;
+  --k-ink-line: #2E2821;
+  --k-on-ink: #F4EFE4;
+  --k-on-ink-2: #B3A998;
+  --k-on-ink-3: #857B6C;
+
+  --k-text: #1B1712;
+  --k-text-2: #5C5348;
+  --k-text-3: #3A352F;
+  --k-muted: #766D63;
+  --k-placeholder: #B9B2A6;
+
+  --k-gold: #C0862C;         /* ذهبي الشعار — حشوة الزرّ الأساسي */
+  --k-gold-hover: #B27A24;
+  --k-gold-press: #A26E1E;
+  --k-gold-2: #E7C271;
+  --k-gold-deep: #8A5C16;    /* نصّ ذهبي على سطح فاتح */
+  --k-gold-tint: #F7EEDC;
+  --k-gold-line: #E9D5A8;
+  --k-cream: #FBF7EC;
+
+  --k-bg: #F8F6F1;
+  --k-surface: #FFFFFF;
+  --k-fill: #F4F1EA;
+  --k-fill-hover: #ECE7DC;
+  --k-border: #E8E2D6;
+  --k-border-strong: #D5CCBB;
+
+  --k-success: #1E7A44; --k-success-bg: #E6F3EA; --k-success-line: #C4E4CE;
+  --k-warn: #8A6A08;    --k-warn-bg: #FBF3D6;    --k-warn-line: #F0E3AE;
+  --k-danger: #BE2626;  --k-danger-bg: #FBE9E7;  --k-danger-line: #F3C9C9;
+  --k-info: #1E52C7;    --k-info-bg: #EAF1FE;    --k-info-line: #CBDBFB;
+
+  --k-ring: rgba(192, 134, 44, .28);
+
+  --k-elev-1: 0 1px 2px rgba(27,23,18,.05);
+  --k-elev-2: 0 1px 2px rgba(27,23,18,.04), 0 6px 16px -4px rgba(27,23,18,.08);
+  --k-elev-3: 0 4px 8px -2px rgba(27,23,18,.06), 0 18px 36px -10px rgba(27,23,18,.18);
+  --k-elev-4: 0 32px 72px -20px rgba(20,17,14,.42), 0 0 0 1px rgba(20,17,14,.04);
+
+  --k-ease: cubic-bezier(.22, 1, .36, 1);
+  --k-fast: 120ms;
+  --k-base: 200ms;
+
+  /* متغيّرات shadcn — تُقرأ من اللوحة نفسها فلا تنحرف عنها. */
+  --background: var(--k-bg);
+  --foreground: var(--k-text);
   --card: #ffffff;
-  --card-foreground: #1B1712;
+  --card-foreground: var(--k-text);
   --popover: #ffffff;
-  --popover-foreground: #1B1712;
+  --popover-foreground: var(--k-text);
   /* الذهبي هو اللون الأساسي للفعل، ونصُّه أسود: الأبيض عليه ٣٫١:١. */
-  --primary: #C0862C;
-  --primary-foreground: #1B1712;
-  --secondary: #F5F2EB;
-  --secondary-foreground: #1B1712;
-  --muted: #F5F2EB;
-  --muted-foreground: #7A7168;
-  --accent: #F7EEDC;
-  --accent-foreground: #1B1712;
-  --destructive: #BE2626;
+  --primary: var(--k-gold);
+  --primary-foreground: var(--k-text);
+  --secondary: var(--k-fill);
+  --secondary-foreground: var(--k-text);
+  --muted: var(--k-fill);
+  --muted-foreground: var(--k-muted);
+  --accent: var(--k-gold-tint);
+  --accent-foreground: var(--k-text);
+  --destructive: var(--k-danger);
   --destructive-foreground: #ffffff;
-  --border: #E7E0D3;
+  --border: var(--k-border);
   --input: transparent;
   --input-background: #ffffff;
   --switch-background: #C7BBA6;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #C0862C;
+  --ring: var(--k-gold);
   /* Tasaheel brand tokens */
-  --ts-black: #1B1712;
-  --ts-green: #154C48;
-  --ts-gold: #C0862C;
-  --ts-cream: #FBF7EC;
-  --ts-bg: #FAF8F4;
+  --ts-black: var(--k-text);
+  --ts-green: var(--k-ink);
+  --ts-gold: var(--k-gold);
+  --ts-cream: var(--k-cream);
+  --ts-bg: var(--k-bg);
   --ts-card: #FFFFFF;
-  --ts-fill: #F5F2EB;
-  --ts-border: #E7E0D3;
-  --ts-text-muted: #7A7168;
-  --ts-text-secondary: #5C5348;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ts-fill: var(--k-fill);
+  --ts-border: var(--k-border);
+  --ts-text-muted: var(--k-muted);
+  --ts-text-secondary: var(--k-text-2);
+  --chart-1: #C0862C;
+  --chart-2: #14110E;
+  --chart-3: #1E7A44;
+  --chart-4: #1E52C7;
+  --chart-5: #8A6A08;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: var(--k-ink);
+  --sidebar-foreground: var(--k-on-ink);
+  --sidebar-primary: var(--k-gold);
+  --sidebar-primary-foreground: var(--k-text);
+  --sidebar-accent: var(--k-ink-2);
+  --sidebar-accent-foreground: var(--k-on-ink);
+  --sidebar-border: var(--k-ink-line);
+  --sidebar-ring: var(--k-gold);
 }
 
 .dark {
@@ -97,6 +145,16 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+/* الأوزان — كان «العريض» ٧٠٠ و«العريض جداً» ٨٠٠ على ثلاثة أرباع نصوص
+   اللوحة، فصارت الصفحة كلّها تصيح بصوتٍ واحد. و٨٠٠ ليس محمَّلاً أصلاً
+   (القاهرة تُجلب حتى ٧٠٠). تُنزَّل الدرجتان درجةً: العريض ٦٠٠ والعريض جداً
+   ٧٠٠ — فيعود للعنوان فرقٌ عن سطره، بلا تعديل ثمانمئة موضع. */
+@theme {
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 700;
+  --font-weight-black: 700;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -127,7 +185,7 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: 0.75rem;   /* ١٢ — نصف قطر عناصر التحكّم: الزرّ والحقل */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

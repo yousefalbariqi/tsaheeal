@@ -1,0 +1,48 @@
+/* تنسيقات شاشات مسار الحجز والحساب — تُكتب هنا لا في index.css. */
+
+/* ── رأس القشرة وتذييلها ──
+   الرأس لاصقٌ بأعلى الشاشة فيحترم نتوءها؛ ارتفاعه 60px فوق المنطقة الآمنة. */
+.tsf-header { box-sizing:content-box; height:60px; padding-top:env(safe-area-inset-top, 0px); }
+.tsf-footer { box-shadow:0 -2px 16px -4px rgba(20,17,14,.10); }
+
+/* زرّ أيقونة 44×44 — رجوع، إغلاق، إظهار كلمة المرور، نسخ. */
+.tsf-icon-btn { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:44px; height:44px; padding:0; color:#1B1712; border:0; border-radius:999px; background:transparent; cursor:pointer; transition:background .15s ease-out; }
+.tsf-icon-btn:hover { background:#F4F1EA; }
+.tsf-icon-btn:active { background:#E8E2D6; }
+
+/* زرّ ثانوي تحت الزرّ الأساسي — نصٌّ بلا حشوة لونية، بارتفاع لمسٍ كامل. */
+.tsf-ghost-btn { width:100%; height:48px; color:#1B1712; border:0; border-radius:999px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:16px; font-weight:600; transition:background .15s ease-out; }
+.tsf-ghost-btn:hover { background:#F4F1EA; }
+
+/* ── حقول نموذج صاحب الحجز ── */
+.ts-customer-app .tsf-input { width:100%; height:52px; padding-inline:14px; color:#1B1712; border:1px solid #D5CCBB; border-radius:12px; background:#fff; font-family:inherit; font-size:16px; outline:none; transition:border-color .15s ease-out, box-shadow .15s ease-out; }
+.ts-customer-app .tsf-input::placeholder { color:#A39A8B; }
+.ts-customer-app .tsf-input[aria-invalid="true"] { border-color:#BE2626; }
+.ts-customer-app .tsf-input:disabled { background:#F4F1EA; cursor:not-allowed; }
+.ts-customer-app .tsf-input:focus { border-color:#C0862C; box-shadow:0 0 0 3px rgba(192,134,44,.28); }
+
+/* القوائم المشتركة (نوع الوثيقة، الجنسية) — زرّها يُسوّى بالحقول المجاورة
+   من هنا، لأن المكوّن نفسه مشترك مع اللوحة ولا يُعدَّل لأجل هذه الشاشة. */
+.ts-customer-app .tsf-form button[aria-haspopup="dialog"] { min-height:52px; padding-inline:14px; border-radius:12px; font-size:16px; transition:border-color .15s ease-out, box-shadow .15s ease-out; }
+.ts-customer-app .tsf-form button[aria-haspopup="dialog"]:focus-visible,
+.ts-customer-app .tsf-form button[aria-haspopup="dialog"][data-state="open"] { outline:none; border-color:#C0862C !important; box-shadow:0 0 0 3px rgba(192,134,44,.28); }
+.ts-customer-app .tsf-form button[aria-haspopup="dialog"][aria-invalid="true"] { border-color:#BE2626 !important; }
+
+/* ── مربّع الموافقة ── */
+.tsf-check { position:relative; display:flex; align-items:center; gap:12px; min-height:48px; cursor:pointer; }
+.tsf-check input { position:absolute; inset-inline-start:0; top:50%; width:24px; height:24px; margin:0; opacity:0; transform:translateY(-50%); cursor:pointer; }
+.tsf-check-box { display:grid; flex:0 0 auto; place-items:center; width:24px; height:24px; color:#1B1712; border:1.5px solid #A39A8B; border-radius:7px; background:#fff; transition:background .15s ease-out, border-color .15s ease-out; }
+.tsf-check input:checked + .tsf-check-box { border-color:#C0862C; background:#C0862C; }
+.tsf-check input:focus-visible + .tsf-check-box { outline:2px solid #C0862C; outline-offset:2px; }
+
+/* ── هياكل التحميل ── */
+@keyframes tsf-shimmer { from { background-position:200% 0; } to { background-position:-200% 0; } }
+.tsf-skel { display:block; border-radius:8px; background:linear-gradient(90deg,#F1EEE8 25%,#FAF8F3 50%,#F1EEE8 75%); background-size:200% 100%; animation:tsf-shimmer 1.4s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tsf-skel { animation:none; }
+  .tsf-icon-btn, .tsf-ghost-btn, .tsf-check-box, .ts-customer-app .tsf-input { transition:none; }
+}
+
+/* تاريخ الميلاد: رسالة الحقل نفسه («تاريخ غير صحيح») تغني عن «مطلوب» تحته. */
+.tsf-birth:has([role="alert"]) .tsf-field-error { display:none; }

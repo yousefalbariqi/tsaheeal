@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as RP from "@radix-ui/react-popover";
 import { ChevronDown, Check, Search, X } from "lucide-react";
-import { B } from "@/lib/theme";
+import { B, ELEV } from "@/lib/theme";
 
 /* قائمة منسدلة قابلة للبحث — Portal فلا تُقصّ داخل البطاقات، وتعمل RTL/LTR.
    تُستخدم للجنسية والسنة وأي قائمة طويلة. لوحة المفاتيح: ↑↓ تنقّل، Enter اختيار، Esc إغلاق. */
@@ -97,7 +97,7 @@ export function SearchSelect({
           aria-invalid={invalid || undefined}
           className={`w-full flex items-center justify-between gap-2 border rounded-xl ${pad} text-sm focus:outline-none`}
           style={{
-            borderColor: invalid ? "#E1A3A3" : B.border,
+            borderColor: invalid ? "#D98A8A" : B.borderStrong,
             background: disabled ? B.fill : "#fff",
             color: selected ? B.black : B.placeholder,
             fontFamily: "inherit",
@@ -107,7 +107,7 @@ export function SearchSelect({
         >
           <span className="flex items-center gap-2 min-w-0">
             {selected?.prefix && <span style={{ fontSize: 17, lineHeight: 1 }}>{selected.prefix}</span>}
-            <span className="truncate" style={{ fontWeight: selected ? 700 : 400 }}>{selected ? selected.label : placeholder}</span>
+            <span className="truncate" style={{ fontWeight: selected ? 500 : 400 }}>{selected ? selected.label : placeholder}</span>
             {subInTrigger && selected?.sub && <span className="truncate text-xs" style={{ color: B.muted }}>· {selected.sub}</span>}
           </span>
           <ChevronDown size={16} style={{ color: B.muted, flexShrink: 0 }} />
@@ -121,11 +121,11 @@ export function SearchSelect({
           sideOffset={6}
           collisionPadding={12}
           onOpenAutoFocus={e => { if (!searchable) { e.preventDefault(); listRef.current?.focus(); } }}
-          className="z-50 overflow-hidden rounded-2xl"
+          className="z-[200] overflow-hidden rounded-xl"
           style={{
             background: "#fff",
             border: `1px solid ${B.border}`,
-            boxShadow: "0 18px 44px -14px rgba(21,76,72,.38)",
+            boxShadow: ELEV[3],
             width: "var(--radix-popover-trigger-width)",
             minWidth: 200,
             maxHeight: "min(340px, var(--radix-popover-content-available-height))",
@@ -182,11 +182,11 @@ export function SearchSelect({
                     aria-selected={isSel}
                     onMouseEnter={() => setActive(i)}
                     onClick={() => pick(o.value)}
-                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm cursor-pointer select-none"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer select-none"
                     style={{ background: i === active ? B.fill : "transparent", color: B.black }}
                   >
                     {o.prefix && <span style={{ fontSize: 17, lineHeight: 1 }}>{o.prefix}</span>}
-                    <span className="truncate" style={{ fontWeight: isSel ? 700 : 500 }}>{o.label}</span>
+                    <span className="truncate" style={{ fontWeight: isSel ? 600 : 400 }}>{o.label}</span>
                     {o.sub && <span className="truncate text-xs" style={{ color: B.muted }}>{o.sub}</span>}
                     {isSel && <Check size={15} style={{ color: B.primary, marginInlineStart: "auto", flexShrink: 0 }} />}
                   </div>

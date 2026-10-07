@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import { useSearchParams } from "react-router";
-import { X, Check, BookOpen, Plus } from "lucide-react";
-import { B } from "@/lib/theme";
+import { X, Check, BookOpen, Plus, CreditCard, Ticket, ChevronLeft, AlertTriangle, SearchX } from "lucide-react";
+import { B, TONE } from "@/lib/theme";
 import type { Pkg, Trip, Pilgrim, BookingStatus, Booking, BookingTravellerCounts, Transport } from "@/types";
 import { newId, todayYMD } from "@/lib/utils";
 import { statusLabel } from "@/lib/status";
 import { isSellable } from "@/lib/trip";
 import { EntityGate } from "@/components/States";
 import { useServerPagedSearch } from "@/lib/useServerSearch";
-import { Spinner } from "@/components/Spinner";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { AppSelect } from "@/components/AppSelect";
@@ -18,11 +17,17 @@ import { Field } from "@/components/Field";
 import { NumericInput } from "@/components/NumericInput";
 import { Pager, type Paged, usePaged } from "@/components/Pager";
 import { sar } from "@/lib/money";
+import { fmtDateShort, fmtDayDate } from "@/lib/dates";
+import { Badge, Button, FilterChips, IconButton, Input, Modal, ModalIcon, Note, Textarea, type ChipOption } from "@/components/ui";
+import { SEAT_TONE } from "@/components/BusSeatGrid";
+import { EmptyState } from "@/components/States";
 import { isStale } from "./flow";
 /* لغةٌ واحدة في الجدول والشاشة: عمود «الحالة» يقول الخطوة التي يقف
    عندها الطلب (stages.ts) لا اسم حالته في القاعدة — «جديد» و«مقبول»
    كانتا تظهران هنا بينما تقول شاشة الطلب شيئاً آخر. */
 import { BookingDetail } from "./BookingDetail";
+import { InvoiceModal } from "@/features/payments";
+import { TicketCard } from "@/features/tickets";
 import { STAGES, closedAs, stageLabel, stageOf, type StageKey } from "./stages";
 import { closeStaleBookings, searchCustomers, type CustomerHit } from "./ops";
 import { packagePrice, roomSplits, splitSummary, type RoomSplit } from "@/features/customer/roomSplit";
@@ -57,16 +62,12 @@ const validPhone = (p:string) => /^(05\d{8}|(\+?966)5\d{8})$/.test(p.replace(/\s
    الطلب: «التحقق من البيانات» لا «جديد»، و«بانتظار الدفع» لا «مقبول». */
 function StageBadge({booking}:{booking:Booking}) {
   const closed=closedAs(booking.status);
-  const label=closed?(closed==="rejected"?"مرفوض":"ملغى"):stageLabel(stageOf(booking));
-  const tone=closed
-    ? {bg:"#FBE6E6",fg:"#BE2626",br:"#F3C9C9"}
-    : booking.status==="confirmed"
-      ? {bg:"#E3F3E8",fg:"#1E7A44",br:"#C4E4CE"}
-      : {bg:B.cream,fg:"#8A6A08",br:"#EDE4CF"};
-  return (
-    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap"
-      style={{background:tone.bg,color:tone.fg,border:`1px solid ${tone.br}`}}>{label}</span>
-  );
+  if(closed) return <Badge tone={closed==="rejected"?"danger":"neutral"} dot>{closed==="rejected"?"مرفوض":"ملغى"}</Badge>;
+  const stage=stageOf(booking);
+  /* لونٌ لكل خطوة: الأصفر ما ينتظر الموظف، الأزرق والذهبي ما ينتظر
+     العميل، والأخضر ما اكتمل — فيُقرأ العمود من بعيد قبل أن يُقرأ نصّه. */
+  const tone=booking.status==="confirmed"||stage==="done"?"success":stage==="verify"?"warn":stage==="seats"?"info":"gold";
+  return <Badge tone={tone} dot>{stageLabel(stage)}</Badge>;
 }
 
 /* ════════ إضافة طلب جديد (حجز داخلي للموظف) ════════ */
@@ -104,6 +105,16 @@ function localCustomerSearch(q:string):CustomerHit[]{
   return [...out,...byPhone.values()].slice(0,8);
 }
 
+/** قسمٌ في نموذج الطلب — عنوانٌ صغير يجمع حقوله. */
+function FormSection({title,children}:{title:string;children:ReactNode}) {
+  return (
+    <section>
+      <h3 className="text-xs font-bold" style={{color:B.muted,margin:"0 0 10px"}}>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   packages:Pkg[];trips:Trip[];transports:Transport[];
   onCreate:(d:InternalOrderInput)=>string|null;
@@ -124,9 +135,6 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
   const [searching,setSearching]=useState(false);
   const [picked,setPicked]=useState<CustomerHit|null>(null);
   const requestClose=useConfirmDiscard({clientName,clientPhone,packageId,tripId,travellerCounts,payMethod,split},onClose);
-  const inp="w-full border rounded-xl px-3.5 py-2.5 text-sm focus:outline-none";
-  const ist={borderColor:B.border,background:"#fff",color:B.black,fontFamily:"inherit"} as const;
-  const req=<span style={{color:B.gold}}>*</span>;
 
   /* isSellable لا `status === "open"`: العمود يبقى open بعد انطلاق
      الرحلة، فكانت قائمة «الرحلات المتاحة» تعرض للموظف رحلةً راحت أمس
@@ -145,7 +153,6 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
       return {...prev,[key]:Math.min(value,Math.max(0,maxSeats-other))};
     });
   };
-  const Err=({k}:{k:string})=> errors[k] ? <div className="text-xs font-bold mt-1" style={{color:"#BE2626"}}>{errors[k]}</div> : null;
 
   /* نوع السكن — نفس توزيعات شاشة المستفيد حرفياً، فالطلب اليدوي يمرّ
      بنفس قواعد السعر (ملاحظة «المسار»). */
@@ -202,165 +209,182 @@ function NewOrderModal({packages,trips,transports,onCreate,onClose}:{
     setDone("أُنشئ الطلب بحالة «قيد المراجعة». أكمل بيانات المعتمرين ثم اقبله واحصّل المبلغ.");
   }
 
-  return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-      style={{background:"rgba(21,76,72,.6)"}}>
-      <motion.div initial={{scale:.96,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:.96,opacity:0}}
-        className="w-full max-w-lg my-4 rounded-2xl overflow-hidden" style={{background:"#fff"}} onClick={e=>e.stopPropagation()}>
-        <div className="relative px-6 py-5" style={{background:B.primaryDeep}}>
-          <div className="absolute top-0 inset-x-0 h-1" style={{background:`linear-gradient(90deg,${B.gold},${B.gold2})`}}/>
-          <h3 className="font-extrabold text-base" style={{color:"#fff",margin:0,fontFamily:"var(--font-app)"}}>إضافة طلب جديد</h3>
-          <button aria-label="إغلاق النافذة" title="إغلاق النافذة" onClick={done?onClose:requestClose} className="absolute top-4 left-4 p-1 cursor-pointer" style={{background:"none",border:"none",color:"#9DBAB6"}}><X size={16}/></button>
-        </div>
+  const fieldGrid="grid grid-cols-1 sm:grid-cols-2 gap-4";
+  const ltr={direction:"ltr",textAlign:"end"} as const;
 
-        {done ? (
-          <div className="p-8 flex flex-col items-center text-center gap-3">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{background:"#E3F3E8"}}><Check size={32} style={{color:"#1E7A44"}}/></div>
-            <div className="font-extrabold text-lg" style={{color:B.black}}>أُنشئ الطلب</div>
-            <div className="text-sm" style={{color:B.text2}}>{done}</div>
-            <button onClick={onClose} className="mt-2 px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.gold,color:B.black,border:"none"}}>تم</button>
-          </div>
-        ) : (
-        <>
-        <div className="p-6 grid grid-cols-2 gap-4">
-          <div>
-            <Field label={<>اسم العميل {req}</>}>
-              <input value={clientName} onChange={e=>{setClientName(e.target.value);setPicked(null);}} placeholder="الاسم الكامل" className={inp} style={ist}/>
-            </Field>
-            <Err k="name"/>
-          </div>
-          <div>
-            <Field label={<>رقم الجوال {req}</>}>
-              <input value={clientPhone} onChange={e=>{setClientPhone(e.target.value);setPicked(null);}} placeholder="05xxxxxxxx" className={inp} style={{...ist,direction:"ltr",textAlign:"right"}}/>
-            </Field>
-            <Err k="phone"/>
-          </div>
-          {/* عميلٌ قائم؟ — يُعرض قبل أن يُنشأ ملفٌ مكرّر. */}
-          {(hits.length>0||searching||picked)&&(
-            <div className="col-span-2 rounded-xl overflow-hidden" style={{border:`1px solid ${picked?"#C4E4CE":B.border}`,background:picked?"#F3FAF5":B.fill}}>
-              {picked ? (
-                <div className="flex items-center gap-2 px-3.5 py-2.5 text-xs" style={{color:"#1E7A44"}}>
-                  <Check size={13}/>عميل قائم — {picked.source==="beneficiary"?"ملف مستفيد":"سبق أن حجز"} · {picked.bookingsCount} طلب
-                  <button onClick={()=>setPicked(null)} className="mr-auto cursor-pointer text-xs font-bold" style={{background:"none",border:"none",color:B.text2}}>تغيير</button>
+  return (
+    <Modal open onClose={done?onClose:requestClose} width={760}
+      title="إضافة طلب جديد"
+      sub={done?undefined:"حجزٌ داخلي يُنشأ «قيد المراجعة» — تُكمل بيانات المعتمرين ثم تُقفل المقاعد ويُحصَّل المبلغ من داخل الطلب."}
+      footer={done
+        ? <Button variant="primary" onClick={onClose}>تم</Button>
+        : <>
+            <Button variant="primary" loading={busy} onClick={submit}>{busy?"جارٍ الحفظ…":"إنشاء طلب"}</Button>
+            <Button variant="secondary" onClick={requestClose}>إلغاء</Button>
+          </>}>
+      {done ? (
+        <div className="py-6 flex flex-col items-center text-center gap-3">
+          <span aria-hidden className="flex items-center justify-center rounded-full" style={{width:56,height:56,background:TONE.success.bg,color:TONE.success.fg}}><Check size={28}/></span>
+          <div className="font-extrabold" style={{color:B.black,fontSize:17}}>أُنشئ الطلب</div>
+          <p className="text-sm" style={{color:B.text2,margin:0,lineHeight:1.8,maxWidth:420}}>{done}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <FormSection title="العميل">
+            <div className={fieldGrid}>
+              <div>
+                <Field label={<>اسم العميل<span className="ui-req">*</span></>} error={errors.name}>
+                  <Input value={clientName} invalid={!!errors.name} onChange={e=>{setClientName(e.target.value);setPicked(null);}} placeholder="الاسم الكامل"/>
+                </Field>
+              </div>
+              <div>
+                <Field label={<>رقم الجوال<span className="ui-req">*</span></>} error={errors.phone}>
+                  <Input value={clientPhone} invalid={!!errors.phone} inputMode="tel" onChange={e=>{setClientPhone(e.target.value);setPicked(null);}} placeholder="05xxxxxxxx" style={ltr}/>
+                </Field>
+              </div>
+            </div>
+            {/* عميلٌ قائم؟ — يُعرض قبل أن يُنشأ ملفٌ مكرّر. */}
+            {picked ? (
+              <Note tone="success" icon={<Check size={15}/>} className="mt-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex-1 min-w-0">عميل قائم — {picked.source==="beneficiary"?"ملف مستفيد":"سبق أن حجز"} · {picked.bookingsCount} طلب</span>
+                  <Button variant="link" size="sm" onClick={()=>setPicked(null)}>تغيير</Button>
                 </div>
-              ) : searching ? (
-                <div className="px-3.5 py-2.5 text-xs" style={{color:B.muted}}>جارٍ البحث عن عميلٍ قائم…</div>
+              </Note>
+            ) : searching ? (
+              <div className="ui-hint" aria-live="polite">جارٍ البحث عن عميلٍ قائم…</div>
+            ) : hits.length>0 ? (
+              <div className="mt-3 rounded-xl overflow-hidden" style={{border:`1px solid ${B.border}`}}>
+                <div className="px-3.5 py-2 text-xs font-bold" style={{color:B.text2,background:B.fill,borderBottom:`1px solid ${B.border}`}}>عملاء قائمون بنفس البيانات — اختر بدل الإنشاء المكرّر</div>
+                {hits.map((h,i)=>(
+                  <button key={`${h.source}:${h.refId}`} type="button" onClick={()=>pick(h)}
+                    className="w-full flex items-center gap-3 px-3.5 text-start cursor-pointer hover:bg-[var(--k-cream)] focus-visible:bg-[var(--k-cream)]"
+                    style={{height:44,borderTop:i?`1px solid ${B.border}`:"none",fontFamily:"inherit",filter:"none",outlineOffset:-2}}>
+                    <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{h.name||"—"}</span>
+                    <span className="text-xs" style={{color:B.muted,direction:"ltr"}}>{h.phone}</span>
+                    <Badge size="sm" tone={h.source==="beneficiary"?"success":"info"}>{h.source==="beneficiary"?"ملف":"حجز"} · {h.bookingsCount}</Badge>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </FormSection>
+
+          <FormSection title="الباقة والرحلة">
+            <div className={fieldGrid}>
+              <div>
+                <Field label={<>الباقة<span className="ui-req">*</span></>} error={errors.pkg}>
+                  <AppSelect value={packageId} placeholder="اختر الباقة" invalid={!!errors.pkg} onChange={v=>{setPackageId(v);setTripId("");}}
+                    options={packages.map(p=>({value:p.id,label:p.name}))}/>
+                </Field>
+              </div>
+              <div>
+                <Field label={<>الرحلة<span className="ui-req">*</span></>} error={errors.trip}
+                  hint={packageId&&availTrips.length===0?"لا توجد رحلات متاحة لهذه الباقة.":undefined}>
+                  <AppSelect value={tripId} placeholder={packageId?"اختر الرحلة المتاحة":"اختر الباقة أولاً"}
+                    disabled={!packageId} invalid={!!errors.trip} onChange={setTripId}
+                    options={availTrips.map(t=>({value:t.id,label:`${fmtDayDate(t.departureDate)} · المتبقي ${t.seats-t.bookedSeats} مقعد`}))}/>
+                </Field>
+              </div>
+            </div>
+          </FormSection>
+
+          <FormSection title="المعتمرون والسكن">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Field label={<><span aria-hidden className="inline-block rounded-full align-middle" style={{width:8,height:8,marginInlineEnd:6,background:SEAT_TONE.male.fg}}/>المعتمرون<span className="ui-req">*</span></>}>
+                  <NumericInput min={0} max={maxSeats-travellerCounts.women} value={travellerCounts.men} onValueChange={v=>setTravellerCount("men",v)} className="ui-input" style={ltr}/>
+                </Field>
+              </div>
+              <div>
+                <Field label={<><span aria-hidden className="inline-block rounded-full align-middle" style={{width:8,height:8,marginInlineEnd:6,background:SEAT_TONE.female.fg}}/>المعتمرات</>}>
+                  <NumericInput min={0} max={maxSeats-travellerCounts.men} value={travellerCounts.women} onValueChange={v=>setTravellerCount("women",v)} className="ui-input" style={ltr}/>
+                </Field>
+              </div>
+            </div>
+            {errors.persons
+              ? <div role="alert" className="ui-error">{errors.persons}</div>
+              : <div className="ui-hint">الإجمالي {persons} مقعد — يُحفظ التوزيع ليظهر الكروكي صحيحاً.</div>}
+
+            {/* نوع السكن — كان النموذج لا يطلبه أصلاً فيُحسب السعر بلا سكن. */}
+            {housing&&(
+              <div className="mt-4">
+                <div className="ui-label" id="new-order-room">نوع السكن<span className="ui-req">*</span></div>
+                {splits.length===0 ? (
+                  <Note tone="warn" icon={<AlertTriangle size={15}/>}>لا توزيع غرفٍ ممكن لهذا العدد — راجع أسعار الغرف في الباقة.</Note>
+                ) : (
+                  <div role="radiogroup" aria-labelledby="new-order-room" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {splits.map(sp=>{
+                      const on=split?.key===sp.key;
+                      return (
+                        /* المختار بحدٍّ أسود وعلامة، لا حشوةٌ ذهبية: الاختيار ليس فعلاً. */
+                        <button key={sp.key} type="button" role="radio" aria-checked={on} onClick={()=>setSplit(sp)}
+                          className="flex items-start gap-3 text-start rounded-xl px-3.5 py-3 cursor-pointer"
+                          style={{background:on?B.cream:B.surface,border:`1px solid ${on?B.black:B.borderStrong}`,boxShadow:on?`0 0 0 1px ${B.black}`:"none",color:B.black,fontFamily:"inherit"}}>
+                          <span aria-hidden className="flex items-center justify-center rounded-full flex-shrink-0"
+                            style={{width:18,height:18,marginTop:2,background:on?B.black:B.surface,border:`1px solid ${on?B.black:B.borderStrong}`,color:B.onInk}}>
+                            {on&&<Check size={12} strokeWidth={3}/>}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-bold">{splitSummary(sp,tAr)}</span>
+                            <span className="block text-xs mt-0.5" style={{color:B.muted}}>
+                              {sar(sp.perNight)} للغرفة مرة واحدة{sp.spare>0?` · ${sp.spare} سرير فائض`:""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {errors.room&&<div role="alert" className="ui-error">{errors.room}</div>}
+              </div>
+            )}
+          </FormSection>
+
+          {/* الدفع والسعر متجاوران: الطريقة في عمود، والمبلغ الذي ستُحصَّل به
+              في العمود المقابل — يُقرآن معاً قبل الضغط على «إنشاء طلب». */}
+          <FormSection title="الدفع والسعر">
+            <div className={`${fieldGrid} items-start`}>
+              <div>
+                <Field label={<>طريقة الدفع المتوقّعة<span className="ui-req">*</span></>}
+                  hint="اختيار الطريقة لا يعني الدفع — التحصيل يُسجَّل من داخل الطلب بإثباته.">
+                  <AppSelect value={payMethod} onChange={setPayMethod} options={PAY_METHODS_INTERNAL.map(m=>({value:m,label:m}))}/>
+                </Field>
+              </div>
+
+              {/* السعر المحسوب وتفصيله قبل الإنشاء — لا مبلغ حرّ. */}
+              {tripId ? (
+                <div className="rounded-xl px-4 py-3" style={{background:B.fill,border:`1px solid ${B.border}`}}>
+                  <div className="text-sm" style={{color:B.text2,lineHeight:1.8}}>
+                    {housing&&split&&price
+                      ? <><div>المواصلات: {persons} مقاعد × {sar(price.seatPrice)} = {sar(price.transport)}</div><div>السكن: {split.rooms.length} {split.rooms.length===1?"غرفة":"غرف"} = {sar(price.accommodation)}</div></>
+                      : <div>{persons} معتمر × {sar(selTrip?.price||selPkg?.marketPrice||0)}</div>}
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 mt-2 pt-2" style={{borderTop:`1px solid ${B.borderStrong}`}}>
+                    <span className="text-sm font-bold" style={{color:B.text3}}>الإجمالي التقديري</span>
+                    <span className="font-extrabold" style={{color:B.black,fontSize:20,lineHeight:1.3,whiteSpace:"nowrap"}}>{sar(estimate)}</span>
+                  </div>
+                  <div className="text-xs" style={{color:B.muted,marginTop:4,lineHeight:1.6}}>المبلغ المعتمد تحسبه القاعدة من أسعار الباقة — لا يُرسل من هنا.</div>
+                </div>
               ) : (
-                <>
-                  <div className="px-3.5 pt-2.5 pb-1 text-xs font-bold" style={{color:B.text3}}>عملاء قائمون بنفس البيانات — اختر بدل الإنشاء المكرّر</div>
-                  {hits.map(h=>(
-                    <button key={`${h.source}:${h.refId}`} onClick={()=>pick(h)}
-                      className="w-full flex items-center gap-3 px-3.5 py-2 text-start cursor-pointer"
-                      style={{background:"none",border:"none",borderTop:`1px solid ${B.border}`}}>
-                      <span className="font-bold text-sm flex-1 min-w-0 truncate" style={{color:B.black}}>{h.name||"—"}</span>
-                      <span className="text-xs" style={{color:B.muted,direction:"ltr",fontFamily:"var(--font-app)"}}>{h.phone}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{background:h.source==="beneficiary"?"#E3F3E8":"#EAF1FE",color:h.source==="beneficiary"?"#1E7A44":"#1E52C7"}}>
-                        {h.source==="beneficiary"?"ملف":"حجز"} · {h.bookingsCount}
-                      </span>
-                    </button>
-                  ))}
-                </>
+                <div className="rounded-xl px-4 flex items-center justify-center text-center text-xs" style={{minHeight:68,marginTop:25,border:`1px dashed ${B.borderStrong}`,color:B.muted}}>
+                  يُحسب السعر بعد اختيار الباقة والرحلة.
+                </div>
               )}
             </div>
-          )}
-          <div className="col-span-2">
-            <Field label={<>الباقة {req}</>}>
-              <AppSelect value={packageId} placeholder="اختر الباقة" onChange={v=>{setPackageId(v);setTripId("");}}
-                options={packages.map(p=>({value:p.id,label:p.name}))}/>
-            </Field>
-            <Err k="pkg"/>
-          </div>
-          <div className="col-span-2">
-            <Field label={<>الرحلة {req}</>}>
-              <AppSelect value={tripId} placeholder={packageId?"اختر الرحلة المتاحة":"اختر الباقة أولاً"}
-                disabled={!packageId} onChange={setTripId}
-                options={availTrips.map(t=>({value:t.id,label:`${t.departureDate} · ${packages.find(p=>p.id===t.packageId)?.name??t.id} · المتبقي ${t.seats-t.bookedSeats}`}))}/>
-            </Field>
-            {packageId&&availTrips.length===0&&<div className="text-xs mt-1" style={{color:B.muted}}>لا توجد رحلات متاحة لهذه الباقة.</div>}
-            <Err k="trip"/>
-          </div>
-          <div className="col-span-2">
-            <Field label={<>توزيع المعتمرين {req}</>}>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="rounded-xl px-3 py-2" style={{border:`1px solid #CBDBFB`,background:"#F7FAFF"}}>
-                  <span className="block text-xs font-bold mb-1" style={{color:"#1E52C7"}}>المعتمرون</span>
-                  <NumericInput min={0} max={maxSeats-travellerCounts.women} value={travellerCounts.men} onValueChange={v=>setTravellerCount("men",v)} className={inp} style={{...ist,direction:"ltr",textAlign:"right",borderColor:"#CBDBFB"}}/>
-                </label>
-                <label className="rounded-xl px-3 py-2" style={{border:`1px solid #F3CADF`,background:"#FFF8FB"}}>
-                  <span className="block text-xs font-bold mb-1" style={{color:"#B4266E"}}>المعتمرات</span>
-                  <NumericInput min={0} max={maxSeats-travellerCounts.men} value={travellerCounts.women} onValueChange={v=>setTravellerCount("women",v)} className={inp} style={{...ist,direction:"ltr",textAlign:"right",borderColor:"#F3CADF"}}/>
-                </label>
-              </div>
-              <div className="text-xs mt-1" style={{color:B.muted}}>الإجمالي {persons} مقعد — يُحفظ التوزيع ليظهر الكروكي صحيحاً.</div>
-            </Field>
-            <Err k="persons"/>
-          </div>
-          <div>
-            <Field label={<>طريقة الدفع المتوقّعة {req}</>}>
-              <AppSelect value={payMethod} onChange={setPayMethod} options={PAY_METHODS_INTERNAL.map(m=>({value:m,label:m}))}/>
-            </Field>
-            <div className="text-xs mt-1" style={{color:B.muted}}>اختيار الطريقة لا يعني الدفع — التحصيل يُسجَّل من داخل الطلب بإثباته.</div>
-          </div>
+          </FormSection>
 
-          {/* نوع السكن — كان النموذج لا يطلبه أصلاً فيُحسب السعر بلا سكن. */}
-          {housing&&(
-            <div className="col-span-2">
-              <Field label={<>نوع السكن {req}</>}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {splits.map(sp=>{
-                    const on=split?.key===sp.key;
-                    return (
-                      <button key={sp.key} type="button" onClick={()=>setSplit(sp)}
-                        className="text-start rounded-xl px-3.5 py-2.5 cursor-pointer"
-                        style={{background:on?B.gold:"#fff",border:`1px solid ${on?B.gold:B.border}`,color:B.black}}>
-                        <div className="text-sm font-bold">{splitSummary(sp,tAr)}</div>
-                        <div className="text-xs mt-0.5" style={{color:on?B.black:B.muted}}>
-                          {sar(sp.perNight)} للغرفة مرة واحدة{sp.spare>0?` · ${sp.spare} سرير فائض`:""}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {splits.length===0&&<div className="text-xs" style={{color:"#B4530C"}}>لا توزيع غرفٍ ممكن لهذا العدد — راجع أسعار الغرف في الباقة.</div>}
-                </div>
-              </Field>
-              <Err k="room"/>
-            </div>
-          )}
-
-          {/* السعر المحسوب وتفصيله قبل الإنشاء — لا مبلغ حرّ. */}
-          {tripId&&(
-            <div className="col-span-2 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap" style={{background:B.cream,border:"1px solid #EDE4CF"}}>
-              <div className="text-xs" style={{color:B.text2}}>
-                {housing&&split&&price
-                  ? <>المواصلات: {persons} مقاعد × {sar(price.seatPrice)} = {sar(price.transport)}<br/>السكن: {split.rooms.length} {split.rooms.length===1?"غرفة":"غرف"} = {sar(price.accommodation)}</>
-                  : <>{persons} معتمر × {sar(selTrip?.price||selPkg?.marketPrice||0)}</>}
-                <div style={{color:B.muted,marginTop:2}}>المبلغ المعتمد تحسبه القاعدة من أسعار الباقة — لا يُرسل من هنا.</div>
-              </div>
-              <div className="font-extrabold" style={{color:B.black,fontFamily:"var(--font-app)",fontSize:18}}>{sar(estimate)}</div>
-            </div>
-          )}
-
-          {errors.seats&&<div className="col-span-2 rounded-xl px-4 py-3 text-xs font-bold" style={{background:"#FBE6E6",border:"1px solid #F3C9C9",color:"#BE2626"}}>{errors.seats}</div>}
+          {errors.seats&&<Note tone="danger" icon={<AlertTriangle size={15}/>}>{errors.seats}</Note>}
         </div>
-        <div className="px-6 pb-6 flex gap-3">
-          <button onClick={submit} disabled={busy} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-extrabold text-sm"
-            style={{background:busy?"#d6cfc6":B.gold,color:busy?"#a09688":B.black,border:"none",cursor:busy?"not-allowed":"pointer"}}>
-            {busy&&<Spinner size={14} color={B.black}/>}
-            {busy?"جارٍ الحفظ…":"إنشاء طلب"}
-          </button>
-          <button onClick={requestClose} className="px-6 py-2.5 rounded-xl font-bold text-sm cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>إلغاء</button>
-        </div>
-        </>
-        )}
-      </motion.div>
-    </motion.div>
+      )}
+    </Modal>
   );
 }
 
 export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:Trip[];onMenuOpen?:()=>void}) {
   const bookings=useStore(s=>s.bookings); const setBookings=useStore(s=>s.setBookings);
   const transports=useStore(s=>s.transports);
+  const payments=useStore(s=>s.payments);
+  const tickets=useStore(s=>s.tickets);
   const refreshTrips=useStore(s=>s.refreshTrips);
   const refreshBookings=useStore(s=>s.refreshBookings);
   const currentUser=useStore(s=>s.currentUser);
@@ -378,6 +402,8 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
   const [detailId,setDetailId]=useState<string|null>(null);
   const [onlyStale,setOnlyStale]=useState(false);
   const [showNew,setShowNew]=useState(false);
+  const [invoiceView,setInvoiceView]=useState<ReturnType<typeof payments.find>|null>(null);
+  const [ticketView,setTicketView]=useState<ReturnType<typeof tickets.find>|null>(null);
 
   /* روابط بطاقات الرئيسية قابلة للمشاركة: لا تضيع المرشحات بعد نسخ الرابط
      أو تحديث الصفحة. */
@@ -536,11 +562,18 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
     stale:bookings.filter(b=>isStale(b,trips.find(t=>t.id===b.tripId),today)).length,
   };
 
-  const fb=(on:boolean)=>({padding:"7px 16px",borderRadius:999,fontSize:13,fontWeight:700,cursor:"pointer" as const,border:`1px solid ${on?B.gold:B.border}`,background:on?B.gold:"#fff",color:on?B.black:B.text2,transition:"all 0.15s",whiteSpace:"nowrap" as const});
+  const chipsOn = !onlyStale && !legacyStatus;
+  const stageChips: ChipOption<StageFilter>[] = STAGE_FILTERS.map(([v,l])=>({
+    value:v, label:l, count:v==="all"?bookings.length:byStage(v),
+  }));
+  const filteredOut = activePg.total===0 && bookings.length>0;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-screen" style={{background: B.bg}}>
-      <PageHeader title="الطلبات" crumb="إدارة الطلبات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}/>
+      <PageHeader title="الطلبات" crumb="إدارة الطلبات" search={search} onSearch={setSearch} onMenuOpen={onMenuOpen}
+        actions={!curBooking&&<Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setShowNew(true)}>
+          <span className="hidden sm:inline">طلب جديد</span><span className="sm:hidden">جديد</span>
+        </Button>}/>
 
       {curBooking ? (
         <BookingDetail booking={curBooking} trips={trips} packages={packages} allBookings={bookings}
@@ -548,154 +581,161 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
           onStatusChange={changeStatus} onPilgrimsChange={updatePilgrims} onClientChange={updateClient} onTravellerCountsChange={updateTravellerCounts} onSeatsChange={updateSeats} onRefresh={refreshBookings}/>
       ) : (
         <>
-          {/* Stats */}
-          <div className="px-4 md:px-8 pt-4 md:pt-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <StatCard label="إجمالي الطلبات" value={stats.total} sub="كل الخطوات" accent/>
-              <StatCard label="التحقق من البيانات" value={stats.verify} sub="بانتظار مراجعة الموظف"/>
-              <StatCard label="اختيار المقاعد" value={stats.seats} sub="تُحُقِّق منها ولم تُقفل مقاعدها"/>
-              <StatCard label="بانتظار الدفع" value={stats.payment} sub="مقاعدها مقفلة ولم تُسدَّد"/>
-              <StatCard label="مؤكدة" value={stats.confirmed} sub="صدرت فاتورتها وتذكرتها"/>
-              <StatCard label="إجمالي الإيرادات" value={sar(stats.revenue)} sub="محصّلة"/>
-              <StatCard label="متأخّرة" value={stats.stale} sub={stats.stale?"مضت رحلتها ولم تُغلق":"لا شيء متأخّر"}/>
+          <div className="px-4 md:px-8 pt-1">
+            {/* أربع بطاقاتٍ لا سبع: عدّ كل خطوةٍ صار على شريحتها تحت، فلا
+                يُكتب الرقم نفسه مرّتين في شاشةٍ واحدة. وكل بطاقةٍ تُرشِّح. */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatCard label="كل الطلبات" value={stats.total} sub={`${stats.verify+stats.seats+stats.payment} قيد الإجراء`} accent
+                onClick={()=>{setOnlyStale(false);selectStage("all");}}/>
+              <StatCard label="مؤكدة" value={stats.confirmed} sub="صدرت فاتورتها وتذكرتها"
+                onClick={()=>{setOnlyStale(false);selectStage("done" as StageFilter);}}/>
+              <StatCard label="الإيرادات المحصّلة" value={sar(stats.revenue)} sub="من الطلبات المدفوعة والمؤكدة"/>
+              <StatCard label="متأخّرة" value={stats.stale} alert sub={stats.stale?"مضت رحلتها ولم تُغلق":"لا شيء متأخّر"}
+                onClick={()=>setOnlyStale(v=>!v)}/>
             </div>
-            {/* Filter chips */}
+
             <div className="flex items-center gap-2 mt-5 flex-wrap">
-              {STAGE_FILTERS.map(([v,l])=>{
-                const n = v==="all" ? bookings.length : byStage(v);
-                return (
-                  <button key={v} style={fb(stageFilter===v&&!onlyStale&&!legacyStatus)}
-                    onClick={()=>{setOnlyStale(false);selectStage(v);}}>
-                    {l}{v==="all"?"":` (${n})`}
-                  </button>
-                );
-              })}
+              <FilterChips label="خطوة الطلب" options={stageChips}
+                value={chipsOn?stageFilter:("__none" as StageFilter)}
+                onChange={v=>{setOnlyStale(false);selectStage(v);}}/>
               {/* مرشّحٌ تشغيلي لا حالةٌ في القاعدة: «متأخّرة» صفةٌ تُشتقّ من
                   تاريخ الرحلة، فمكانها بجانب الحالات لا بينها. */}
-              <button style={{...fb(onlyStale),borderColor:onlyStale?"#B4530C":B.border}}
-                onClick={()=>{setOnlyStale(v=>!v);}}>
-                متأخّرة{stats.stale?` (${stats.stale})`:""}
-              </button>
-              {onlyStale&&stats.stale>0&&(
-                <button onClick={()=>setBulkOpen(true)} className="px-4 py-1.5 rounded-full text-xs font-bold cursor-pointer"
-                  style={{background:"#FCEBDD",border:"1px solid #F3D2B4",color:"#8A3F09"}}>
-                  إغلاق الكل بسببٍ واحد ({stats.stale})
+              {stats.stale>0&&(
+                <button type="button" aria-pressed={onlyStale} onClick={()=>setOnlyStale(v=>!v)} className="ui-chip ui-chip--alert">
+                  <AlertTriangle size={14}/>متأخّرة<span className="ui-chip-count">{stats.stale}</span>
                 </button>
+              )}
+              {onlyStale&&stats.stale>0&&(
+                <Button size="sm" variant="danger-soft" onClick={()=>setBulkOpen(true)}>إغلاق الكل بسببٍ واحد</Button>
               )}
               {/* رابطٌ قديم صفّى باسم الحالة: يُقال بأيّه صُفّي ويُزال بضغطة،
                   فلا يبقى جدولٌ منقوصٌ بلا شريحةٍ مضيئة تفسّره. */}
               {legacyStatus&&(
-                <button onClick={clearLegacyStatus} title="إزالة مرشّح الحالة القديم"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer"
-                  style={{background:"#F1E9FA",border:"1px solid #D8BBFA",color:"#7226BE"}}>
-                  الحالة: {statusLabel(legacyStatus,"booking")}<X size={12}/>
+                <button type="button" onClick={clearLegacyStatus} title="إزالة مرشّح الحالة" className="ui-chip is-on">
+                  الحالة: {statusLabel(legacyStatus,"booking")}<X size={13}/>
                 </button>
               )}
-              <span className="mr-auto text-sm font-semibold" style={{color:B.muted}}>{serverSearching?"جارِ البحث…":`${activePg.total} / ${bookings.length}`}</span>
-              <button onClick={()=>setShowNew(true)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
-                style={{background:B.gold,color:B.black,border:"none",boxShadow:"0 4px 12px rgba(192,134,44,0.3)"}}>
-                <Plus size={14}/>إضافة طلب جديد
-              </button>
+              <span className="ms-auto text-sm" style={{color:B.muted}} aria-live="polite">
+                {serverSearching?"جارٍ البحث…":activePg.total===bookings.length?`${bookings.length} طلب`:`${activePg.total} من ${bookings.length}`}
+              </span>
             </div>
-            <div className="mt-5" style={{height:1,background:B.border}}/>
           </div>
 
           {/* Table on desktop / Cards on mobile */}
-          <main className="flex-1 px-4 md:px-8 py-6">
+          <main className="flex-1 px-4 md:px-8 pt-4 pb-8">
             <EntityGate entity="bookings" label="الطلبات" cols={7}>
+            {!serverSearching&&activePg.total===0 ? (
+              <EmptyState
+                icon={filteredOut?<SearchX size={22}/>:<BookOpen size={22}/>}
+                title={filteredOut?"لا طلبات تطابق البحث":"لا طلبات بعد"}
+                note={filteredOut?"جرّب كلمةً أخرى أو أزل المرشّح.":"طلبات العملاء من التطبيق تظهر هنا، ويمكنك إضافة طلبٍ يدوياً."}
+                action={filteredOut
+                  ? <Button variant="secondary" onClick={()=>{setSearch("");setOnlyStale(false);selectStage("all");}}>إزالة المرشّحات</Button>
+                  : <Button variant="primary" icon={<Plus size={16}/>} onClick={()=>setShowNew(true)}>طلب جديد</Button>}/>
+            ) : <>
             {/* Desktop table */}
-            <div className="hidden md:block rounded-2xl overflow-hidden" style={{background:"#fff",border:`1px solid ${B.border}`}}>
-              <div className="tbl-scroll tbl-wide">
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+            <div className="hidden md:block ui-table-wrap" style={{opacity:serverSearching?0.55:1,transition:"opacity .15s"}}>
+              <div className="ui-table-scroll">
+                <table className="ui-table" style={{minWidth:860}}>
                   <thead>
-                    <tr style={{background:B.cream,color:"#7a7168",fontSize:12,textAlign:"right"}}>
-                      {/* أُضيفت ثلاثة أعمدة بطلب الفريق: تاريخ الإنشاء
-                          وتاريخ الرحلة والموظف. الثلاثة موجودةٌ في البيانات
-                          أصلاً ولم تكن معروضة. و«الموظف» هو مُنشئ الطلب أو
-                          مصدره: لا مسؤول معيَّن للطلب بعد قرار ٢٠٢٦-٠٩-١١. */}
-                      {["رقم الطلب","العميل","الباقة","تاريخ الطلب","تاريخ الرحلة","المعتمرون","المبلغ","الموظف","الحالة","إجراء"].map(h=>(
-                        <th key={h} className={h==="إجراء"||h==="إجراءات"?"col-action":undefined} style={{padding:"13px 16px",fontWeight:700}}>{h}</th>
-                      ))}
+                    <tr>
+                      {/* العمودان «تاريخ الطلب» و«تاريخ الرحلة» صارا سطراً ثانياً
+                          تحت الرقم والباقة: المعلومة باقية، وعرض الجدول يتّسع
+                          للاسم كاملاً بلا انكسار. */}
+                      <th>الطلب</th>
+                      <th>العميل</th>
+                      <th>الباقة والرحلة</th>
+                      <th style={{textAlign:"center"}}>المعتمرون</th>
+                      <th>المبلغ</th>
+                      <th>الموظف</th>
+                      <th>الخطوة</th>
+                      <th className="col-action"><span className="sr-only">إجراء</span></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {activePg.rows.map((b,i)=>{
+                    {activePg.rows.map(b=>{
                       const rowTrip=trips.find(t=>t.id===b.tripId);
                       const pkg=packages.find(p=>p.id===rowTrip?.packageId);
                       const stale=isStale(b,rowTrip,today);
+                      const pay=payments.find(p=>p.bookingId===b.id);
+                      const tkt=tickets.find(t=>t.bookingId===b.id);
                       return (
-                        <tr key={b.id} onClick={()=>setDetailId(b.id)} title="فتح مراجعة الطلب"
-                          className="hover:brightness-95" style={{borderTop:`1px solid ${B.border}`,background:i%2===0?"#fff":"#FDFCFA",cursor:"pointer",transition:"filter 0.12s"}}>
-                          <td style={{padding:"14px 16px",fontWeight:700,fontFamily:"var(--font-app)",color:B.black,fontSize:13}}>{b.id}</td>
-                          <td style={{padding:"14px 16px"}}>
-                            <div className="font-bold text-sm" style={{color:B.black}}>{b.clientName}</div>
-                            <div className="text-xs font-mono" style={{color:B.muted,direction:"ltr"}}>{b.clientPhone}</div>
+                        <tr key={b.id} className="is-clickable" tabIndex={0} aria-label={`فتح الطلب ${b.id}`}
+                          onClick={()=>setDetailId(b.id)}
+                          onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) setDetailId(b.id); }}>
+                          <td className="nowrap">
+                            <div className="cell-main num" style={{textAlign:"start"}}>{b.id}</div>
+                            <div className="cell-sub">{fmtDateShort(b.createdAt)}</div>
                           </td>
-                          <td style={{padding:"14px 16px",color:B.text2,fontSize:13}}>{pkg?.name??"—"}</td>
-                          <td style={{padding:"14px 16px",color:B.text2,fontSize:12,fontFamily:"var(--font-app)",whiteSpace:"nowrap"}}>{b.createdAt?.slice(0,10)||"—"}</td>
-                          <td style={{padding:"14px 16px",fontSize:12,fontFamily:"var(--font-app)",whiteSpace:"nowrap",color:stale?"#B4530C":B.text2,fontWeight:stale?700:400}}>
-                            {rowTrip?.departureDate??"—"}
-                            {stale&&<div style={{fontSize:10,fontWeight:700}}>مضت — لم يُغلق</div>}
+                          <td>
+                            <div className="cell-main nowrap">{b.clientName}</div>
+                            <div className="cell-sub num" style={{textAlign:"start"}}>{b.clientPhone}</div>
                           </td>
-                          <td style={{padding:"14px 16px",fontWeight:700,color:B.black,textAlign:"center"}}>{b.persons}</td>
-                          <td style={{padding:"14px 16px",fontWeight:700,color:B.black,fontFamily:"var(--font-app)"}}>{sar(b.total)}</td>
-                          <td style={{padding:"14px 16px",color:B.text2,fontSize:12,whiteSpace:"nowrap"}}>
+                          <td>
+                            <div className="nowrap" style={{color:B.text3}}>{pkg?.name??"—"}</div>
+                            <div className="cell-sub nowrap" style={stale?{color:"var(--k-danger)",fontWeight:600}:undefined}>
+                              {rowTrip?fmtDateShort(rowTrip.departureDate):"بلا رحلة"}{stale&&" · مضت ولم يُغلق"}
+                            </div>
+                          </td>
+                          <td style={{textAlign:"center",color:B.text3}}>{b.persons}</td>
+                          <td className="nowrap cell-main">{sar(b.total)}</td>
+                          <td className="nowrap" style={{color:B.text2,fontSize:13}}>
                             {b.staff||(b.source==="public"?"من التطبيق":"—")}
                           </td>
-                          <td style={{padding:"14px 16px"}}><StageBadge booking={b}/></td>
-                          <td className="col-action" style={{padding:"14px 16px"}} onClick={e=>e.stopPropagation()}>
-                            <button onClick={()=>setDetailId(b.id)} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                              style={{background:B.gold,color:B.black,border:"none"}}>فتح الطلب</button>
+                          <td><StageBadge booking={b}/></td>
+                          <td className="col-action" onClick={e=>e.stopPropagation()}>
+                            <div className="row-actions">
+                              {pay&&<IconButton size="sm" label="عرض الفاتورة" onClick={()=>setInvoiceView(pay)}><CreditCard size={15}/></IconButton>}
+                              {tkt&&<IconButton size="sm" label="عرض التذكرة" onClick={()=>setTicketView(tkt)}><Ticket size={15}/></IconButton>}
+                              <IconButton size="sm" label={`فتح الطلب ${b.id}`} onClick={()=>setDetailId(b.id)}><ChevronLeft size={16}/></IconButton>
+                            </div>
                           </td>
                         </tr>
                       );
                     })}
-                    {serverSearching&&<tr><td colSpan={10} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>جارِ البحث في السجل…</td></tr>}
-                    {!serverSearching&&activePg.total===0&&(
-                      <tr><td colSpan={10} style={{padding:"48px 16px",textAlign:"center",color:B.muted,fontWeight:600}}>لا توجد طلبات مطابقة</td></tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             </div>
 
             {/* Mobile cards */}
-            <div className="md:hidden flex flex-col gap-3">
+            <div className="md:hidden flex flex-col gap-2.5" style={{opacity:serverSearching?0.55:1}}>
               {activePg.rows.map(b=>{
-                const pkg=packages.find(p=>p.id===trips.find(t=>t.id===b.tripId)?.packageId);
+                const rowTrip=trips.find(t=>t.id===b.tripId);
+                const pkg=packages.find(p=>p.id===rowTrip?.packageId);
+                const stale=isStale(b,rowTrip,today);
+                const pay=payments.find(p=>p.bookingId===b.id);
+                const tkt=tickets.find(t=>t.bookingId===b.id);
                 return (
-                  <motion.div key={b.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} onClick={()=>setDetailId(b.id)}
-                    className="rounded-2xl p-4" style={{background:"#fff",border:`1px solid ${B.border}`,cursor:"pointer"}}>
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div>
-                        <div className="font-extrabold text-sm" style={{color:B.black,fontFamily:"var(--font-app)"}}>{b.id}</div>
-                        <div className="text-xs mt-0.5" style={{color:B.muted}}>
-                          أُنشئ {b.createdAt?.slice(0,10)} · رحلة {trips.find(t=>t.id===b.tripId)?.departureDate??"—"}
-                        </div>
-                        {isStale(b,trips.find(t=>t.id===b.tripId),today)&&(
-                          <div className="text-xs font-bold mt-1" style={{color:"#B4530C"}}>مضت رحلته ولم يُغلق</div>
-                        )}
+                  <div key={b.id} role="button" tabIndex={0} onClick={()=>setDetailId(b.id)}
+                    onKeyDown={e=>{ if(e.key==="Enter"&&e.target===e.currentTarget) setDetailId(b.id); }}
+                    className="ui-card ui-card--hover p-4" style={{cursor:"pointer"}}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold truncate" style={{color:B.black,fontSize:15}}>{b.clientName}</div>
+                        <div className="text-xs mt-0.5" style={{color:B.muted}}>{b.id} · {fmtDateShort(b.createdAt)}</div>
                       </div>
                       <StageBadge booking={b}/>
                     </div>
-                    <div className="font-bold text-sm mb-0.5" style={{color:B.black}}>{b.clientName}</div>
-                    <div className="text-xs mb-3" style={{color:B.muted}}>{pkg?.name??"—"} · {b.persons} معتمر · {b.roomType}</div>
-                    <div className="flex items-center justify-between">
-                      <div className="font-extrabold" style={{color:B.gold,fontFamily:"var(--font-app)"}}>{sar(b.total)}</div>
-                      <button onClick={e=>{e.stopPropagation();setDetailId(b.id);}} className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                        style={{background:B.gold,color:B.black,border:"none"}}>فتح الطلب</button>
+                    <div className="text-sm mt-3" style={{color:B.text2}}>
+                      {pkg?.name??"—"} · {b.persons} معتمر
                     </div>
-                  </motion.div>
+                    <div className="text-xs mt-0.5" style={stale?{color:"var(--k-danger)",fontWeight:600}:{color:B.muted}}>
+                      {rowTrip?`الرحلة ${fmtDateShort(rowTrip.departureDate)}`:"بلا رحلة"}{stale&&" · مضت ولم يُغلق"}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3" style={{borderTop:`1px solid ${B.border}`}}>
+                      <div className="font-bold" style={{color:B.black}}>{sar(b.total)}</div>
+                      <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
+                        {pay&&<IconButton size="sm" variant="outline" label="عرض الفاتورة" onClick={()=>setInvoiceView(pay)}><CreditCard size={15}/></IconButton>}
+                        {tkt&&<IconButton size="sm" variant="outline" label="عرض التذكرة" onClick={()=>setTicketView(tkt)}><Ticket size={15}/></IconButton>}
+                        <ChevronLeft size={18} style={{color:B.muted,marginInlineStart:4}} aria-hidden/>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
-              {serverSearching&&<div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}><span className="text-sm font-medium">جارِ البحث في السجل…</span></div>}
-              {!serverSearching&&activePg.total===0&&(
-                <div className="flex flex-col items-center py-16 rounded-2xl" style={{border:`2px dashed ${B.border}`,color:B.muted}}>
-                  <BookOpen size={28} style={{opacity:0.3,marginBottom:8}}/>
-                  <p className="text-sm font-medium">لا توجد طلبات مطابقة</p>
-                </div>
-              )}
             </div>
+            </>}
             </EntityGate>
             <Pager p={activePg} unit="طلب"/>
           </main>
@@ -703,37 +743,22 @@ export function BookingsPage({packages,trips,onMenuOpen}:{packages:Pkg[];trips:T
       )}
       <AnimatePresence>
         {showNew&&<NewOrderModal packages={packages} trips={trips} transports={transports} onCreate={createInternalOrder} onClose={()=>setShowNew(false)}/>}
-        {bulkOpen&&(
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-            className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-auto"
-            style={{background:"rgba(14,12,11,0.8)",backdropFilter:"blur(4px)"}}>
-            <motion.div initial={{scale:0.95,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.95,opacity:0}}
-              role="dialog" aria-modal="true" aria-label="إغلاق الطلبات المتأخّرة"
-              className="w-full rounded-2xl overflow-hidden my-6 p-6 flex flex-col gap-4" style={{maxWidth:460,background:"#fff"}} onClick={e=>e.stopPropagation()}>
-              <div>
-                <h3 className="text-base font-bold" style={{color:B.black,margin:0}}>إغلاق {stats.stale} طلباً متأخّراً</h3>
-                <p className="text-xs mt-1" style={{color:B.muted,margin:0}}>
-                  كلها انتهت رحلتها وما زالت مفتوحة. تُغلق «ملغاة» بسببٍ واحد يُكتب في سجلّ كل طلب باسمك، وتعود مقاعدها للبيع. لا شيء يُحذف.
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1.5" style={{color:B.text3}}>سبب الإغلاق <span style={{color:"#BE2626"}}>*</span></label>
-                <textarea value={bulkReason} onChange={e=>setBulkReason(e.target.value)} rows={2}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm resize-none focus:outline-none" style={{borderColor:B.border,fontFamily:"inherit",color:B.black}}/>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={runBulkClose} disabled={bulkBusy||!bulkReason.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold"
-                  style={{background:"#B4530C",color:"#fff",border:"none",opacity:bulkBusy||!bulkReason.trim()?0.5:1,cursor:bulkBusy?"not-allowed":"pointer"}}>
-                  {bulkBusy&&<Spinner size={13} color="#fff" track="rgba(255,255,255,0.3)"/>}
-                  {bulkBusy?"جارٍ الإغلاق…":`إغلاق ${stats.stale} طلباً`}
-                </button>
-                <button onClick={()=>!bulkBusy&&setBulkOpen(false)} className="px-5 py-3 rounded-xl text-sm font-bold cursor-pointer" style={{background:B.fill,color:B.text2,border:"none"}}>تراجع</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+        {invoiceView&&<InvoiceModal pay={invoiceView} onClose={()=>setInvoiceView(null)}/>}
+        {ticketView&&<TicketCard ticket={ticketView} onClose={()=>setTicketView(null)}/>}
       </AnimatePresence>
+      <Modal open={bulkOpen} onClose={()=>{ if(!bulkBusy) setBulkOpen(false); }} width={460}
+        title={`إغلاق ${stats.stale} طلباً متأخّراً`}
+        sub="كلها انتهت رحلتها وما زالت مفتوحة. تُغلق «ملغاة» بسببٍ واحد يُكتب في سجلّ كل طلب باسمك، وتعود مقاعدها للبيع. لا شيء يُحذف."
+        icon={<ModalIcon tone="warn"><AlertTriangle size={19}/></ModalIcon>}
+        footer={<>
+          <Button variant="danger" loading={bulkBusy} disabled={!bulkReason.trim()} onClick={runBulkClose}>
+            {bulkBusy?"جارٍ الإغلاق…":`إغلاق ${stats.stale} طلباً`}
+          </Button>
+          <Button variant="secondary" disabled={bulkBusy} onClick={()=>setBulkOpen(false)}>تراجع</Button>
+        </>}>
+        <label className="ui-label" htmlFor="bulk-close-reason">سبب الإغلاق<span className="ui-req">*</span></label>
+        <Textarea id="bulk-close-reason" value={bulkReason} onChange={e=>setBulkReason(e.target.value)} rows={2} style={{resize:"none"}}/>
+      </Modal>
     </div>
   );
 }

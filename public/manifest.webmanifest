@@ -1,0 +1,15 @@
+{
+  "name": "تساهيل العمرة",
+  "short_name": "تساهيل",
+  "description": "احجز عمرتك بسهولة وطمأنينة.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FBF9F5",
+  "theme_color": "#FBF9F5",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

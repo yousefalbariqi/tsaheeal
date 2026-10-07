@@ -4,10 +4,11 @@
    المعنى، والقائمة الرأسية تُرتّبها ضمنياً (الأول أولى) وتدفع الثالث
    تحت طيّ الشاشة على الجوال. المتجاور يُقرأ دفعةً واحدة ويُقارَن.
 
-   اللون يحمل المعنى قبل النص: أزرق للرجل ووردي للمرأة وذهبيّ الهوية
-   للعائلة. هذه الثلاثة هي الاستثناء الوحيد للوحة الذهبية في tokens.ts —
-   لأن الفرق بين «مسافر» و«مسافرة» كلمةٌ واحدة بحرفٍ زائد، وقارئٌ مستعجل
-   على جوال يخطئها. اللون يفرزهما قبل أن تُقرأ الكلمة.
+   اللون يسند المعنى ولا يصرخ به: أزرقُ رماديٌّ للرجل وورديٌّ مطفأ
+   للمرأة وذهبيّ الهوية للعائلة. كانا أزرق ووردياً مشبّعين يزاحمان
+   الزرّ الذهبي على العين؛ الدرجتان الآن هادئتان ومتمايزتان — لأن الفرق
+   بين «مسافر» و«مسافرة» كلمةٌ واحدة بحرفٍ زائد، وقارئٌ مستعجل على جوال
+   يخطئها. اللون يفرزهما قبل أن تُقرأ الكلمة.
 
    والرسم يقول المعنى كذلك: الرجل بإحرامه مكشوف الكتف (الاضطباع)،
    والمرأة بحجابها وعباءتها، والعائلة أبٌ وأمٌّ وطفلٌ بينهما — لا ثلاث
@@ -19,15 +20,15 @@ import { motion } from "motion/react";
 import { Check } from "lucide-react";
 import { Minus, Plus } from "lucide-react";
 import type { TravellerType } from "@/types";
-import { C, T, R } from "./tokens";
+import { C, R } from "./tokens";
 import type { TravellerCounts } from "../draft";
 import { travellerCountTotal } from "../draft";
 
 /** لوحة كل نوع: `ink` لون الرسم، و`tint` خلفية القرص والبطاقة المختارة. */
 export const TRAVELLER_PALETTE: Record<TravellerType, { ink: string; tint: string }> = {
-  male_solo:   { ink: "#2E6DB4", tint: "#E9F1FA" },
-  female_solo: { ink: "#C2557E", tint: "#FBECF2" },
-  family:      { ink: "#B7893F", tint: "#F7EEDC" },
+  male_solo:   { ink: "#55708A", tint: "#EEF2F5" },
+  female_solo: { ink: "#A06A80", tint: "#F7EFF2" },
+  family:      { ink: C.greenDeep, tint: C.goldTint },
 };
 
 /** الترتيب مقصود: الفرديّان أولاً لأنهما الأكثر، والعائلة آخراً.
@@ -155,8 +156,7 @@ export function TravellerTypeGrid({ value, onPick, t }: {
               borderRadius: R.card, background: bg,
               /* الحدّ سميكٌ في الحالتين ويتبدّل لونه وحده: لو رقّ غير
                  المختار لانزاح المحتوى بكسر البكسل عند كل نقرة. */
-              border: `2px solid ${selected ? ink : C.border}`,
-              boxShadow: selected ? `0 4px 14px -6px ${ink}66` : "none",
+              border: `2px solid ${selected ? C.ink : C.border}`,
               transition: "background .16s, border-color .16s, box-shadow .16s",
             }}>
             <span className="flex items-center justify-center"
@@ -168,12 +168,12 @@ export function TravellerTypeGrid({ value, onPick, t }: {
               <TravellerIcon type={type} size={40} bg={selected ? C.white : tint} />
             </span>
             <span className="flex flex-col items-center justify-center flex-1" style={{ gap: 2 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.25, color: selected ? ink : C.ink, textAlign: "center" }}>{title}</span>
-              {sub && <span style={{ fontSize: 10.5, fontWeight: 500, lineHeight: 1.3, color: selected ? ink : C.ink2, opacity: selected ? .85 : 1, textAlign: "center" }}>{sub}</span>}
+              <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3, color: C.ink, textAlign: "center" }}>{title}</span>
+              {sub && <span style={{ fontSize: 12, fontWeight: 400, lineHeight: 1.4, color: C.ink2, textAlign: "center" }}>{sub}</span>}
             </span>
             {selected && (
               <span className="absolute flex items-center justify-center"
-                style={{ top: 6, insetInlineEnd: 6, width: 20, height: 20, borderRadius: R.pill, background: ink, color: C.white }}>
+                style={{ top: 6, insetInlineEnd: 6, width: 20, height: 20, borderRadius: R.pill, background: C.ink, color: C.white }}>
                 <Check size={13} strokeWidth={3} />
               </span>
             )}
@@ -217,7 +217,7 @@ export function TravellerCountPicker({ value, onChange, max, lang }: {
       const palette = TRAVELLER_PALETTE[type];
       return <article className="ts-traveller-count" key={key}>
         <span className="ts-traveller-count-icon" style={{ color: palette.ink, background: palette.tint }}>
-          <TravellerIcon type={type} size={42} bg={palette.tint} />
+          <TravellerIcon type={type} size={30} bg={palette.tint} />
         </span>
         <span className="ts-traveller-count-copy"><strong>{label}</strong></span>
         <div className="ts-traveller-stepper" dir="ltr" aria-label={`${label}: ${value[key]}`}>

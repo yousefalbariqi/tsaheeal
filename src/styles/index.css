@@ -2,6 +2,9 @@
 @import './tailwind.css';
 @import './theme.css';
 @import './admin.css';
+@import './ui.css' layer(components);
+@import './customer-flow.css';
+@import './customer-misc.css';
 
 @font-face { font-family:'DGShamael-Regular'; src:url('/DGShamael-Regular.ttf') format('truetype'); font-style:normal; font-weight:400; font-display:swap; }
 
@@ -111,264 +114,1730 @@
 .ts-national-day .ts-destination-footer img { opacity:.28; filter:brightness(0) invert(1); }
 .ts-national-day .ts-destination-footer small { color:#d7efdf; }
 
-/* ═══ مرحلة اختيار الوجهة ═══ */
+/* ═══ مرحلة اختيار الوجهة ═══
+   رأسٌ بثلاثة عناصر، عنوانٌ واحد، ثم بطاقتا الوجهة: الصورة هي البطاقة
+   والاسم فوقها. لا بطاقة «مختارة سلفاً» — الاثنتان متساويتان حتى يختار
+   العميل. */
 .ts-destination-choice {
-  position:relative; min-height:100dvh; overflow:hidden;
-  background:#fffaf2; color:#2d241b;
+  position:relative;
+  min-height:100dvh;
+  overflow:hidden;
+  background:#FBF9F5;
+  color:var(--k-text);
 }
 .ts-destination-header {
-  position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between;
-  padding:18px 20px 6px;
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:64px;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
 }
-.ts-destination-brand,.ts-destination-actions button { border:0; background:transparent; cursor:pointer; }
-.ts-destination-brand { padding:0; color:#3f2a18; transform:translateY(5px); }
-.ts-destination-actions { display:flex; align-items:center; gap:8px; }
-.ts-destination-content { max-width:460px; margin:0 auto; padding:34px 20px 0; text-align:center; }
-.ts-destination-overline { margin:0 0 10px; color:#967033; font-size:12px; font-weight:700; letter-spacing:.04em; }
-.ts-destination-content h1 { margin:0; color:#17130f; font-family:var(--font-display); font-size:clamp(30px,8vw,39px); font-weight:700; line-height:1.18; }
-.ts-destination-lead { max-width:29ch; margin:10px auto 0; color:#847466; font-size:14px; font-weight:600; line-height:1.65; }
-.ts-destination-cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:28px; text-align:start; }
-.ts-destination-card { position:relative; overflow:hidden; min-width:0; padding:0; border:1px solid rgba(105,76,32,.12); border-radius:20px; background:#fff; cursor:pointer; box-shadow:0 12px 30px rgba(63,40,11,.14); transition:transform .18s ease,box-shadow .18s ease; }
-.ts-destination-card:first-child { border-color:#a27a32; }
-.ts-destination-card:hover,.ts-destination-card:focus-visible { transform:translateY(-3px); box-shadow:0 18px 35px rgba(63,40,11,.22); outline:none; }
-.ts-destination-card:focus-visible { box-shadow:0 0 0 3px #fffaf2,0 0 0 6px #8a6a08; }
-.ts-destination-card > img { width:100%; aspect-ratio:1 / .92; object-fit:cover; display:block; }
-.ts-destination-card-copy { display:flex; flex-direction:column; min-height:84px; justify-content:center; padding:10px 8px; text-align:center; }
-.ts-destination-card-copy strong { color:#4f3921; font-family:var(--font-display); font-size:19px; line-height:1.2; }
-.ts-destination-card-copy small { margin-top:5px; color:#847466; font-size:11px; font-weight:600; line-height:1.45; }
-.ts-destination-selected { position:absolute; top:10px; inset-inline-end:10px; display:grid; place-items:center; width:28px; height:28px; border-radius:50%; color:#7f5b19; background:#fff; box-shadow:0 3px 10px rgba(0,0,0,.2); }
-.ts-destination-prompt { display:flex; align-items:center; justify-content:center; gap:10px; margin:26px 0 22px; color:#80633c; font-size:13px; font-weight:600; }
-.ts-destination-prompt::before,.ts-destination-prompt::after { content:""; width:30px; height:1px; background:#bf9557; }
-.ts-destination-trust { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; color:#725d46; }
-.ts-destination-trust span { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10px; font-weight:600; line-height:1.4; }
-.ts-destination-trust svg { color:#8a6a08; }
-.ts-destination-reviews { margin-top:34px; }
-.ts-destination-reviews h2 { display:flex; align-items:center; justify-content:center; gap:10px; margin:0 0 16px; color:#4f3921; font-family:var(--font-display); font-size:20px; font-weight:700; line-height:1.3; }
-.ts-destination-reviews h2::before,.ts-destination-reviews h2::after { content:""; width:34px; height:1px; background:#c6a365; }
-.ts-destination-review-carousel { position:relative; min-height:126px; overflow:hidden; }
-.ts-destination-review-track { display:flex; width:100%; gap:8px; direction:ltr; will-change:transform; animation:ts-destination-review-chain 60s linear infinite; }
-@keyframes ts-destination-review-chain { from { transform:translateX(0); } to { transform:translateX(calc(-400% - 32px)); } }
-@media (prefers-reduced-motion:reduce) { .ts-destination-review-track { animation:none; } }
-.ts-destination-review { display:flex; flex:0 0 calc((100% - 16px) / 3); min-width:0; min-height:126px; flex-direction:column; align-items:center; justify-content:center; margin:0; padding:11px 8px; border:1px solid #eee4d5; border-radius:16px; background:rgba(255,255,255,.86); box-shadow:0 8px 20px rgba(63,40,11,.07); }
-.ts-destination-review-stars { display:flex; gap:1px; color:#c18b20; }
-.ts-destination-review blockquote { margin:10px 0 8px; color:#625141; font-size:11px; font-weight:600; line-height:1.6; }
-.ts-destination-review figcaption { color:#9a8b7c; font-size:10px; font-weight:600; }
-.ts-destination-footer { position:relative; display:flex; min-height:176px; flex-direction:column; align-items:center; justify-content:flex-end; margin:20px -20px 0; padding:0 20px calc(24px + env(safe-area-inset-bottom)); overflow:hidden; }
-.ts-destination-footer::before { position:absolute; z-index:0; inset:28% 0 0; content:""; background:rgba(255,248,236,.72); }
-.ts-destination-footer img { position:absolute; z-index:0; inset-inline:50%; bottom:-2px; width:max(620px,165vw); max-width:none; transform:translateX(-50%); opacity:.64; }
-.ts-destination-footer p,.ts-destination-footer small { position:relative; z-index:1; margin:0; }
-.ts-destination-footer p { color:#6a4e2a; font-family:var(--font-display); font-size:22px; font-weight:700; }
-.ts-destination-footer small { margin-top:6px; color:#9b8261; font-size:12px; font-weight:600; }
-@media (min-width:760px) {
-  .ts-destination-header { max-width:1240px; margin:auto; padding:24px 40px 8px; }
-  .ts-destination-content { max-width:1120px; padding:52px 40px 0; }
-  .ts-destination-overline { font-size:15px; }
-  .ts-destination-content h1 { font-size:clamp(46px,4.8vw,66px); }
-  .ts-destination-lead { max-width:none; font-size:17px; }
-  .ts-destination-cards { gap:28px; margin-top:46px; }
-  .ts-destination-card { border-radius:26px; }
-  .ts-destination-card > img { aspect-ratio:1.55 / 1; }
-  .ts-destination-card-copy { min-height:106px; padding:16px 18px; }
-  .ts-destination-card-copy strong { font-size:28px; }
-  .ts-destination-card-copy small { font-size:13px; }
-  .ts-destination-prompt { margin:32px 0 25px; font-size:15px; }
-  .ts-destination-trust { max-width:740px; margin:auto; gap:28px; }
-  .ts-destination-trust span { font-size:12px; }
-  .ts-destination-reviews { max-width:740px; margin-inline:auto; }
-  .ts-destination-review-carousel { min-height:144px; }
-  .ts-destination-review { min-height:144px; padding:16px; }
-  .ts-destination-review blockquote { font-size:13px; }
-  .ts-destination-footer { min-height:215px; margin-inline:-40px; }
+.ts-destination-brand {
+  display:grid;
+  place-items:center;
+  min-width:44px;
+  min-height:44px;
+  padding:0;
+  color:var(--k-text);
+  border:0;
+  background:transparent;
+}
+.ts-destination-actions {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.ts-mobile-auth {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:44px;
+  padding:0 14px;
+  color:var(--k-text);
+  border:1px solid transparent;
+  border-radius:999px;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:15px;
+  font-weight:600;
+  white-space:nowrap;
+  transition:background-color .15s ease-out;
+}
+.ts-mobile-auth:hover,
+.ts-mobile-auth:active { background:var(--k-fill); }
+
+.ts-destination-content {
+  max-width:520px;
+  margin:0 auto;
+  padding:18px 16px 0;
+}
+.ts-destination-overline {
+  margin:0 0 8px;
+  color:var(--k-gold-deep);
+  font-size:14px;
+  font-weight:600;
+}
+.ts-destination-content h1 {
+  margin:0;
+  color:var(--k-text);
+  font-family:var(--font-display);
+  font-size:clamp(30px,8.4vw,36px);
+  font-weight:700;
+  line-height:1.25;
+}
+.ts-destination-lead {
+  max-width:34ch;
+  margin:8px 0 0;
+  color:var(--k-text-2);
+  font-size:16px;
+  line-height:1.65;
+}
+.ts-destination-prompt {
+  margin:26px 0 12px;
+  color:var(--k-text);
+  font-size:17px;
+  font-weight:600;
+}
+.ts-destination-cards {
+  display:grid;
+  gap:12px;
+}
+.ts-destination-card {
+  position:relative;
+  display:block;
+  overflow:hidden;
+  width:100%;
+  aspect-ratio:16 / 10;
+  padding:0;
+  color:#fff;
+  text-align:start;
+  border:0;
+  border-radius:20px;
+  background:var(--k-ink);
+  box-shadow:var(--k-elev-2);
+  cursor:pointer;
+  font-family:var(--font-app);
+  transition:transform .16s ease-out, box-shadow .16s ease-out;
+}
+.ts-destination-card > img {
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  transition:transform .4s ease-out;
+}
+/* ظلٌّ من الأسفل فقط: يحمل الاسم ولا يطفئ الصورة. */
+.ts-destination-card::after {
+  position:absolute;
+  inset:0;
+  content:"";
+  background:linear-gradient(180deg, rgba(20,17,14,0) 38%, rgba(20,17,14,.82) 100%);
+  pointer-events:none;
+}
+.ts-destination-card-copy {
+  position:absolute;
+  z-index:1;
+  inset-inline:16px;
+  bottom:14px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+}
+.ts-destination-card-text {
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+}
+.ts-destination-card-copy strong {
+  font-family:var(--font-display);
+  font-size:24px;
+  font-weight:700;
+  line-height:1.3;
+}
+.ts-destination-card-copy small {
+  color:rgba(255,255,255,.9);
+  font-size:14px;
+  line-height:1.5;
+}
+.ts-destination-card-go {
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:44px;
+  height:44px;
+  color:var(--k-text);
+  border-radius:50%;
+  background:#fff;
+  transition:background-color .16s ease-out;
+}
+.ts-destination-card:hover { box-shadow:var(--k-elev-3); }
+.ts-destination-card:hover > img { transform:scale(1.03); }
+.ts-destination-card:hover .ts-destination-card-go { background:var(--k-gold); }
+.ts-destination-card:active { transform:scale(.985); }
+.ts-destination-card:active .ts-destination-card-go { background:var(--k-gold); }
+
+.ts-destination-trust {
+  display:grid;
+  gap:0;
+  margin:22px 0 0;
+  padding:4px 16px;
+  list-style:none;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-destination-trust li {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-height:56px;
+  color:var(--k-text);
+  font-size:15px;
+  line-height:1.5;
+}
+.ts-destination-trust li + li { border-top:1px solid var(--k-border); }
+.ts-destination-trust svg {
+  flex:0 0 auto;
+  color:var(--k-gold-deep);
 }
 
-/* ═══ تجربة Focus: الوجهة ثم الأيام القادمة والرحلات الحقيقية ═══ */
-.ts-focus-trips { min-height:100dvh; background:#fffaf4; color:#44311e; }
-.ts-focus-hero { position:relative; height:320px; overflow:hidden; color:#fff; background:#253d3c; }
-.ts-focus-hero > img { width:100%; height:100%; object-fit:cover; object-position:center 50%; display:block; }
-.ts-focus-hero-shade { position:absolute; inset:0; background:linear-gradient(180deg,rgba(13,29,30,.34),rgba(18,31,31,.18) 35%,rgba(18,28,28,.82)); }
-.ts-focus-back { position:absolute; z-index:3; top:20px; inset-inline-start:18px; display:grid; place-items:center; width:46px; height:46px; border:0; border-radius:50%; background:rgba(255,255,255,.18); color:#fff; cursor:pointer; touch-action:manipulation; backdrop-filter:blur(8px); }
-.ts-focus-brand { position:absolute; top:20px; inset-inline:0; display:flex; justify-content:center; filter:drop-shadow(0 2px 8px rgba(0,0,0,.3)); }
-.ts-focus-title { position:absolute; inset-inline:22px; bottom:28px; text-align:center; text-shadow:0 2px 16px rgba(0,0,0,.5); }
-.ts-focus-title h1 { margin:0; font-family:var(--font-display); font-size:42px; font-weight:700; line-height:1.1; }
-.ts-focus-title p { margin:8px 0 0; font-size:16px; font-weight:600; color:#f4ead9; }
-.ts-focus-body { position:relative; z-index:1; max-width:600px; margin:-18px auto 0; padding:20px 16px calc(34px + env(safe-area-inset-bottom)); border-radius:22px 22px 0 0; background:#fffaf4; }
+.ts-destination-reviews { margin-top:34px; }
+.ts-destination-reviews h2 {
+  margin:0 0 12px;
+  color:var(--k-text);
+  font-family:var(--font-display);
+  font-size:22px;
+  font-weight:700;
+  line-height:1.3;
+}
+/* صفٌّ يُسحب باليد ويقف عند كل بطاقة. لا حركة تلقائية: نصٌّ يهرب من
+   القارئ لا يُقرأ. يمتدّ إلى حافتي الشاشة ليُفهم أن له بقية. */
+.ts-destination-review-row {
+  display:flex;
+  gap:12px;
+  margin:0 -16px;
+  padding:2px 16px 14px;
+  overflow-x:auto;
+  list-style:none;
+  scroll-snap-type:x mandatory;
+  scroll-padding-inline:16px;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.ts-destination-review-row::-webkit-scrollbar { display:none; }
+.ts-destination-review {
+  display:flex;
+  flex:0 0 min(78%,300px);
+  flex-direction:column;
+  gap:10px;
+  margin:0;
+  padding:16px;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+  scroll-snap-align:start;
+}
+.ts-destination-review-stars {
+  display:flex;
+  gap:2px;
+  color:var(--k-gold);
+}
+.ts-destination-review blockquote {
+  flex:1;
+  margin:0;
+  color:var(--k-text);
+  font-size:16px;
+  line-height:1.7;
+}
+.ts-destination-review figcaption {
+  color:var(--k-muted);
+  font-size:14px;
+}
+
+.ts-destination-footer {
+  position:relative;
+  display:flex;
+  overflow:hidden;
+  flex-direction:column;
+  align-items:center;
+  margin:14px -16px 0;
+  padding:0 16px calc(28px + env(safe-area-inset-bottom));
+  text-align:center;
+}
+.ts-destination-footer img {
+  display:block;
+  width:100%;
+  max-width:560px;
+  height:auto;
+  opacity:.5;
+}
+.ts-destination-footer p {
+  margin:-6px 0 0;
+  color:var(--k-text);
+  font-family:var(--font-display);
+  font-size:20px;
+  font-weight:700;
+}
+.ts-destination-footer small {
+  margin-top:4px;
+  color:var(--k-muted);
+  font-size:13px;
+}
+@media (min-width:760px) {
+  .ts-destination-header {
+    max-width:1120px;
+    margin:auto;
+    padding:20px 40px 8px;
+  }
+  .ts-destination-content {
+    max-width:1120px;
+    padding:36px 40px 0;
+    text-align:center;
+  }
+  .ts-destination-overline { font-size:15px; }
+  .ts-destination-content h1 { font-size:clamp(44px,4.4vw,56px); }
+  .ts-destination-lead {
+    max-width:none;
+    font-size:18px;
+  }
+  .ts-destination-prompt {
+    margin:36px 0 16px;
+    font-size:18px;
+  }
+  .ts-destination-cards {
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+    text-align:start;
+  }
+  .ts-destination-card { border-radius:24px; }
+  .ts-destination-card-copy {
+    inset-inline:24px;
+    bottom:22px;
+  }
+  .ts-destination-card-copy strong { font-size:30px; }
+  .ts-destination-card-copy small { font-size:16px; }
+  .ts-destination-trust {
+    grid-template-columns:repeat(3,1fr);
+    max-width:860px;
+    margin:28px auto 0;
+    padding:6px 8px;
+  }
+  .ts-destination-trust li { justify-content:center; }
+  .ts-destination-trust li + li {
+    border-top:0;
+    border-inline-start:1px solid var(--k-border);
+  }
+  .ts-destination-reviews { margin-top:48px; }
+  .ts-destination-reviews h2 { font-size:26px; }
+  .ts-destination-review-row {
+    margin:0;
+    padding-inline:0;
+    scroll-padding-inline:0;
+    text-align:start;
+  }
+  .ts-destination-review { flex-basis:300px; }
+  .ts-destination-footer { margin-inline:-40px; }
+}
+
+/* ═══ قائمة الرحلات: الوجهة ثم أسبوع المواعيد ثم بطاقات الرحلات ═══ */
+.ts-focus-trips {
+  min-height:100dvh;
+  background:#FBF9F5;
+  color:var(--k-text);
+}
+.ts-focus-hero {
+  position:relative;
+  height:228px;
+  overflow:hidden;
+  color:#fff;
+  background:var(--k-ink);
+}
+.ts-focus-hero > img {
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center 50%;
+}
+.ts-focus-hero-shade {
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg, rgba(20,17,14,.34) 0%, rgba(20,17,14,.12) 40%, rgba(20,17,14,.72) 100%);
+}
+/* زرّا الرجوع فوق الصور: قرصٌ أبيض مصمت بسهمٍ أسود. الزجاج الشفاف كان
+   يذوب في صورةٍ مزدحمة فلا يُرى السهم. */
+.ts-focus-back,
+.ts-focus-detail-back {
+  position:absolute;
+  z-index:3;
+  top:calc(12px + env(safe-area-inset-top));
+  inset-inline-start:16px;
+  display:grid;
+  place-items:center;
+  width:44px;
+  height:44px;
+  padding:0;
+  color:var(--k-text);
+  border:0;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 2px 10px rgba(20,17,14,.28);
+  cursor:pointer;
+}
+.ts-focus-back:active,
+.ts-focus-detail-back:active { transform:scale(.94); }
+.ts-focus-brand {
+  position:absolute;
+  top:calc(12px + env(safe-area-inset-top));
+  inset-inline:0;
+  display:flex;
+  justify-content:center;
+  color:#fff;
+  filter:drop-shadow(0 2px 8px rgba(0,0,0,.4));
+  pointer-events:none;
+}
+.ts-focus-title {
+  position:absolute;
+  inset-inline:20px;
+  bottom:34px;
+  text-align:center;
+  text-shadow:0 2px 14px rgba(0,0,0,.5);
+}
+.ts-focus-title h1 {
+  margin:0;
+  font-family:var(--font-display);
+  font-size:32px;
+  font-weight:700;
+  line-height:1.2;
+}
+.ts-focus-title p {
+  margin:4px 0 0;
+  color:rgba(255,255,255,.92);
+  font-size:15px;
+}
+.ts-focus-body {
+  position:relative;
+  z-index:1;
+  max-width:600px;
+  margin:-18px auto 0;
+  padding:16px 16px calc(96px + env(safe-area-inset-bottom));
+  border-radius:22px 22px 0 0;
+  background:#FBF9F5;
+}
+
+.ts-focus-customize {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  min-height:72px;
+  margin:0 0 24px;
+  padding:12px 14px;
+  color:var(--k-text);
+  text-align:start;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+  cursor:pointer;
+  font-family:var(--font-app);
+  transition:border-color .15s ease-out, background-color .15s ease-out;
+}
+.ts-focus-customize:hover { border-color:var(--k-border-strong); }
+.ts-focus-customize:active { background:var(--k-fill); }
+.ts-focus-customize-icon {
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:44px;
+  height:44px;
+  color:var(--k-gold-deep);
+  border-radius:14px;
+  background:var(--k-gold-tint);
+}
+.ts-focus-customize > span:nth-child(2) {
+  display:flex;
+  flex:1;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+}
+.ts-focus-customize strong {
+  font-size:17px;
+  font-weight:600;
+  line-height:1.4;
+}
+.ts-focus-customize small {
+  color:var(--k-text-2);
+  font-size:13px;
+  line-height:1.5;
+}
+.ts-focus-customize > svg {
+  flex:0 0 auto;
+  color:var(--k-muted);
+}
+
+.ts-focus-timeline-head {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin:0 0 12px;
+}
+.ts-focus-timeline-head h2 {
+  margin:0;
+  font-family:var(--font-display);
+  font-size:22px;
+  font-weight:700;
+  line-height:1.35;
+}
+.ts-focus-timeline-head small {
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.5;
+}
+
+/* أسبوعٌ واحد: الأيام بدائل مستقلة للموعد. المختار حبرٌ مصمت، واليوم
+   يُسمّى باسمه، واليوم الفارغ باهتٌ لا يُضغط. */
+.ts-week-picker {
+  margin:0 0 20px;
+  padding:12px;
+  overflow:hidden;
+  border:1px solid var(--k-border);
+  border-radius:20px;
+  background:#fff;
+}
+.ts-week-picker > header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+.ts-week-month {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+  font-size:16px;
+  font-weight:600;
+}
+.ts-week-month svg {
+  flex:0 0 auto;
+  color:var(--k-gold-deep);
+}
+.ts-focus-calendar-switch {
+  display:flex;
+  flex:0 0 auto;
+  padding:3px;
+  border-radius:999px;
+  background:var(--k-fill);
+}
+.ts-focus-calendar-switch button {
+  min-width:64px;
+  min-height:40px;
+  padding:0 14px;
+  color:var(--k-text-2);
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:14px;
+}
+.ts-focus-calendar-switch button.active {
+  color:var(--k-text);
+  background:#fff;
+  box-shadow:var(--k-elev-1);
+  font-weight:600;
+}
+.ts-week-days {
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:4px;
+}
+.ts-week-day {
+  display:flex;
+  min-width:0;
+  min-height:88px;
+  flex-direction:column;
+  align-items:center;
+  justify-content:space-between;
+  padding:9px 0 8px;
+  color:var(--k-placeholder);
+  border:1px solid transparent;
+  border-radius:14px;
+  background:transparent;
+  font-family:var(--font-app);
+}
+.ts-week-day b {
+  font-size:12px;
+  font-weight:400;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.ts-week-day time {
+  font-size:20px;
+  font-weight:600;
+  line-height:1.2;
+}
+/* عدد الرحلات رقمٌ في قرص: «3 رحلات» لا تسعها خانةٌ عرضها 44 بكسل. */
+.ts-week-day i {
+  display:grid;
+  place-items:center;
+  min-width:22px;
+  height:22px;
+  padding:0 6px;
+  border-radius:999px;
+  font-size:13px;
+  font-style:normal;
+  font-weight:600;
+  line-height:1;
+}
+.ts-week-day.available {
+  color:var(--k-text);
+  border-color:var(--k-border);
+  background:#fff;
+  cursor:pointer;
+  transition:background-color .15s ease-out, border-color .15s ease-out;
+}
+.ts-week-day.available b { color:var(--k-text-2); }
+.ts-week-day.available i {
+  color:var(--k-gold-deep);
+  background:var(--k-gold-tint);
+}
+.ts-week-day.available:hover { border-color:var(--k-border-strong); }
+.ts-week-day.today b {
+  color:var(--k-gold-deep);
+  font-weight:600;
+}
+.ts-week-day.selected {
+  color:#fff;
+  border-color:var(--k-ink);
+  background:var(--k-ink);
+}
+.ts-week-day.selected b { color:rgba(255,255,255,.82); }
+.ts-week-day.selected.today b { color:var(--k-gold-2); }
+.ts-week-day.selected i {
+  color:var(--k-text);
+  background:var(--k-gold);
+}
+.ts-week-nav {
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:4px;
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px solid var(--k-border);
+}
+.ts-week-nav button {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:44px;
+  padding:0 8px;
+  color:var(--k-text);
+  border:0;
+  border-radius:12px;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:14px;
+  font-weight:600;
+  white-space:nowrap;
+}
+.ts-week-nav button:first-child { justify-self:start; }
+.ts-week-nav button:last-child { justify-self:end; }
+.ts-week-nav button.current {
+  padding:0 14px;
+  color:var(--k-text-2);
+  font-weight:400;
+}
+.ts-week-nav button:hover:not(:disabled) { background:var(--k-fill); }
+.ts-week-nav button:disabled {
+  color:var(--k-placeholder);
+  cursor:default;
+}
+
+.ts-focus-timeline-packages > header {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+.ts-focus-timeline-packages h2 {
+  margin:0;
+  font-size:18px;
+  font-weight:600;
+  line-height:1.4;
+}
+.ts-focus-timeline-packages > header span {
+  flex:0 0 auto;
+  color:var(--k-text-2);
+  font-size:14px;
+}
+.ts-focus-package-list {
+  display:grid;
+  gap:16px;
+}
+
+/* بطاقة الرحلة هي المنتج: صورةٌ كاملة التشبّع في الأعلى، ثم الاسم
+   والموعدان كنقطتين على خط، ثم السعر بحجمٍ يُقرأ من بعيد. البطاقة كلها
+   زرٌّ واحد، و«عرض التفاصيل» دلالةٌ بصرية لا زرٌّ ثانٍ داخلها. */
+.ts-focus-trip-card {
+  position:relative;
+  display:flex;
+  overflow:hidden;
+  width:100%;
+  flex-direction:column;
+  padding:0;
+  color:var(--k-text);
+  text-align:start;
+  border:1px solid var(--k-border);
+  border-radius:20px;
+  background:#fff;
+  box-shadow:var(--k-elev-2);
+  cursor:pointer;
+  font-family:var(--font-app);
+  transition:transform .16s ease-out, box-shadow .16s ease-out;
+}
+.ts-focus-trip-card:hover { box-shadow:var(--k-elev-3); }
+.ts-focus-trip-card:active { transform:scale(.99); }
+.ts-focus-trip-photo {
+  position:relative;
+  display:block;
+  flex:0 0 auto;
+  overflow:hidden;
+  width:100%;
+  aspect-ratio:3 / 2;
+  background:var(--k-fill);
+}
+.ts-focus-trip-photo > img {
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.ts-focus-trip-countdown {
+  position:absolute;
+  top:12px;
+  inset-inline-start:12px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:30px;
+  padding:0 12px;
+  color:var(--k-text);
+  border-radius:999px;
+  background:#fff;
+  box-shadow:0 2px 8px rgba(20,17,14,.2);
+  font-size:13px;
+  font-weight:600;
+}
+.ts-focus-trip-countdown svg {
+  flex:0 0 auto;
+  color:var(--k-gold-deep);
+}
+.ts-focus-trip-info {
+  display:flex;
+  min-width:0;
+  flex:1;
+  flex-direction:column;
+  gap:12px;
+  padding:16px;
+}
+.ts-focus-trip-info > strong {
+  font-family:var(--font-display);
+  font-size:18px;
+  font-weight:700;
+  line-height:1.4;
+}
+.ts-focus-trip-schedule {
+  position:relative;
+  display:grid;
+  gap:10px;
+}
+/* الخط الواصل بين نقطتي الذهاب والعودة. */
+.ts-focus-trip-schedule::before {
+  position:absolute;
+  top:14px;
+  bottom:14px;
+  inset-inline-start:4px;
+  width:1px;
+  content:"";
+  background:var(--k-border-strong);
+}
+.ts-focus-trip-schedule > span {
+  position:relative;
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  padding-inline-start:20px;
+  font-size:15px;
+  line-height:1.5;
+}
+.ts-focus-trip-schedule > span::before {
+  position:absolute;
+  top:7px;
+  inset-inline-start:0;
+  box-sizing:border-box;
+  width:9px;
+  height:9px;
+  content:"";
+  border:2px solid var(--k-text);
+  border-radius:50%;
+  background:var(--k-text);
+}
+.ts-focus-trip-schedule > span:last-child::before { background:#fff; }
+.ts-focus-trip-schedule b {
+  flex:0 0 auto;
+  min-width:44px;
+  color:var(--k-muted);
+  font-size:13px;
+  font-weight:400;
+}
+.ts-focus-trip-schedule time { min-width:0; }
+.ts-focus-trip-meta {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px 12px;
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.5;
+}
+.ts-focus-trip-branch {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+.ts-focus-trip-branch svg {
+  flex:0 0 auto;
+  color:var(--k-muted);
+}
+/* اسم نقطة الانطلاق قد يطول؛ يُقصّ بثلاث نقاط ولا يدفع ما بعده. */
+.ts-focus-trip-depart {
+  overflow:hidden;
+  min-width:0;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.ts-focus-trip-seats {
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:0 10px;
+  color:#8A6A08;
+  border-radius:999px;
+  background:#FBF3D6;
+  font-size:13px;
+  font-weight:600;
+  white-space:nowrap;
+}
+.ts-focus-trip-foot {
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  padding-top:12px;
+  border-top:1px solid var(--k-border);
+}
+.ts-focus-trip-price {
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+.ts-focus-trip-price small {
+  color:var(--k-muted);
+  font-size:13px;
+  line-height:1.4;
+}
+.ts-focus-trip-price span {
+  font-size:14px;
+  line-height:1.2;
+}
+.ts-focus-trip-price b {
+  margin-inline-end:4px;
+  font-size:26px;
+  font-weight:700;
+  line-height:1.2;
+}
+.ts-focus-trip-go {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size:15px;
+  font-weight:600;
+  white-space:nowrap;
+}
+.ts-focus-trip-go i {
+  display:grid;
+  place-items:center;
+  width:36px;
+  height:36px;
+  color:var(--k-text);
+  border-radius:50%;
+  background:var(--k-gold);
+}
 
 /* هيكل النتائج: يظهر في موضع المواعيد والبطاقات وحده أثناء جلب الكتالوج.
    لا يحجب صفحة اختيار الوجهة ولا يوحي للمستفيد بأن التطبيق أعاد فتحه. */
-.ts-focus-loading { display:grid; gap:16px; padding:5px 4px 12px; }
-.ts-focus-loading-heading { display:grid; gap:8px; width:min(62%,260px); }
-.ts-focus-loading-heading .sk-bar:first-child { height:22px; }
-.ts-focus-loading-heading .sk-bar:last-child { width:72%; height:12px; }
-.ts-focus-loading-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; padding:12px 8px; border:1px solid #e8ddcd; border-radius:16px; background:#fffdf9; }
-.ts-focus-loading-days .sk-bar { height:54px; }
-.ts-focus-loading-card { display:grid; grid-template-columns:42% 58%; min-height:143px; overflow:hidden; border:1px solid #e7ded2; border-radius:18px; background:#fff; }
-.ts-focus-loading-card>span { border-radius:0; }
-.ts-focus-loading-card>div { display:grid; align-content:center; gap:10px; padding:16px 20px; }
-.ts-focus-loading-card>div .sk-bar { height:12px; }
-.ts-focus-loading-card>div .sk-bar:first-child { width:78%; height:18px; }
-.ts-focus-loading-card>div .sk-bar:last-child { width:44%; }
-
-/* الأيام الفارغة تفصل الزمن فقط: رمادية وهادئة. اليوم الحالي وحده ذهبي،
-   ولا يأخذ يومٌ آخر اللون الذهبي لمجرد اختياره. */
-
-.ts-focus-trip-card { position:relative; display:grid; grid-template-columns:42% 58%; overflow:hidden; width:100%; min-height:158px; padding:0; direction:rtl; text-align:start; color:inherit; border:1px solid #e7ded2; border-radius:18px; background:#fff; cursor:pointer; box-shadow:0 8px 18px rgba(58,38,15,.1); transition:transform .18s ease,box-shadow .18s ease; }
-.ts-focus-trip-card:hover,.ts-focus-trip-card:focus-visible { transform:translateY(-2px); box-shadow:0 18px 30px rgba(58,38,15,.2); outline:none; }
-.ts-focus-trip-card:focus-visible { box-shadow:0 0 0 3px #fffaf4,0 0 0 6px #a8782c; }
-.ts-focus-trip-card > img { order:0; width:100%; height:100%; min-height:158px; object-fit:cover; display:block; filter:saturate(.88); }
-.ts-focus-trip-countdown { position:absolute; z-index:2; top:9px; inset-inline-start:9px; display:inline-flex; align-items:center; gap:4px; max-width:calc(42% - 18px); min-height:24px; padding:4px 7px; color:#5d401a; border:1px solid rgba(255,244,220,.78); border-radius:8px; background:rgba(255,249,237,.92); box-shadow:0 2px 8px rgba(45,29,10,.18); font-size:10px; font-weight:900; line-height:1; white-space:nowrap; backdrop-filter:blur(5px); }
-.ts-focus-trip-countdown svg { flex:0 0 auto; color:#a8782c; }
-.ts-focus-trip-countdown-compact { display:none; }
-.ts-focus-trip-info { position:relative; z-index:1; display:flex; min-width:0; flex-direction:column; justify-content:center; gap:4px; padding:14px 48px 14px 12px; background:#fff; }
-.ts-focus-trip-info strong { color:#392816; font-family:var(--font-display); font-size:18px; line-height:1.25; }
-.ts-focus-trip-info small,.ts-focus-trip-info em { display:flex; align-items:center; gap:6px; color:#756450; font-size:12px; font-style:normal; font-weight:600; line-height:1.35; white-space:nowrap; }
-.ts-focus-trip-info em { margin-top:2px; color:#8c6423; font-weight:800; }
-.ts-focus-trip-info small svg,.ts-focus-trip-info em svg { flex:0 0 auto; color:#82705c; }.ts-focus-trip-info em svg { color:#a8782c; }
-.ts-focus-trip-arrow { position:absolute; inset-inline-end:12px; top:50%; display:grid; place-items:center; width:34px; height:34px; border-radius:50%; color:#765629; background:#f0efed; transform:translateY(-50%); }
-
-.ts-focus-empty { display:flex; flex-direction:column; align-items:center; gap:8px; padding:36px 18px; color:#8a7560; text-align:center; border:1px dashed #d9cbb9; border-radius:18px; background:#fffdf9; }
-.ts-focus-empty svg { color:#c0a373; }
-.ts-focus-empty strong { color:#553d23; font-family:var(--font-display); font-size:17px; font-weight:700; }
-.ts-focus-empty small { max-width:34ch; font-size:12px; font-weight:600; line-height:1.6; }
-.ts-focus-empty-action { min-height:40px; margin-top:6px; padding:0 18px; color:#fff; border:0; border-radius:12px; background:#a8782c; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; }
-.ts-focus-empty-action:hover,.ts-focus-empty-action:focus-visible { background:#8c6423; outline:none; }
-
-/* مدينة الانطلاق — سطرٌ واحد فوق الخط الزمني. مرتفعٌ بصرياً عمّا تحته
-   لأنه يحكم ما يُعرض فيه: من يقرأ «الدمام» يفهم فوراً لماذا اختفت
-   مواعيد الخبر، وتغييره بضغطةٍ في مكانه لا في صفحةٍ أخرى. */
-.ts-focus-depart { display:flex; align-items:center; gap:11px; width:100%; min-height:64px; margin:0 0 14px; padding:10px 13px; color:#513a22; text-align:start; border:1px solid #e5d7c3; border-radius:16px; background:linear-gradient(135deg,#fffdf9,#faf1e2); cursor:pointer; box-shadow:0 6px 16px rgba(72,48,20,.07); font-family:var(--font-app); transition:transform .18s ease,box-shadow .18s ease; }
-.ts-focus-depart:hover,.ts-focus-depart:focus-visible { transform:translateY(-1px); box-shadow:0 12px 22px rgba(72,48,20,.13); outline:none; }
-.ts-focus-depart:focus-visible { box-shadow:0 0 0 3px #fffaf4,0 0 0 6px #a8782c; }
-/* لم تُختر بعد: حدٌّ متقطّع ونصٌّ ذهبي — دعوةٌ لا خبر. */
-.ts-focus-depart.is-empty { border-style:dashed; border-color:#d8c19a; }
-.ts-focus-depart-icon { display:grid; flex:0 0 auto; place-items:center; width:40px; height:40px; border-radius:13px; color:#a8782c; background:#fff; border:1px solid #eedfca; }
-.ts-focus-depart-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:2px; }
-.ts-focus-depart-copy small { color:#8a7256; font-size:11px; font-weight:700; }
-.ts-focus-depart-copy strong { overflow:hidden; color:#553d23; font-family:var(--font-display); font-size:17px; white-space:nowrap; text-overflow:ellipsis; }
-.ts-focus-depart.is-empty .ts-focus-depart-copy strong { color:#9a6d22; }
-.ts-focus-depart-action { display:flex; flex:0 0 auto; align-items:center; gap:2px; color:#9a6d22; font-size:12px; font-weight:800; }
-/* اسم نقطة الانطلاق قد يطول («مجمع الملك عبدالله — طريق الملك فهد»)؛
-   يُقصّ بثلاث نقاط ولا يدفع السعر خارج البطاقة. */
-.ts-focus-trip-depart { overflow:hidden; min-width:0; text-overflow:ellipsis; }
-
-/* الخط الزمني للمغادرات: المساحة للرحلة لا للأيام الفارغة. */
-.ts-focus-timeline-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:2px 4px 12px; }.ts-focus-timeline-head>div:first-child { display:grid; gap:2px; }.ts-focus-timeline-head span { color:#513a22; font-family:var(--font-display); font-size:20px; font-weight:700; }.ts-focus-timeline-head small { color:#947e63; font-size:11px; font-weight:700; }.ts-focus-calendar-switch { display:flex; flex:0 0 auto; padding:3px; border:1px solid #e8ddcd; border-radius:10px; background:#fffdf9; }.ts-focus-calendar-switch button { min-height:27px; padding:0 8px; color:#a19384; border:0; border-radius:7px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:10px; font-weight:800; }.ts-focus-calendar-switch button.active { color:#fff; background:#a8782c; }.ts-focus-calendar-switch button:focus-visible { outline:2px solid #a8782c; outline-offset:2px; }
-.ts-focus-timeline { position:relative; display:grid; gap:0; padding-bottom:2px; }.ts-focus-timeline::before { content:""; position:absolute; top:42px; bottom:12px; inset-inline-start:14px; width:1px; background:#dfd8cf; }.ts-focus-timeline-group { position:relative; }.ts-focus-month { margin:8px 0 3px 38px; color:#806647; font-family:var(--font-display); font-size:13px; font-weight:700; }.ts-focus-timeline-day { position:relative; min-height:35px; }.ts-focus-timeline-marker { position:relative; z-index:1; display:flex; align-items:center; gap:10px; min-height:35px; }.ts-focus-timeline-marker>span { display:block; flex:0 0 auto; width:9px; height:9px; margin-inline:10px 9px; border-radius:50%; background:#d2cbc3; box-shadow:0 0 0 4px #fffaf4; }.ts-focus-timeline-marker>div { display:flex; align-items:baseline; gap:5px; color:#a19487; }.ts-focus-timeline-marker em { padding:2px 6px; color:#8d6a32; border-radius:7px; background:#f3e8d4; font-size:10px; font-style:normal; font-weight:800; }.ts-focus-timeline-marker b { font-size:12px; font-weight:700; }.ts-focus-timeline-marker time { font-family:var(--font-display); font-size:15px; font-weight:700; }
-.ts-focus-timeline-day.has-trip { padding-bottom:15px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker { min-height:43px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>span { width:15px; height:15px; margin-inline:7px 6px; background:#a8782c; box-shadow:0 0 0 4px #fffaf4,0 0 0 5px #d8b981; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>div { color:#6e522a; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker b { font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker time { color:#8c6423; font-size:20px; }
-.ts-focus-timeline-trips { display:grid; gap:9px; margin-block:2px 0; margin-inline-start:40px; }.ts-focus-timeline-trips .ts-focus-trip-card { min-height:143px; }.ts-focus-timeline-trips .ts-focus-trip-card>img { min-height:143px; }
-.ts-focus-load-more { display:flex; align-items:center; justify-content:center; gap:6px; width:calc(100% - 40px); min-height:48px; margin-inline-start:40px; color:#8c6423; border:1px dashed #d8c19a; border-radius:13px; background:#fffdf8; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; transition:background .16s ease,transform .16s ease; }.ts-focus-load-more:hover,.ts-focus-load-more:focus-visible { background:#fbf3e5; transform:translateY(-1px); outline:none; }.ts-focus-load-more:disabled { cursor:wait; opacity:.7; transform:none; }
-
-/* صفحة الرحلات: هرم واضح — تخصيص ثم موعد ثم باقة. الهيدر أخف عمداً
-   حتى لا يسبق قرار الحجز، والخط الزمني لا يعرض يوماً بلا رحلة. */
-.ts-focus-hero { height:228px; }.ts-focus-hero-shade { background:linear-gradient(180deg,rgba(17,30,27,.14),rgba(17,27,23,.44)); }.ts-focus-title { bottom:20px; text-shadow:0 2px 10px rgba(0,0,0,.36); }.ts-focus-title h1 { font-size:34px; }.ts-focus-title p { margin-top:4px; font-size:14px; }.ts-focus-body { margin-top:-12px; padding-top:16px; }
-.ts-focus-customize { display:flex; align-items:center; gap:11px; width:100%; min-height:72px; margin:0 0 20px; padding:11px 13px; color:#50391f; text-align:start; border:1px solid #e5d7c3; border-radius:17px; background:#fffdfa; box-shadow:0 7px 18px rgba(72,48,20,.06); cursor:pointer; font-family:var(--font-app); transition:transform .18s ease,box-shadow .18s ease; }.ts-focus-customize:hover,.ts-focus-customize:focus-visible { transform:translateY(-1px); box-shadow:0 12px 22px rgba(72,48,20,.12); outline:none; }.ts-focus-customize>span:nth-child(2) { display:grid; flex:1; min-width:0; gap:3px; }.ts-focus-customize strong { color:#50391f; font-family:var(--font-display); font-size:18px; }.ts-focus-customize small { color:#8a7256; font-size:11px; font-weight:700; line-height:1.45; }.ts-focus-customize>svg { flex:0 0 auto; color:#9b702f; }.ts-focus-customize-icon { display:grid; flex:0 0 auto; place-items:center; width:43px; height:43px; border-radius:13px; color:#a8782c; background:#f9edda; }
-.ts-focus-timeline-head { margin:0 4px 10px; }.ts-focus-timeline-head small { font-weight:600; }.ts-focus-timeline { padding-bottom:0; }.ts-focus-timeline::before { top:39px; bottom:20px; }.ts-focus-month { margin:10px 0 5px 40px; }.ts-focus-timeline-day { display:block; width:100%; min-height:0; padding:0 0 9px; color:inherit; text-align:start; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); }.ts-focus-timeline-marker { min-height:44px; }.ts-focus-timeline-marker>i { display:block; flex:0 0 auto; width:11px; height:11px; margin-inline:9px 8px; border-radius:50%; background:#d2cbc3; box-shadow:0 0 0 4px #fffaf4; }.ts-focus-timeline-marker>.ts-focus-timeline-copy { display:flex; align-items:center; flex:1; width:auto; height:auto; margin:0; padding:0; color:#796957; border-radius:0; background:transparent; box-shadow:none; }.ts-focus-timeline-copy b { font-size:15px; }.ts-focus-timeline-copy time { margin-inline-start:5px; color:#725532; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-copy small { margin-inline-start:auto; padding:4px 8px; color:#926a29; border-radius:8px; background:#f8eddb; font-size:10px; font-weight:800; white-space:nowrap; }.ts-focus-timeline-day.active .ts-focus-timeline-marker>i { width:15px; height:15px; margin-inline:7px 6px; background:#a8782c; box-shadow:0 0 0 4px #fffaf4,0 0 0 5px #d8b981; }.ts-focus-timeline-day.active .ts-focus-timeline-copy b { color:#5e4322; font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.active .ts-focus-timeline-copy time { color:#8c6423; font-size:20px; }.ts-focus-timeline-day:focus-visible { outline:2px solid #a8782c; outline-offset:3px; border-radius:10px; }
-.ts-focus-timeline-day.is-empty { cursor:default; opacity:.56; }.ts-focus-more-dates { display:flex; align-items:center; justify-content:center; width:100%; min-height:42px; margin-top:13px; color:#8c6423; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:12px; font-weight:800; text-decoration:underline; }.ts-focus-more-dates:disabled { cursor:wait; opacity:.6; }
-.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy { width:auto; height:auto; margin:0; padding:0; color:#796957; border-radius:0; background:transparent; box-shadow:none; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy b { font-family:var(--font-app); font-size:15px; }.ts-focus-timeline-day.has-trip .ts-focus-timeline-marker>.ts-focus-timeline-copy time { color:#725532; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-day.has-trip.active .ts-focus-timeline-marker>.ts-focus-timeline-copy b { color:#5e4322; font-family:var(--font-display); font-size:17px; }.ts-focus-timeline-day.has-trip.active .ts-focus-timeline-marker>.ts-focus-timeline-copy time { color:#8c6423; font-size:20px; }
-.ts-focus-timeline-day.active { margin-bottom:3px; border-radius:12px; background:#fbf2e3; }.ts-focus-timeline-day.active .ts-focus-timeline-copy { padding-inline-end:10px; }.ts-focus-timeline-packages { margin:4px 0 16px; padding:14px 0 0 40px; border-top:1px solid #eadfce; }.ts-focus-timeline-packages>header { display:flex; align-items:center; justify-content:space-between; gap:9px; margin:0 0 10px; }.ts-focus-timeline-packages h2 { margin:0; color:#513a22; font-family:var(--font-display); font-size:18px; }.ts-focus-timeline-packages>header>span { display:flex; align-items:center; gap:4px; flex:0 0 auto; padding:5px 7px; color:#80633c; border:1px solid #eadfce; border-radius:8px; background:#fffdf9; font-size:10px; font-weight:700; white-space:nowrap; }.ts-focus-timeline-packages>header svg { color:#a8782c; }.ts-focus-package-list { display:grid; gap:9px; }.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:36% 64%; height:142px; min-height:0; border-radius:16px; }.ts-focus-package-list .ts-focus-trip-card>img { height:100%; min-height:0; min-width:0; object-fit:cover; }.ts-focus-package-list .ts-focus-trip-info { min-height:0; gap:3px; padding:11px 42px 11px 10px; }.ts-focus-package-list .ts-focus-trip-info strong { font-size:16px; }.ts-focus-package-list .ts-focus-trip-info small,.ts-focus-package-list .ts-focus-trip-info em { font-size:11px; }.ts-focus-package-list .ts-focus-trip-arrow { inset-inline-end:9px; width:29px; height:29px; }.ts-focus-all-trips { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:48px; margin-top:16px; color:#8c6423; border:1px solid #d8c19a; border-radius:13px; background:#fffdf8; cursor:pointer; font-family:var(--font-app); font-size:13px; font-weight:800; }.ts-focus-all-trips:hover,.ts-focus-all-trips:focus-visible { background:#fbf3e5; outline:none; }
-@media (min-width:760px) { .ts-focus-hero { height:260px; }.ts-focus-body { max-width:680px; }.ts-focus-customize { min-height:78px; }.ts-focus-package-list .ts-focus-trip-card { height:224px; min-height:0; }.ts-focus-package-list .ts-focus-trip-card>img { height:100%; min-height:0; } }
-@media (max-width:759px) { .ts-focus-package-list { width:92%; margin-inline:auto; }.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:32% 68%; height:124px; }.ts-focus-package-list .ts-focus-trip-info { padding:9px 38px 9px 8px; }.ts-focus-package-list .ts-focus-trip-info strong { font-size:15px; }.ts-focus-package-list .ts-focus-trip-info small,.ts-focus-package-list .ts-focus-trip-info em { font-size:10px; }.ts-focus-package-list .ts-focus-trip-arrow { width:27px; height:27px; } }
-
-/* خط المواعيد: اختيار تاريخ فقط. صفوف ثابتة لا تتمدد بالبطاقات، لذلك
-   يبقى السياق الزمني أمام المستفيد بينما تتغير الباقات في القسم التالي. */
-.ts-focus-timeline { gap:8px; padding-inline:2px; }.ts-focus-timeline::before { top:28px; bottom:28px; }.ts-focus-month { margin:4px 0 2px 38px; }.ts-focus-timeline-day { min-height:64px; padding:0; overflow:hidden; border:1px solid #eee5d9; border-radius:14px; background:#fffdf9; }.ts-focus-timeline-day.has-trip { padding:0; }.ts-focus-timeline-day.is-empty { opacity:1; color:#a79b8c; background:#f3f0eb; border-color:transparent; }.ts-focus-timeline-marker { min-height:64px; }.ts-focus-timeline-marker>i { position:relative; z-index:2; margin-inline:8px 9px; }.ts-focus-timeline-marker>.ts-focus-timeline-copy { display:flex; align-items:center; gap:9px; min-width:0; padding:0 10px 0 0; }.ts-focus-date { display:grid; flex:0 0 76px; gap:2px; }.ts-focus-date b { color:#4f3920; font-size:14px; font-weight:900; }.ts-focus-date time { margin:0; color:#9a896f; font-family:var(--font-app); font-size:10px; font-weight:700; }.ts-focus-availability { display:grid; flex:1; min-width:0; gap:2px; }.ts-focus-availability strong { color:#513a22; font-size:13px; font-weight:900; }.ts-focus-availability small { margin:0; padding:0; color:#9a6b27; border:0; border-radius:0; background:transparent; font-size:11px; font-weight:800; white-space:nowrap; }.ts-focus-timeline-copy>em { flex:0 0 auto; padding:6px 10px; color:#946928; border-radius:9px; background:#fbebcc; font-size:11px; font-style:normal; font-weight:900; white-space:nowrap; }.ts-focus-timeline-copy>svg { flex:0 0 auto; color:#9b702f; }.ts-focus-empty-day { flex:1; color:#a69b8e; font-size:12px; font-weight:700; }.ts-focus-timeline-day.active { margin:0; border-color:#c99032; background:#fff9ee; box-shadow:0 5px 13px rgba(158,111,32,.1); }.ts-focus-timeline-day.active .ts-focus-timeline-marker>i { background:#a8782c; }.ts-focus-timeline-day.active .ts-focus-date b,.ts-focus-timeline-day.active .ts-focus-availability strong { color:#694714; }.ts-focus-timeline-packages { margin:18px 0 14px; padding:16px 0 0; border-top:1px solid #e4d7c6; }.ts-focus-timeline-packages>header { margin-bottom:12px; }.ts-focus-timeline-packages h2 { font-size:19px; }.ts-focus-package-list { gap:10px; }
-@media (max-width:420px) { .ts-focus-date { flex-basis:68px; }.ts-focus-availability strong { font-size:12px; }.ts-focus-timeline-copy>em { padding:5px 8px; font-size:10px; } }
-
-/* أسبوع واحد، لا Timeline: الأيام بدائل مستقلة للموعد ولا توجد صلة
-   بصرية مضللة بينها وبين بطاقات الرحلات. */
-.ts-week-picker { margin:8px 0 12px; padding:12px; overflow:hidden; border:1px solid #e9dfd1; border-radius:17px; background:#fff; }.ts-week-picker>header { display:flex; align-items:center; justify-content:center; margin-bottom:10px; color:#755631; font-family:var(--font-display); font-size:14px; font-weight:800; }.ts-week-picker>header>span { display:inline-flex; align-items:center; gap:6px; }.ts-week-picker>header svg { color:#b47a22; }.ts-week-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; direction:rtl; }.ts-week-day { display:grid; place-items:center; align-content:center; min-width:0; min-height:82px; padding:5px 2px; color:#b2a89b; border:1px solid transparent; border-radius:12px; background:#f5f2ed; font-family:var(--font-app); text-align:center; }.ts-week-day.available { color:#543b1f; background:#fffdfa; cursor:pointer; }.ts-week-day.available:hover,.ts-week-day.available:focus-visible { border-color:#d5b477; background:#fff8e9; outline:none; }.ts-week-day.today { border-color:#ddd4c8; background:#fff; }.ts-week-day.selected { color:#4f3515; border-color:#c88b2b; background:#fff3dc; box-shadow:0 4px 10px rgba(173,119,31,.12); }.ts-week-day b { display:block; overflow:hidden; max-width:100%; font-size:11px; font-weight:800; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }.ts-week-day time { display:block; margin:3px 0 2px; font-family:var(--font-display); font-size:21px; font-weight:900; line-height:1; }.ts-week-day small { display:block; overflow:hidden; max-width:100%; color:inherit; font-size:9px; font-weight:800; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }.ts-week-day.selected small { color:#9b6720; }.ts-week-nav { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:5px; margin-top:9px; }.ts-week-nav button { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-height:36px; padding:0 6px; color:#765426; border:1px solid transparent; border-radius:9px; background:transparent; cursor:pointer; font-family:var(--font-app); font-size:11px; font-weight:900; white-space:nowrap; }.ts-week-nav button:first-child { justify-content:flex-start; }.ts-week-nav button:last-child { justify-content:flex-end; }.ts-week-nav button:hover:not(:disabled),.ts-week-nav button:focus-visible:not(:disabled) { border-color:#eadfce; background:#fff5e4; outline:none; }.ts-week-nav button.current { color:#8e7e6a; border-color:#eadfce; background:#fffdf9; }.ts-week-nav button:disabled { cursor:default; opacity:.4; }.ts-focus-timeline-packages { margin-top:10px; padding-top:12px; }.ts-focus-timeline-packages>header { align-items:flex-start; }.ts-focus-timeline-packages>header>span { border:0; padding:2px 0; color:#9c7540; background:transparent; }
-@media (max-width:420px) { .ts-week-picker { margin-inline:-2px; padding:10px 8px; }.ts-week-days { gap:3px; }.ts-week-day { min-height:74px; border-radius:10px; }.ts-week-day b { font-size:10px; }.ts-week-day time { font-size:19px; }.ts-week-day small { font-size:8px; } }
-
-/* بطاقة الموعد: موعدا الذهاب والعودة من سجل الرحلة، لا نص تسويقي ثابت.
-   الصورة شاهد بصري فقط؛ أما المساحة الأكبر فتذهب لما يحتاجه العميل ليقرر. */
-.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:34% 66%; height:172px; }
-.ts-focus-package-list .ts-focus-trip-info { display:block; min-height:0; padding:12px 14px; }
-.ts-focus-trip-copy { display:flex; height:100%; min-width:0; flex-direction:column; justify-content:center; gap:3px; }
-.ts-focus-trip-copy strong { overflow:hidden; color:#392816; font-size:17px; line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
-.ts-focus-trip-branch { min-width:0; color:#756450; }
-.ts-focus-trip-schedule { display:grid; gap:1px; margin-top:1px; }
-.ts-focus-trip-schedule small { display:flex; min-width:0; gap:4px; color:#705d49; font-size:11px; font-weight:700; line-height:1.35; white-space:nowrap; }
-.ts-focus-trip-schedule b { flex:0 0 auto; color:#513a22; font-weight:900; }
-.ts-focus-trip-schedule time { overflow:hidden; min-width:0; text-overflow:ellipsis; }
-.ts-focus-trip-copy em { margin-top:2px; font-size:12px; }
-@media (min-width:760px) { .ts-focus-package-list .ts-focus-trip-card { grid-template-columns:36% 64%; height:184px; }.ts-focus-package-list .ts-focus-trip-info { padding:16px 20px; }.ts-focus-trip-copy { gap:5px; }.ts-focus-trip-copy strong { font-size:20px; }.ts-focus-trip-schedule small { font-size:12px; } }
-@media (max-width:420px) { .ts-focus-trip-countdown { top:7px; inset-inline-start:7px; max-width:calc(28% - 14px); min-height:21px; padding:3px 5px; gap:3px; font-size:8px; }.ts-focus-trip-countdown>span:not(.ts-focus-trip-countdown-compact) { display:none; }.ts-focus-trip-countdown-compact { display:inline; }.ts-focus-trip-countdown svg { width:10px; height:10px; }.ts-focus-package-list { width:96%; }.ts-focus-package-list .ts-focus-trip-card { grid-template-columns:28% 72%; height:150px; }.ts-focus-package-list .ts-focus-trip-info { padding:9px 10px; }.ts-focus-trip-copy { gap:2px; }.ts-focus-trip-copy strong { font-size:14px; }.ts-focus-trip-branch { font-size:10px!important; }.ts-focus-trip-schedule small { gap:3px; font-size:9px; }.ts-focus-trip-copy em { font-size:10px; } }
-
-/* ═══ صفحات التفاصيل والتخصيص لتجربة Focus ═══ */
-.ts-focus-detail { width:100%; max-width:100%; min-height:100dvh; overflow-x:clip; padding-bottom:20px; background:#fffaf4; color:#50391f; }.ts-focus-detail-hero { position:relative; height:252px; overflow:hidden; background:#5c4931; }.ts-focus-detail-hero>img { width:100%; height:100%; object-fit:cover; display:block; }.ts-focus-detail-back { position:absolute; top:18px; inset-inline-start:18px; display:grid; place-items:center; width:42px; height:42px; color:#fff; border:0; border-radius:50%; background:rgba(15,15,13,.3); cursor:pointer; backdrop-filter:blur(8px); }
-.ts-focus-detail-main { box-sizing:border-box; width:100%; max-width:680px; margin:-24px auto 0; padding:21px 18px 28px; position:relative; border-radius:24px 24px 0 0; background:#fffaf4; }
-
-.ts-focus-detail-copy,.ts-focus-program { margin-top:22px; }.ts-focus-detail-copy h2,.ts-focus-program h2 { margin:0 0 7px; font-family:var(--font-display); font-size:19px; }
-.ts-focus-program>div { position:relative; display:grid; gap:0; padding-inline-start:8px; }.ts-focus-program>div::before { content:""; position:absolute; top:16px; bottom:16px; inset-inline-start:17px; width:1px; background:#ddc79f; }.ts-focus-program article { position:relative; display:flex; align-items:flex-start; gap:12px; max-width:100%; padding:9px 0; }.ts-focus-program article>span { position:relative; z-index:1; display:grid; place-items:center; flex:0 0 auto; width:19px; height:19px; color:#fff; border-radius:50%; background:#aa7b30; font-size:10px; font-weight:800; }.ts-focus-program article div { display:flex; min-width:0; flex:1 1 0; flex-direction:column; gap:2px; }.ts-focus-program article strong { overflow-wrap:anywhere; color:#563f25; font-size:13px; }.ts-focus-program article small { display:flex; flex-wrap:wrap; gap:2px 5px; max-width:100%; color:#897561; font-size:11px; line-height:1.55; }.ts-focus-program article small span { min-width:0; overflow-wrap:anywhere; }
-.ts-focus-detail-cta button,.ts-focus-configure-cta button { display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 21px; color:#fff; border:0; border-radius:24px; background:linear-gradient(120deg,#c3974d,#8b6021); cursor:pointer; font-family:var(--font-app); font-size:14px; font-weight:800; }
-
-.ts-focus-configure { min-height:100dvh; padding-bottom:114px; background:#fffaf4; color:#50391f; }.ts-focus-configure-head { display:grid; grid-template-columns:42px 1fr 42px; align-items:center; min-height:65px; padding:0 14px; border-bottom:1px solid #efe4d6; background:#fff; }.ts-focus-configure-head button { display:grid; place-items:center; width:38px; height:38px; color:#563f25; border:0; border-radius:50%; background:#f7f2ea; cursor:pointer; }.ts-focus-configure-head h1 { margin:0; text-align:center; font-family:var(--font-display); font-size:20px; }.ts-focus-configure main { max-width:620px; margin:auto; padding:16px; }
-
-.ts-focus-configure-section { margin-top:23px; }.ts-focus-section-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; }.ts-focus-section-heading>div { display:flex; flex-direction:column; gap:2px; }.ts-focus-section-heading h2,.ts-focus-price-summary h2 { margin:0; font-family:var(--font-display); font-size:19px; }.ts-focus-section-heading small { color:#88735e; font-size:11px; }.ts-focus-section-heading>svg { color:#a8782c; }.ts-focus-counter { display:grid; grid-template-columns:54px 1fr 54px; align-items:center; max-width:220px; overflow:hidden; border:1px solid #eadfce; border-radius:15px; background:#fff; }.ts-focus-counter button { display:grid; place-items:center; height:52px; color:#9d7026; border:0; background:#fbf6ee; cursor:pointer; }.ts-focus-counter button:disabled { color:#c8bcae; cursor:not-allowed; }.ts-focus-counter strong { text-align:center; color:#4b351c; font-family:var(--font-display); font-size:25px; }
-.ts-traveller-counts { display:grid; gap:10px; }.ts-traveller-count { display:flex; align-items:center; gap:11px; min-height:88px; padding:10px 11px; border:1px solid #eadfce; border-radius:17px; background:linear-gradient(105deg,#fff 42%,#fffaf3); box-shadow:0 5px 14px rgba(92,62,25,.045); }.ts-traveller-count-icon { display:grid; place-items:center; flex:0 0 auto; width:62px; height:62px; border-radius:50%; }.ts-traveller-count-copy { display:grid; flex:1; min-width:0; gap:3px; }.ts-traveller-count-copy strong { color:#4b351c; font-family:var(--font-display); font-size:20px; }.ts-traveller-stepper { display:grid; grid-template-columns:43px 52px 43px; flex:0 0 auto; align-items:center; overflow:hidden; border:1px solid #eadfce; border-radius:13px; background:#fff; }.ts-traveller-stepper button { display:grid; place-items:center; height:45px; color:#9d7026; border:0; background:#fcf7ef; cursor:pointer; }.ts-traveller-stepper button:disabled { color:#cbbfad; cursor:not-allowed; }.ts-traveller-stepper output { color:#4b351c; text-align:center; font-family:var(--font-display); font-size:23px; font-weight:800; }
-.ts-focus-room-list { display:grid; gap:9px; }.ts-focus-room-list>button { display:flex; align-items:center; gap:10px; width:100%; min-height:90px; padding:8px; color:#50391f; text-align:start; border:1px solid #eadfce; border-radius:16px; background:#fff; cursor:pointer; font-family:var(--font-app); }.ts-focus-room-list>button.active { border:2px solid #a8782c; background:#fffaf0; }.ts-focus-room-list>button>img { width:74px; height:72px; object-fit:cover; border-radius:11px; }.ts-focus-room-list>button>svg { flex:0 0 auto; margin-inline-start:auto; color:#fff; border-radius:50%; background:#a8782c; padding:2px; }.ts-focus-room-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:4px; }.ts-focus-room-copy strong { color:#50391f; font-family:var(--font-display); font-size:15px; }.ts-focus-room-copy small { color:#806e5b; font-size:11px; }.ts-focus-room-copy em { color:#986b20; font-size:12px; font-style:normal; font-weight:800; }.ts-focus-room-empty { margin:0; padding:16px; color:#836f5b; text-align:center; border:1px dashed #ddcdb8; border-radius:14px; font-size:12px; }
-
-.ts-focus-price-summary { margin-top:22px; padding:15px; border:1px solid #eadfce; border-radius:17px; background:#fff; }.ts-focus-price-summary h2 { margin-bottom:10px; }.ts-focus-price-summary>div,.ts-focus-price-summary footer { display:flex; align-items:center; justify-content:space-between; padding:5px 0; color:#7a6652; font-size:12px; }.ts-focus-price-summary b { color:#5b4022; }.ts-focus-price-summary footer { margin-top:7px; padding-top:12px; color:#563f25; border-top:1px solid #eee4d8; font-family:var(--font-display); font-size:17px; }.ts-focus-price-summary footer strong { color:#986b20; font-size:21px; }.ts-focus-privacy-seat-note { display:flex; align-items:flex-start; gap:7px; margin:10px 0 0; padding:10px 11px; color:#9a3e68; border:1px solid #f2cbdd; border-radius:11px; background:#fff2f7; font-size:11px; font-weight:700; line-height:1.6; }
-.ts-focus-configure-cta { position:fixed; z-index:20; right:0; bottom:0; left:0; display:flex; max-width:620px; flex-direction:column; gap:5px; margin:auto; padding:11px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid #eadfce; background:rgba(255,253,249,.97); backdrop-filter:blur(10px); }.ts-focus-configure-cta button { width:100%; }.ts-focus-configure-cta button:disabled { opacity:.45; cursor:not-allowed; }.ts-focus-configure-cta small { color:#876f54; text-align:center; font-size:10px; }
-
-/* في صفحة التفاصيل: التخصيص ليس صفحة مقطوعة، بل القسم التالي الطبيعي. */
-.ts-focus-configure.embedded { min-height:0; padding:0; background:transparent; }.ts-focus-configure.embedded main { padding:16px 0 0; }.ts-focus-configure.embedded .ts-focus-configure-cta { position:static; max-width:none; margin-top:20px; padding:0; border:0; background:transparent; backdrop-filter:none; }
-@media (min-width: 760px) {
-  .ts-focus-detail-hero { height:360px; }.ts-focus-detail-main { max-width:980px; padding:30px 34px 42px; }.ts-focus-program { max-width:760px; }
-  .ts-focus-configure.embedded main { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); column-gap:28px; align-items:start; }.ts-focus-configure.embedded .ts-focus-configure-trip { grid-column:1/-1; }.ts-focus-configure.embedded .ts-focus-travellers { grid-column:1; }.ts-focus-configure.embedded .ts-focus-accommodation { grid-column:2; }.ts-focus-configure.embedded .ts-focus-included { grid-column:1; }.ts-focus-configure.embedded .ts-focus-price-summary { grid-column:2; }.ts-focus-configure.embedded .ts-focus-configure-cta { grid-column:1/-1; max-width:410px; justify-self:end; width:100%; }
+.ts-focus-loading {
+  display:grid;
+  gap:16px;
 }
-.ts-focus-empty svg { color:#a8782c; }.ts-focus-empty strong { color:#60462a; font-size:14px; }.ts-focus-empty span { font-size:12px; }
+.ts-focus-loading-heading {
+  display:grid;
+  gap:8px;
+  width:min(70%,280px);
+}
+.ts-focus-loading-heading .sk-bar:first-child { height:24px; }
+.ts-focus-loading-heading .sk-bar:last-child {
+  width:72%;
+  height:14px;
+}
+.ts-focus-loading-days {
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:4px;
+  padding:12px;
+  border:1px solid var(--k-border);
+  border-radius:20px;
+  background:#fff;
+}
+.ts-focus-loading-days .sk-bar {
+  height:88px;
+  border-radius:14px;
+}
+.ts-focus-loading-card {
+  overflow:hidden;
+  border:1px solid var(--k-border);
+  border-radius:20px;
+  background:#fff;
+}
+.ts-focus-loading-card > .sk-bar {
+  aspect-ratio:3 / 2;
+  border-radius:0;
+}
+.ts-focus-loading-card > div {
+  display:grid;
+  gap:12px;
+  padding:16px;
+}
+.ts-focus-loading-card > div .sk-bar { height:14px; }
+.ts-focus-loading-card > div .sk-bar:first-child {
+  width:70%;
+  height:20px;
+}
+.ts-focus-loading-card > div .sk-bar:last-child {
+  width:40%;
+  height:28px;
+}
 
-/* ── حجز الرحلة: الملخص أولاً، ثم قرار واحد في كل مرة ── */
-.ts-focus-detail { padding-bottom:112px; background:#fffdf9; }
-.ts-focus-detail-hero { height:132px; }
-.ts-focus-detail-hero::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,rgba(37,27,16,.15),rgba(37,27,16,.04)); pointer-events:none; }
-.ts-focus-detail-hero>img { filter:saturate(.85); }
-.ts-focus-detail-back { z-index:1; top:12px; inset-inline-start:12px; width:38px; height:38px; }
-.ts-focus-detail-main { max-width:680px; margin:-12px auto 0; padding:16px 16px calc(96px + env(safe-area-inset-bottom)); border-radius:18px 18px 0 0; background:#fffdf9; }
-.ts-focus-trip-summary { display:flex; align-items:stretch; justify-content:space-between; gap:12px; padding:16px; border:1px solid #e5d8c7; border-radius:16px; background:#fff; }
-.ts-focus-trip-summary-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:7px; }
-.ts-focus-trip-summary-copy h1 { margin:0; color:#3f2d19; font-family:var(--font-display); font-size:23px; line-height:1.25; }
-.ts-focus-trip-summary-copy p { display:flex; align-items:center; gap:6px; margin:0; color:#735f4a; font-size:12px; font-weight:600; line-height:1.5; }
-.ts-focus-trip-summary-copy svg { flex:0 0 auto; color:#9b702f; }
-.ts-focus-departure-time { display:flex; flex:0 0 auto; flex-direction:column; align-items:center; justify-content:center; min-width:104px; padding-inline-start:12px; border-inline-start:1px solid #eee3d6; text-align:center; }
-.ts-focus-departure-time small { color:#8c7255; font-size:10px; font-weight:700; white-space:nowrap; }
-.ts-focus-departure-time strong { color:#5a3710; direction:ltr; font-family:var(--font-display); font-size:30px; line-height:1.05; letter-spacing:-.03em; white-space:nowrap; }
-.ts-focus-departure-time em { margin-top:3px; color:#9b6a23; font-size:11px; font-style:normal; font-weight:800; }
-.ts-focus-includes { display:flex; align-items:center; flex-wrap:wrap; gap:8px 15px; margin:15px 2px 0; color:#59442e; }.ts-focus-includes strong { font-family:var(--font-display); font-size:17px; }.ts-focus-includes span { display:flex; align-items:center; gap:5px; min-width:0; font-size:12px; font-weight:700; }.ts-focus-includes svg { flex:0 0 auto; color:#9f732f; }
-.ts-focus-program-compact { margin-top:15px; overflow:hidden; border:1px solid #e6dacb; border-radius:13px; background:#fff; }.ts-focus-program-compact>button { display:flex; align-items:center; width:100%; min-height:62px; gap:10px; padding:10px 13px; color:#4d3924; border:0; background:transparent; cursor:pointer; font-family:var(--font-app); text-align:start; }.ts-focus-program-compact>button>span { font-family:var(--font-display); font-size:17px; }.ts-focus-program-compact>button>em { margin-inline-start:auto; color:#85632c; font-size:12px; font-style:normal; font-weight:800; white-space:nowrap; }.ts-focus-program-compact>button svg { flex:0 0 auto; transition:transform .18s ease; }.ts-focus-program-compact>button[aria-expanded="true"] svg { transform:rotate(180deg); }
-.ts-focus-trip-details-summary { display:grid; flex:1; min-width:0; gap:2px; }.ts-focus-trip-details-summary strong { color:#4d3924; font-family:var(--font-display); font-size:18px; }.ts-focus-trip-details-summary small { overflow:hidden; color:#8a7257; font-family:var(--font-app); font-size:11px; font-weight:700; white-space:nowrap; text-overflow:ellipsis; }.ts-focus-trip-details-body { padding:0 13px 14px; border-top:1px solid #eee5da; }
-.ts-focus-experience-grid { display:grid; gap:10px; padding-top:13px; }.ts-focus-experience-card { display:grid; grid-template-columns:112px minmax(0,1fr); overflow:hidden; min-height:136px; border:1px solid #ebe0d1; border-radius:12px; background:#fffdf9; }.ts-focus-experience-card>img { width:100%; height:100%; min-height:136px; object-fit:cover; display:block; background:#eee5da; }.ts-focus-experience-copy { position:relative; display:grid; align-content:start; gap:5px; padding:13px 12px; }.ts-focus-experience-icon { display:grid; place-items:center; width:32px; height:32px; margin-bottom:1px; color:#9a6b25; border-radius:10px; background:#faeedb; }.ts-focus-experience-copy h3 { margin:0; color:#513a21; font-family:var(--font-display); font-size:17px; line-height:1.25; }.ts-focus-experience-copy p { margin:0; color:#786650; font-size:11px; font-weight:700; line-height:1.55; }.ts-focus-experience-features { display:flex; flex-wrap:wrap; gap:5px; margin:5px 0 0; padding:0; list-style:none; }.ts-focus-experience-features li { padding:4px 7px; color:#28644b; border:1px solid #cce3d3; border-radius:999px; background:#edf7f0; font-size:10px; font-weight:800; line-height:1.25; }
-.ts-focus-program-timeline { position:relative; display:grid; gap:0; margin:14px 0 0; padding:14px 0 0; border-top:1px solid #eee5da; }.ts-focus-program-timeline>h2 { margin:0 0 5px; color:#553d24; font-family:var(--font-display); font-size:16px; }.ts-focus-program-timeline::before { content:""; position:absolute; top:48px; bottom:21px; inset-inline-start:9px; width:1px; background:#d9c39f; }.ts-focus-program-timeline article { position:relative; z-index:1; display:flex; align-items:flex-start; gap:9px; padding:9px 0; }.ts-focus-program-timeline article>span { display:grid; place-items:center; flex:0 0 auto; width:19px; height:19px; color:#fff; border-radius:50%; background:#a8782c; font-size:10px; font-weight:800; }.ts-focus-program-timeline article>div { display:grid; gap:2px; min-width:0; }.ts-focus-program-timeline strong { color:#553d24; font-size:12px; }.ts-focus-program-timeline small { color:#7c6854; font-size:11px; line-height:1.55; }
-@media (min-width:760px) { .ts-focus-experience-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.ts-focus-experience-card { grid-template-columns:130px minmax(0,1fr); min-height:154px; }.ts-focus-experience-card>img { min-height:154px; } }
-.ts-focus-configure.embedded { padding:0; background:transparent; }.ts-focus-configure.embedded main { display:block; padding:0; }
-.ts-focus-configure-section { margin-top:24px; }.ts-focus-configure-section:first-child { margin-top:24px; }
-.ts-focus-audience { padding:14px; border:1px solid #eadfce; border-radius:15px; background:#fffaf1; }
-.ts-focus-hotel-once { display:flex; align-items:center; gap:10px; margin-bottom:9px; overflow:hidden; border:1px solid #eadfce; border-radius:12px; background:#fff; }.ts-focus-hotel-once img { width:66px; height:54px; object-fit:cover; }.ts-focus-hotel-once div { display:grid; gap:2px; min-width:0; }.ts-focus-hotel-once strong { overflow:hidden; color:#51391f; font-family:var(--font-display); font-size:15px; text-overflow:ellipsis; white-space:nowrap; }.ts-focus-hotel-once small { color:#806b55; font-size:11px; }
-.ts-focus-room-list { gap:7px; }.ts-focus-room-list>button { gap:10px; min-height:52px; padding:8px 11px; border-radius:12px; }.ts-focus-room-list>button>img { display:none; }.ts-focus-room-list>button.active { border:2px solid #9a6b2b; background:#fffaf0; }.ts-focus-room-radio { display:grid; place-items:center; flex:0 0 auto; width:20px; height:20px; color:#fff; border:1.5px solid #8d7761; border-radius:50%; }.active .ts-focus-room-radio { border-color:#9a6b2b; background:#9a6b2b; }.ts-focus-room-copy { gap:0; }.ts-focus-room-copy strong { font-size:14px; }.ts-focus-room-list>button>em { flex:0 0 auto; color:#7b5520; font-size:12px; font-style:normal; font-weight:800; white-space:nowrap; }
-.ts-focus-price-summary { margin-top:20px; padding:14px; border-radius:14px; }.ts-focus-price-summary h2 { font-size:18px; }
-.ts-focus-room-choice { display:grid; gap:7px; }.ts-focus-room-choice>button { display:flex; align-items:center; gap:10px; width:100%; min-height:76px; padding:8px 11px; color:#50391f; text-align:start; border:1px solid #eadfce; border-radius:12px; background:#fff; cursor:pointer; font-family:var(--font-app); }.ts-focus-room-choice>button.active { border:2px solid #9a6b2b; background:#fffaf0; }.ts-focus-room-choice .ts-focus-room-copy { gap:2px; }.ts-focus-room-choice .ts-focus-room-copy small { color:#7b5520; font-size:12px; font-style:normal; font-weight:800; }.ts-room-capacity { position:relative; display:grid; flex:0 0 auto; place-items:center; width:62px; height:62px; border:1px solid #f0e6d7; border-radius:16px; background:linear-gradient(145deg,#fffdf9,#faf2e4); }.ts-room-capacity-beds { display:grid; grid-template-columns:repeat(2,22px); grid-auto-rows:22px; gap:3px; place-content:center; }.ts-room-capacity-beds svg { color:#d4cec5; }.ts-room-capacity-beds svg.is-included { color:#a8782c; }.ts-room-capacity em { position:absolute; inset-inline-end:4px; bottom:3px; padding:1px 4px; color:#fff; border-radius:6px; background:#8c6423; font-size:9px; font-style:normal; font-weight:800; line-height:1.2; }.active .ts-room-capacity { border-color:#d9bb83; box-shadow:0 0 0 2px rgba(168,120,44,.1); }.ts-focus-room-quantity { display:flex; align-items:center; justify-content:space-between; padding:2px 12px 9px 42px; color:#6d5944; font-size:12px; font-weight:700; }.ts-focus-room-quantity>div { display:grid; grid-template-columns:34px 42px 34px; align-items:center; overflow:hidden; border:1px solid #eadfce; border-radius:10px; background:#fff; direction:ltr; }.ts-focus-room-quantity button { display:grid; place-items:center; height:34px; color:#9d7026; border:0; background:#fbf6ee; cursor:pointer; }.ts-focus-room-quantity button:disabled { color:#c8bcae; cursor:not-allowed; }.ts-focus-room-quantity strong { text-align:center; color:#4b351c; font-family:var(--font-display); font-size:17px; }
-@media (max-width:380px) { .ts-focus-room-choice>button { gap:8px; padding-inline:8px; }.ts-room-capacity { width:56px; height:56px; }.ts-room-capacity-beds { grid-template-columns:repeat(2,20px); grid-auto-rows:20px; gap:2px; }.ts-room-capacity-beds svg { width:20px; height:20px; } }
-.ts-focus-configure-cta,.ts-focus-configure.embedded .ts-focus-configure-cta { position:fixed; z-index:30; right:0; bottom:0; left:0; display:flex; max-width:680px; flex-direction:row; align-items:center; gap:12px; margin:auto; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border:1px solid #eadfce; border-bottom:0; border-radius:16px 16px 0 0; background:rgba(255,253,249,.97); backdrop-filter:blur(10px); }.ts-focus-configure-cta>div { display:flex; flex:1; min-width:0; flex-direction:column; }.ts-focus-configure-cta small { color:#806c56; text-align:start; font-size:11px; }.ts-focus-configure-cta strong { color:#593d19; font-family:var(--font-display); font-size:20px; white-space:nowrap; }.ts-focus-configure-cta button { flex:1.25; width:auto; min-height:49px; border-radius:12px; }.ts-focus-configure-cta button:disabled { opacity:.45; cursor:not-allowed; }
-/* واتساب داخل الشريط: دائرةٌ ثابتة لا تطفو فوق شيء. الانتقاء أدقّ من
-   قاعدة الأزرار الذهبية أعلاه فيغلبها وحده. */
-.ts-focus-configure-cta button.ts-wa-inline { flex:0 0 auto; width:46px; min-width:46px; height:46px; min-height:46px; padding:0; color:#fff; border-radius:50%; background:#25D366; }
+.ts-focus-empty {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  padding:32px 20px;
+  text-align:center;
+  border:1px solid var(--k-border);
+  border-radius:20px;
+  background:#fff;
+}
+.ts-focus-empty-icon {
+  display:grid;
+  place-items:center;
+  width:56px;
+  height:56px;
+  margin-bottom:8px;
+  color:var(--k-gold-deep);
+  border-radius:50%;
+  background:var(--k-gold-tint);
+}
+.ts-focus-empty strong {
+  font-family:var(--font-display);
+  font-size:18px;
+  font-weight:700;
+  line-height:1.4;
+}
+.ts-focus-empty small {
+  max-width:34ch;
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.6;
+}
+.ts-focus-empty-action {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:50px;
+  margin-top:12px;
+  padding:0 28px;
+  color:var(--k-text);
+  border:0;
+  border-radius:999px;
+  background:var(--k-gold);
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:16px;
+  font-weight:600;
+  transition:background-color .15s ease-out;
+}
+.ts-focus-empty-action:hover { background:var(--k-gold-hover); }
+.ts-focus-empty-action:active { background:var(--k-gold-press); }
+.ts-focus-empty-action.is-quiet {
+  border:1px solid var(--k-text);
+  background:transparent;
+}
+.ts-focus-empty-action.is-quiet:hover,
+.ts-focus-empty-action.is-quiet:active { background:var(--k-fill); }
+
+.ts-focus-all-trips {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  min-height:48px;
+  margin-top:20px;
+  color:var(--k-text);
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:15px;
+  font-weight:600;
+  text-decoration:underline;
+  text-underline-offset:4px;
+}
+.ts-focus-all-trips:hover { background:var(--k-fill); }
+
+@media (min-width:760px) {
+  .ts-focus-hero { height:300px; }
+  .ts-focus-title h1 { font-size:44px; }
+  .ts-focus-title p { font-size:17px; }
+  .ts-focus-body {
+    max-width:760px;
+    padding-inline:24px;
+  }
+  .ts-week-picker { padding:16px; }
+  .ts-week-days { gap:8px; }
+  .ts-week-day b { font-size:14px; }
+  /* على الشاشة الواسعة الصورة جانبية: بطاقةٌ بعرض 700 بكسل وصورتها فوقها
+     تصير لافتة لا بطاقة رحلة. */
+  .ts-focus-trip-card { flex-direction:row; }
+  .ts-focus-trip-photo {
+    flex:0 0 42%;
+    width:auto;
+    aspect-ratio:auto;
+    min-height:260px;
+  }
+  .ts-focus-trip-info { padding:20px; }
+  .ts-focus-trip-info > strong { font-size:20px; }
+  .ts-focus-trip-foot { margin-top:auto; }
+  .ts-focus-loading-card {
+    display:grid;
+    grid-template-columns:42% 1fr;
+    min-height:260px;
+  }
+  .ts-focus-loading-card > .sk-bar {
+    height:100%;
+    aspect-ratio:auto;
+  }
+  .ts-focus-loading-card > div { align-content:center; }
+}
+
+/* ═══ صفحة الرحلة: الصورة، الملخّص، ما تشمله، ثم المعتمرون والسكن ═══ */
+.ts-focus-detail {
+  width:100%;
+  max-width:100%;
+  min-height:100dvh;
+  overflow-x:clip;
+  background:#FBF9F5;
+  color:var(--k-text);
+}
+.ts-focus-detail-hero {
+  position:relative;
+  height:264px;
+  overflow:hidden;
+  background:var(--k-ink);
+}
+.ts-focus-detail-hero > img {
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+/* ظلٌّ علويٌّ خفيف يسند شريط الحالة وزرّ الرجوع فقط. */
+.ts-focus-detail-hero::after {
+  position:absolute;
+  inset:0 0 auto;
+  height:96px;
+  content:"";
+  background:linear-gradient(180deg, rgba(20,17,14,.34), rgba(20,17,14,0));
+  pointer-events:none;
+}
+/* الحشوة السفلية تساوي ارتفاع شريط الإجراء الثابت وزيادة: آخر سطرٍ في
+   ملخّص التكلفة يُقرأ كاملاً فوقه. */
+.ts-focus-detail-main {
+  position:relative;
+  box-sizing:border-box;
+  width:100%;
+  max-width:720px;
+  margin:-22px auto 0;
+  padding:20px 16px calc(120px + env(safe-area-inset-bottom));
+  border-radius:24px 24px 0 0;
+  background:#FBF9F5;
+}
+.ts-focus-trip-summary h1 {
+  margin:0;
+  font-family:var(--font-display);
+  font-size:26px;
+  font-weight:700;
+  line-height:1.3;
+}
+.ts-focus-trip-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
+.ts-focus-trip-chips span {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:30px;
+  padding:0 12px;
+  color:var(--k-text-2);
+  border-radius:999px;
+  background:var(--k-fill);
+  font-size:13px;
+}
+.ts-focus-trip-chips span.is-low {
+  color:#8A6A08;
+  background:#FBF3D6;
+  font-weight:600;
+}
+.ts-focus-trip-facts {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  margin:16px 0 0;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-focus-trip-facts > div {
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+  padding:14px 16px;
+}
+.ts-focus-trip-facts > div:nth-child(even) { border-inline-start:1px solid var(--k-border); }
+.ts-focus-trip-facts > div:nth-child(n+3) { border-top:1px solid var(--k-border); }
+.ts-focus-trip-facts dt {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--k-muted);
+  font-size:13px;
+  line-height:1.5;
+}
+.ts-focus-trip-facts dt svg { flex:0 0 auto; }
+.ts-focus-trip-facts dd {
+  margin:0;
+  font-size:16px;
+  font-weight:600;
+  line-height:1.5;
+}
+
+.ts-focus-included { margin-top:28px; }
+.ts-focus-included > h2,
+.ts-focus-section-heading h2,
+.ts-focus-price-summary h2 {
+  margin:0;
+  font-family:var(--font-display);
+  font-size:20px;
+  font-weight:700;
+  line-height:1.4;
+}
+.ts-focus-experience-grid {
+  display:grid;
+  gap:12px;
+  margin-top:12px;
+}
+/* الصورة مطلقة الموضع بارتفاع البطاقة: لو دخلت في حساب الارتفاع لمدّت
+   البطاقة إلى ارتفاعها الأصلي وتركت تحت النص فراغاً. */
+.ts-focus-experience-card {
+  position:relative;
+  overflow:hidden;
+  min-height:132px;
+  padding-inline-start:116px;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-focus-experience-card > img {
+  position:absolute;
+  inset-block:0;
+  inset-inline-start:0;
+  display:block;
+  width:116px;
+  height:100%;
+  object-fit:cover;
+  background:var(--k-fill);
+}
+.ts-focus-experience-copy {
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:4px;
+  padding:12px 14px;
+}
+.ts-focus-experience-kind {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  color:var(--k-gold-deep);
+  font-size:13px;
+  font-weight:600;
+}
+.ts-focus-experience-copy h3 {
+  margin:0;
+  font-size:17px;
+  font-weight:600;
+  line-height:1.4;
+}
+.ts-focus-experience-meta {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:2px 10px;
+  margin:0;
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.5;
+}
+.ts-focus-experience-stars {
+  display:inline-flex;
+  gap:1px;
+  color:var(--k-gold);
+}
+.ts-focus-experience-features {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin:6px 0 0;
+  padding:0;
+  list-style:none;
+}
+.ts-focus-experience-features li {
+  padding:3px 10px;
+  color:var(--k-text-2);
+  border-radius:999px;
+  background:var(--k-fill);
+  font-size:13px;
+  line-height:1.5;
+}
+.ts-focus-program-timeline {
+  margin-top:12px;
+  padding:16px;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-focus-program-timeline > h3 {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 12px;
+  font-size:17px;
+  font-weight:600;
+}
+.ts-focus-program-timeline > h3 svg { color:var(--k-gold-deep); }
+.ts-focus-program-timeline ol {
+  display:grid;
+  gap:0;
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+.ts-focus-program-timeline li {
+  position:relative;
+  display:grid;
+  grid-template-columns:28px minmax(0,1fr);
+  gap:12px;
+  padding-bottom:16px;
+}
+.ts-focus-program-timeline li:last-child { padding-bottom:0; }
+.ts-focus-program-timeline li:not(:last-child)::before {
+  position:absolute;
+  top:30px;
+  bottom:2px;
+  inset-inline-start:13.5px;
+  width:1px;
+  content:"";
+  background:var(--k-border-strong);
+}
+.ts-focus-program-timeline li > span {
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  color:var(--k-text);
+  border-radius:50%;
+  background:var(--k-fill);
+  font-size:13px;
+  font-weight:600;
+}
+.ts-focus-program-timeline li > div {
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+  padding-top:2px;
+}
+.ts-focus-program-timeline li strong {
+  font-size:15px;
+  font-weight:600;
+  line-height:1.5;
+}
+.ts-focus-program-timeline li small {
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.6;
+}
+.ts-focus-more {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:44px;
+  margin-top:8px;
+  padding:0;
+  color:var(--k-text);
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+  font-size:15px;
+  font-weight:600;
+  text-decoration:underline;
+  text-underline-offset:4px;
+}
+.ts-focus-more svg { transition:transform .16s ease-out; }
+.ts-focus-more[aria-expanded="true"] svg { transform:rotate(180deg); }
+
+/* ── اختيار المعتمرين والسكن ── */
+.ts-focus-configure {
+  min-height:100dvh;
+  padding-bottom:calc(120px + env(safe-area-inset-bottom));
+  background:#FBF9F5;
+  color:var(--k-text);
+}
+.ts-focus-configure.embedded {
+  min-height:0;
+  padding:0;
+  background:transparent;
+}
+.ts-focus-configure main {
+  max-width:720px;
+  margin:auto;
+  padding:0 16px;
+}
+.ts-focus-configure.embedded main { padding:0; }
+.ts-focus-configure-head {
+  display:grid;
+  grid-template-columns:44px 1fr 44px;
+  align-items:center;
+  max-width:720px;
+  margin:auto;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+}
+.ts-focus-configure-head button {
+  display:grid;
+  place-items:center;
+  width:44px;
+  height:44px;
+  padding:0;
+  color:var(--k-text);
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  cursor:pointer;
+}
+.ts-focus-configure-head button:hover { background:var(--k-fill); }
+.ts-focus-configure-head h1 {
+  margin:0;
+  font-family:var(--font-display);
+  font-size:20px;
+  font-weight:700;
+  text-align:center;
+}
+.ts-focus-configure-section { margin-top:28px; }
+.ts-focus-section-heading { margin-bottom:12px; }
+.ts-focus-section-heading small {
+  display:block;
+  margin-top:2px;
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.5;
+}
+
+.ts-traveller-counts {
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-traveller-count {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-height:72px;
+  padding:12px 14px;
+}
+.ts-traveller-count + .ts-traveller-count { border-top:1px solid var(--k-border); }
+.ts-traveller-count-icon {
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+}
+.ts-traveller-count-copy {
+  flex:1;
+  min-width:0;
+}
+.ts-traveller-count-copy strong {
+  font-size:17px;
+  font-weight:600;
+}
+.ts-traveller-stepper,
+.ts-focus-room-quantity > div {
+  display:flex;
+  flex:0 0 auto;
+  align-items:center;
+  gap:4px;
+}
+.ts-traveller-stepper button,
+.ts-focus-room-quantity button {
+  display:grid;
+  place-items:center;
+  width:44px;
+  height:44px;
+  padding:0;
+  color:var(--k-text);
+  border:1px solid var(--k-border-strong);
+  border-radius:50%;
+  background:#fff;
+  cursor:pointer;
+  transition:background-color .15s ease-out, border-color .15s ease-out;
+}
+.ts-traveller-stepper button:hover:not(:disabled),
+.ts-focus-room-quantity button:hover:not(:disabled) { border-color:var(--k-text); }
+.ts-traveller-stepper button:active:not(:disabled),
+.ts-focus-room-quantity button:active:not(:disabled) { background:var(--k-fill); }
+.ts-traveller-stepper button:disabled,
+.ts-focus-room-quantity button:disabled {
+  color:var(--k-placeholder);
+  border-color:var(--k-border);
+  cursor:default;
+}
+.ts-traveller-stepper output,
+.ts-focus-room-quantity strong {
+  min-width:32px;
+  font-size:18px;
+  font-weight:600;
+  text-align:center;
+}
+
+.ts-focus-room-list {
+  display:grid;
+  gap:10px;
+}
+/* المختار حدٌّ أسود بسماكة بكسلين مرسومٌ بالظل: لو سُمِّك الحدّ نفسه
+   لانزاح المحتوى بكسلاً عند كل نقرة. */
+.ts-focus-room-choice {
+  overflow:hidden;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+  transition:border-color .15s ease-out, box-shadow .15s ease-out;
+}
+.ts-focus-room-choice.is-active {
+  border-color:var(--k-text);
+  box-shadow:inset 0 0 0 1px var(--k-text);
+}
+.ts-focus-room-choice > button {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  min-height:76px;
+  padding:12px 14px;
+  color:var(--k-text);
+  text-align:start;
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  font-family:var(--font-app);
+}
+.ts-focus-room-radio {
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:24px;
+  height:24px;
+  color:#fff;
+  border:1.5px solid var(--k-border-strong);
+  border-radius:50%;
+  background:#fff;
+}
+.ts-focus-room-choice.is-active .ts-focus-room-radio {
+  border-color:var(--k-text);
+  background:var(--k-text);
+}
+.ts-focus-room-copy {
+  display:flex;
+  flex:1;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+}
+.ts-focus-room-copy strong {
+  font-size:16px;
+  font-weight:600;
+  line-height:1.5;
+}
+.ts-focus-room-copy small {
+  color:var(--k-text-2);
+  font-size:14px;
+  line-height:1.5;
+}
+.ts-focus-room-copy small b {
+  color:var(--k-text);
+  font-size:16px;
+  font-weight:600;
+}
+.ts-room-capacity {
+  display:flex;
+  flex:0 0 auto;
+  align-items:center;
+  gap:4px;
+  color:var(--k-border-strong);
+}
+.ts-room-capacity-beds {
+  display:grid;
+  grid-template-columns:repeat(2,20px);
+  gap:2px;
+}
+.ts-room-capacity-beds svg {
+  width:20px;
+  height:20px;
+}
+.ts-room-capacity-beds svg.is-included { color:var(--k-gold); }
+.ts-room-capacity em {
+  color:var(--k-muted);
+  font-size:13px;
+  font-style:normal;
+}
+.ts-focus-room-quantity {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 14px;
+  border-top:1px solid var(--k-border);
+  font-size:15px;
+}
+.ts-focus-room-empty {
+  margin:0;
+  padding:20px 16px;
+  color:var(--k-text-2);
+  text-align:center;
+  border:1px dashed var(--k-border-strong);
+  border-radius:18px;
+  font-size:15px;
+  line-height:1.6;
+}
+
+.ts-focus-price-summary {
+  margin-top:28px;
+  padding:16px;
+  border:1px solid var(--k-border);
+  border-radius:18px;
+  background:#fff;
+}
+.ts-focus-price-summary h2 { margin-bottom:8px; }
+.ts-focus-price-summary > div {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  padding:8px 0;
+  color:var(--k-text-2);
+  font-size:14px;
+}
+.ts-focus-price-summary > div b {
+  color:var(--k-text);
+  font-weight:600;
+  white-space:nowrap;
+}
+.ts-focus-price-summary > div.is-total {
+  margin-top:6px;
+  padding-top:14px;
+  color:var(--k-text);
+  border-top:1px solid var(--k-border);
+  font-size:16px;
+  font-weight:600;
+}
+.ts-focus-price-summary > div.is-total b {
+  font-size:20px;
+  font-weight:700;
+}
+.ts-focus-price-summary > small {
+  display:block;
+  color:var(--k-muted);
+  font-size:13px;
+}
+.ts-focus-privacy-seat-note {
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin:10px 0 0;
+  padding:12px;
+  color:var(--k-text);
+  border-radius:14px;
+  background:var(--k-gold-tint);
+  font-size:14px;
+  line-height:1.7;
+}
+.ts-focus-privacy-seat-note svg {
+  flex:0 0 auto;
+  margin-top:3px;
+  color:var(--k-gold-deep);
+}
+
+/* شريط الإجراء الثابت: واتساب دائرةٌ ثانوية، ثم الإجمالي، ثم الزرّ
+   الذهبي الوحيد في الشاشة. */
+.ts-focus-configure-cta {
+  position:fixed;
+  z-index:30;
+  right:0;
+  bottom:0;
+  left:0;
+  border-top:1px solid var(--k-border);
+  background:#fff;
+  box-shadow:0 -2px 16px -4px rgba(20,17,14,.1);
+}
+.ts-focus-configure-cta-inner {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  box-sizing:border-box;
+  max-width:720px;
+  margin:auto;
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+.ts-focus-configure-total {
+  display:flex;
+  flex:1;
+  min-width:0;
+  flex-direction:column;
+}
+.ts-focus-configure-total small {
+  color:var(--k-muted);
+  font-size:13px;
+  line-height:1.4;
+}
+.ts-focus-configure-total strong {
+  font-size:20px;
+  font-weight:700;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.ts-wa-inline {
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:44px;
+  height:44px;
+  padding:0;
+  color:#1FAF54;
+  border:1px solid var(--k-border-strong);
+  border-radius:50%;
+  background:#fff;
+  cursor:pointer;
+  transition:background-color .15s ease-out;
+}
+.ts-wa-inline:hover { background:var(--k-fill); }
+.ts-wa-inline:active { transform:scale(.94); }
+
+@media (max-width:359px) {
+  .ts-focus-configure-cta-inner { gap:8px; }
+  .ts-focus-configure-cta .ts-cta { padding-inline:18px !important; }
+  .ts-room-capacity { display:none; }
+  .ts-traveller-count {
+    gap:8px;
+    padding-inline:10px;
+  }
+  .ts-traveller-stepper output { min-width:24px; }
+}
+@media (min-width:760px) {
+  /* الصورة لا تمتدّ بعرض الشاشة: غلاف الباقة ملصقٌ مربّع تقريباً، ومدُّه
+     على 1440 بكسل يقصّ ثلثيه. تبقى بعرض المحتوى وبحوافّ مستديرة. */
+  .ts-focus-detail-hero {
+    max-width:720px;
+    height:400px;
+    margin:24px auto 0;
+    border-radius:24px;
+  }
+  .ts-focus-detail-main {
+    margin-top:0;
+    padding:28px 0 calc(128px + env(safe-area-inset-bottom));
+    border-radius:0;
+  }
+  .ts-focus-trip-summary h1 { font-size:30px; }
+  .ts-focus-trip-facts { grid-template-columns:repeat(4,1fr); }
+  .ts-focus-trip-facts > div:nth-child(n) {
+    border-top:0;
+    border-inline-start:1px solid var(--k-border);
+  }
+  .ts-focus-trip-facts > div:first-child { border-inline-start:0; }
+  .ts-focus-experience-grid { grid-template-columns:1fr 1fr; }
+  .ts-focus-experience-card {
+    min-height:150px;
+    padding-inline-start:140px;
+  }
+  .ts-focus-experience-card > img { width:140px; }
+  .ts-focus-configure-cta-inner { padding-inline:0; }
+}
 
 /* لوحة العرض العامة — ألوان الكروكي تشغيلية ولا تحمل بيانات شخصية. */
 .public-dashboard { min-height:100dvh; padding:36px clamp(16px,4vw,64px) 24px; color:#f8f1df; background:#003d2d; font-family:var(--font-app); }.public-dashboard-header { display:flex; align-items:end; justify-content:space-between; gap:20px; max-width:1440px; margin:auto; padding-bottom:27px; border-bottom:1px solid rgba(230,195,122,.28); }.public-dashboard-kicker { color:#d9b562; font-size:12px; font-weight:800; letter-spacing:.02em; }.public-dashboard h1,.public-dashboard h2,.public-dashboard p { margin:0; }.public-dashboard h1 { margin-top:7px; font-family:var(--font-display); font-size:clamp(30px,4vw,50px); line-height:1.05; }.public-dashboard-header p { display:flex; align-items:center; gap:7px; margin-top:10px; color:#b8cdbf; font-size:13px; }.public-dashboard-header p em { color:#caa451; font-style:normal; }.public-dashboard-week-nav { display:flex; align-items:center; gap:7px; }.public-dashboard-week-nav button { display:grid; place-items:center; min-width:40px; height:40px; padding:0 12px; color:#f8f1df; border:1px solid rgba(230,195,122,.35); border-radius:10px; background:transparent; font:inherit; font-size:12px; font-weight:800; cursor:pointer; }.public-dashboard-week-nav button:hover,.public-dashboard-week-nav .is-current { background:#d2a64b; color:#16362c; border-color:#d2a64b; }.public-dashboard-week-nav .is-refresh { min-width:40px; padding:0; }.public-dashboard-week-nav button:disabled { opacity:.6; cursor:wait; }.public-dashboard .is-spinning { animation:public-dashboard-spin .7s linear infinite; }
-.public-dashboard-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:13px; max-width:1440px; margin:23px auto; }.public-dashboard-metrics article { display:flex; align-items:center; gap:12px; min-height:89px; padding:15px; border:1px solid rgba(232,218,181,.16); border-radius:15px; background:rgba(0,0,0,.12); }.public-dashboard-metrics article>span { display:grid; place-items:center; width:42px; height:42px; color:#e1bc69; border-radius:12px; background:rgba(225,188,105,.12); }.public-dashboard-metrics div { display:grid; gap:2px; }.public-dashboard-metrics small { color:#b6c6bd; font-size:11px; }.public-dashboard-metrics strong { color:#fff8e9; font-family:var(--font-display); font-size:27px; line-height:1; }
-.public-dashboard-layout { display:grid; grid-template-columns:minmax(300px,.76fr) minmax(0,1.24fr); align-items:start; gap:18px; max-width:1440px; margin:auto; }.public-dashboard-trips,.public-dashboard-focus { border:1px solid rgba(232,218,181,.18); border-radius:18px; background:rgba(0,27,19,.36); }.public-dashboard-section-title { display:flex; align-items:end; justify-content:space-between; gap:10px; padding:20px 19px 15px; border-bottom:1px solid rgba(232,218,181,.14); }.public-dashboard-section-title span,.public-dashboard-focus-head>div>span { color:#d8b65f; font-size:11px; font-weight:800; }.public-dashboard-section-title h2 { margin-top:3px; font-family:var(--font-display); font-size:20px; }.public-dashboard-section-title small { color:#aebdb5; font-size:10px; }.public-dashboard-trip { display:flex; width:100%; align-items:center; gap:10px; padding:15px 16px; color:inherit; text-align:right; border:0; border-bottom:1px solid rgba(232,218,181,.12); background:transparent; cursor:pointer; font-family:inherit; }.public-dashboard-trip:last-child { border-bottom:0; }.public-dashboard-trip:hover,.public-dashboard-trip.is-selected { background:rgba(209,166,75,.13); }.public-dashboard-trip.is-selected { box-shadow:inset -3px 0 #d2a64b; }.public-dashboard-trip-number { display:grid; place-items:center; flex:0 0 auto; width:28px; height:28px; color:#d5b461; border:1px solid rgba(213,180,97,.38); border-radius:50%; font-size:12px; font-weight:800; }.public-dashboard-trip-copy { display:grid; flex:1; min-width:0; gap:5px; }.public-dashboard-trip-copy strong { overflow:hidden; color:#fff9ed; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }.public-dashboard-trip-copy small,.public-dashboard-trip-stats small { color:#aebdb5; font-size:10px; }.public-dashboard-progress { display:block; height:5px; overflow:hidden; border-radius:10px; background:rgba(255,255,255,.12); }.public-dashboard-progress i { display:block; height:100%; border-radius:inherit; background:#4fca90; }.public-dashboard-trip-stats { display:grid; min-width:53px; gap:1px; text-align:left; }.public-dashboard-trip-stats b { color:#e7c26d; font-family:var(--font-display); font-size:20px; line-height:1; }
-.public-dashboard-focus { padding:23px; }.public-dashboard-focus-head { display:flex; align-items:start; justify-content:space-between; gap:20px; }.public-dashboard-focus-head h2 { margin-top:5px; color:#fff8e9; font-family:var(--font-display); font-size:clamp(24px,3vw,35px); }.public-dashboard-focus-head p { display:flex; align-items:center; gap:8px; margin-top:8px; color:#b7c8bd; font-size:12px; }.public-dashboard-focus-head p i { width:4px; height:4px; border-radius:50%; background:#d7b460; }.public-dashboard-remaining { display:grid; min-width:100px; gap:1px; padding:10px 14px; text-align:center; border:1px solid rgba(223,184,99,.45); border-radius:13px; background:rgba(202,164,81,.09); }.public-dashboard-remaining small,.public-dashboard-remaining span { color:#c7d3c8; font-size:10px; }.public-dashboard-remaining strong { color:#f2cb75; font-family:var(--font-display); font-size:31px; line-height:1; }.public-dashboard-legend { display:flex; flex-wrap:wrap; gap:12px; margin:21px 0 13px; }.public-dashboard-legend span { display:flex; align-items:center; gap:5px; color:#c5d0c8; font-size:11px; }.public-dashboard-legend i { width:10px; height:10px; border-radius:3px; }.public-dashboard-legend .is-male,.public-dashboard-seat.is-male { background:#4b9fe8; }.public-dashboard-legend .is-female,.public-dashboard-seat.is-female { background:#ed91b7; }.public-dashboard-legend .is-available,.public-dashboard-seat.is-available { background:#51c58b; }.public-dashboard-legend .is-reserved,.public-dashboard-seat.is-reserved { background:#69716d; }
-.public-dashboard-bus { padding:14px; border:1px solid rgba(232,218,181,.18); border-radius:22px; background:#062c22; }.public-dashboard-bus + .public-dashboard-bus { margin-top:12px; }.public-dashboard-bus-head { display:flex; align-items:center; justify-content:space-between; padding:0 6px 13px; color:#d9b663; font-size:12px; font-weight:800; }.public-dashboard-bus-head span { display:flex; align-items:center; gap:6px; }.public-dashboard-bus-head small { color:#9eb0a5; font-size:10px; }.public-dashboard-seat-rows { display:grid; gap:6px; padding:11px; border:1px solid rgba(255,255,255,.07); border-radius:16px; background:#04251b; }.public-dashboard-seat-row { display:grid; grid-template-columns:1fr 24px 1fr; gap:8px; align-items:center; }.public-dashboard-seat-row>div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }.public-dashboard-seat-row>div:empty { min-height:32px; }.public-dashboard-aisle { color:#708278; text-align:center; font-size:9px; }.public-dashboard-seat { display:flex; align-items:center; justify-content:center; gap:3px; min-height:34px; color:#fff; border-radius:8px; box-shadow:inset 0 -2px rgba(0,0,0,.17); font-size:9px; }.public-dashboard-seat b { font-family:var(--font-app); font-size:9px; }.public-dashboard-allocation { display:flex; align-items:center; justify-content:center; gap:6px; margin:12px 0 0; color:#e8c36d; font-size:11px; }.public-dashboard-loading,.public-dashboard-empty { display:grid; place-items:center; gap:10px; max-width:1440px; min-height:290px; margin:0 auto; color:#d7e0d8; text-align:center; border:1px dashed rgba(232,218,181,.27); border-radius:18px; }.public-dashboard-empty strong { color:#fff8e9; font-family:var(--font-display); font-size:20px; }.public-dashboard-empty span { color:#b8c9be; font-size:12px; }.public-dashboard-footer { max-width:1440px; margin:24px auto 0; color:#91a99b; text-align:center; font-size:10px; }.public-dashboard-footer::before { display:block; width:55px; height:1px; margin:0 auto 9px; background:#d2a64b; content:""; }
+.public-dashboard-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:13px; max-width:1440px; margin:23px auto; }.public-dashboard-metrics article { display:flex; align-items:center; gap:12px; min-height:89px; padding:15px; border:1px solid rgba(232,218,181,.16); border-radius:15px; background:rgba(0,0,0,.12); }.public-dashboard-metrics article>span { display:grid; place-items:center; width:42px; height:42px; color:#e1bc69; border-radius:12px; background:rgba(225,188,105,.12); }.public-dashboard-metrics div { display:grid; gap:2px; }.public-dashboard-metrics small { color:#b6c6bd; font-size:12px; }.public-dashboard-metrics strong { color:#fff8e9; font-family:var(--font-display); font-size:27px; line-height:1; }
+.public-dashboard-layout { display:grid; grid-template-columns:minmax(300px,.76fr) minmax(0,1.24fr); align-items:start; gap:18px; max-width:1440px; margin:auto; }.public-dashboard-trips,.public-dashboard-focus { border:1px solid rgba(232,218,181,.18); border-radius:18px; background:rgba(0,27,19,.36); }.public-dashboard-section-title { display:flex; align-items:end; justify-content:space-between; gap:10px; padding:20px 19px 15px; border-bottom:1px solid rgba(232,218,181,.14); }.public-dashboard-section-title span,.public-dashboard-focus-head>div>span { color:#d8b65f; font-size:12px; font-weight:800; }.public-dashboard-section-title h2 { margin-top:3px; font-family:var(--font-display); font-size:20px; }.public-dashboard-section-title small { color:#aebdb5; font-size:12px; }.public-dashboard-trip { display:flex; width:100%; align-items:center; gap:10px; padding:15px 16px; color:inherit; text-align:right; border:0; border-bottom:1px solid rgba(232,218,181,.12); background:transparent; cursor:pointer; font-family:inherit; }.public-dashboard-trip:last-child { border-bottom:0; }.public-dashboard-trip:hover,.public-dashboard-trip.is-selected { background:rgba(209,166,75,.13); }.public-dashboard-trip.is-selected { box-shadow:inset -3px 0 #d2a64b; }.public-dashboard-trip-number { display:grid; place-items:center; flex:0 0 auto; width:28px; height:28px; color:#d5b461; border:1px solid rgba(213,180,97,.38); border-radius:50%; font-size:12px; font-weight:800; }.public-dashboard-trip-copy { display:grid; flex:1; min-width:0; gap:5px; }.public-dashboard-trip-copy strong { overflow:hidden; color:#fff9ed; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }.public-dashboard-trip-copy small,.public-dashboard-trip-stats small { color:#aebdb5; font-size:12px; }.public-dashboard-progress { display:block; height:5px; overflow:hidden; border-radius:10px; background:rgba(255,255,255,.12); }.public-dashboard-progress i { display:block; height:100%; border-radius:inherit; background:#4fca90; }.public-dashboard-trip-stats { display:grid; min-width:53px; gap:1px; text-align:left; }.public-dashboard-trip-stats b { color:#e7c26d; font-family:var(--font-display); font-size:20px; line-height:1; }
+.public-dashboard-focus { padding:23px; }.public-dashboard-focus-head { display:flex; align-items:start; justify-content:space-between; gap:20px; }.public-dashboard-focus-head h2 { margin-top:5px; color:#fff8e9; font-family:var(--font-display); font-size:clamp(24px,3vw,35px); }.public-dashboard-focus-head p { display:flex; align-items:center; gap:8px; margin-top:8px; color:#b7c8bd; font-size:12px; }.public-dashboard-focus-head p i { width:4px; height:4px; border-radius:50%; background:#d7b460; }.public-dashboard-remaining { display:grid; min-width:100px; gap:1px; padding:10px 14px; text-align:center; border:1px solid rgba(223,184,99,.45); border-radius:13px; background:rgba(202,164,81,.09); }.public-dashboard-remaining small,.public-dashboard-remaining span { color:#c7d3c8; font-size:12px; }.public-dashboard-remaining strong { color:#f2cb75; font-family:var(--font-display); font-size:31px; line-height:1; }.public-dashboard-legend { display:flex; flex-wrap:wrap; gap:12px; margin:21px 0 13px; }.public-dashboard-legend span { display:flex; align-items:center; gap:5px; color:#c5d0c8; font-size:12px; }.public-dashboard-legend i { width:10px; height:10px; border-radius:3px; }.public-dashboard-legend .is-male,.public-dashboard-seat.is-male { background:#4b9fe8; }.public-dashboard-legend .is-female,.public-dashboard-seat.is-female { background:#ed91b7; }.public-dashboard-legend .is-available,.public-dashboard-seat.is-available { background:#51c58b; }.public-dashboard-legend .is-reserved,.public-dashboard-seat.is-reserved { background:#69716d; }
+.public-dashboard-bus { padding:14px; border:1px solid rgba(232,218,181,.18); border-radius:22px; background:#062c22; }.public-dashboard-bus + .public-dashboard-bus { margin-top:12px; }.public-dashboard-bus-head { display:flex; align-items:center; justify-content:space-between; padding:0 6px 13px; color:#d9b663; font-size:12px; font-weight:800; }.public-dashboard-bus-head span { display:flex; align-items:center; gap:6px; }.public-dashboard-bus-head small { color:#9eb0a5; font-size:12px; }.public-dashboard-seat-rows { display:grid; gap:6px; padding:11px; border:1px solid rgba(255,255,255,.07); border-radius:16px; background:#04251b; }.public-dashboard-seat-row { display:grid; grid-template-columns:1fr 24px 1fr; gap:8px; align-items:center; }.public-dashboard-seat-row>div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }.public-dashboard-seat-row>div:empty { min-height:32px; }.public-dashboard-aisle { color:#708278; text-align:center; font-size:12px; }.public-dashboard-seat { display:flex; align-items:center; justify-content:center; gap:3px; min-height:34px; color:#fff; border-radius:8px; box-shadow:inset 0 -2px rgba(0,0,0,.17); font-size:12px; }.public-dashboard-seat b { font-family:var(--font-app); font-size:12px; }.public-dashboard-allocation { display:flex; align-items:center; justify-content:center; gap:6px; margin:12px 0 0; color:#e8c36d; font-size:12px; }.public-dashboard-loading,.public-dashboard-empty { display:grid; place-items:center; gap:10px; max-width:1440px; min-height:290px; margin:0 auto; color:#d7e0d8; text-align:center; border:1px dashed rgba(232,218,181,.27); border-radius:18px; }.public-dashboard-empty strong { color:#fff8e9; font-family:var(--font-display); font-size:20px; }.public-dashboard-empty span { color:#b8c9be; font-size:12px; }.public-dashboard-footer { max-width:1440px; margin:24px auto 0; color:#91a99b; text-align:center; font-size:12px; }.public-dashboard-footer::before { display:block; width:55px; height:1px; margin:0 auto 9px; background:#d2a64b; content:""; }
 @keyframes public-dashboard-spin { to { transform:rotate(360deg); } }
 @media (max-width:800px) { .public-dashboard { padding:22px 14px; }.public-dashboard-header { align-items:flex-start; flex-direction:column; }.public-dashboard-week-nav { width:100%; }.public-dashboard-week-nav .is-current { flex:1; }.public-dashboard-metrics { grid-template-columns:repeat(2,1fr); }.public-dashboard-layout { grid-template-columns:1fr; }.public-dashboard-focus { padding:16px; }.public-dashboard-focus-head { flex-direction:column; }.public-dashboard-remaining { width:100%; grid-template-columns:1fr auto 1fr; align-items:center; text-align:right; }.public-dashboard-remaining strong { text-align:center; }.public-dashboard-remaining span { text-align:left; }.public-dashboard-seat-row { gap:5px; }.public-dashboard-seat-row>div { gap:4px; }.public-dashboard-seat { min-height:29px; }.public-dashboard-trip { padding-inline:11px; } }
 
 /* لوحة الإدارة ليست جزءاً من حملة اليوم الوطني: تعود هنا الأسطح الدافئة
    والأخضر الهادئ والذهبي الخاص بهوية التطبيق، بلا خلفية خضراء كاملة. */
-.public-dashboard,.public-dashboard button { --font-app:'DGShamael-Regular',system-ui,sans-serif; --font-display:'DGShamael-Regular',system-ui,sans-serif; font-family:var(--font-app); }.public-dashboard { color:#1b1712; background:#faf8f4; }.public-dashboard-header { border-color:#e7e0d3; }.public-dashboard h1 { color:#154c48; }.public-dashboard-kicker,.public-dashboard-header p em { color:#c0862c; }.public-dashboard-header p { color:#7a7168; }.public-dashboard-week-nav button { color:#5c5348; border-color:#e7e0d3; background:#fff; }.public-dashboard-week-nav button:hover,.public-dashboard-week-nav .is-current { color:#1b1712; border-color:#c0862c; background:#e7c271; }
-.public-dashboard-metrics article { border-color:#e7e0d3; background:#fff; box-shadow:0 5px 15px rgba(45,35,20,.035); }.public-dashboard-metrics article>span { color:#c0862c; background:#f7eedc; }.public-dashboard-metrics small { color:#7a7168; }.public-dashboard-metrics strong { color:#154c48; }.public-dashboard-trips,.public-dashboard-focus { border-color:#e7e0d3; background:#fff; box-shadow:0 7px 20px rgba(45,35,20,.035); }.public-dashboard-section-title { border-color:#eee7da; }.public-dashboard-section-title span,.public-dashboard-focus-head>div>span { color:#c0862c; }.public-dashboard-section-title h2,.public-dashboard-focus-head h2 { color:#154c48; }.public-dashboard-section-title small,.public-dashboard-trip-copy small,.public-dashboard-trip-stats small,.public-dashboard-focus-head p { color:#7a7168; }.public-dashboard-trip { color:#1b1712; border-color:#eee7da; }.public-dashboard-trip:hover,.public-dashboard-trip.is-selected { background:#f7eedc; }.public-dashboard-trip.is-selected { box-shadow:inset -3px 0 #c0862c; }.public-dashboard-trip-number { color:#9a6b2b; border-color:#d8bd89; }.public-dashboard-trip-copy strong { color:#2a2119; }.public-dashboard-progress { background:#eee9e0; }.public-dashboard-progress i { background:#1f6f6b; }.public-dashboard-trip-stats b { color:#9a6b2b; }
-.public-dashboard-focus-head p i { background:#c0862c; }.public-dashboard-remaining { border-color:#e4c889; background:#f7eedc; }.public-dashboard-remaining small,.public-dashboard-remaining span { color:#6c614f; }.public-dashboard-remaining strong { color:#8c6423; }.public-dashboard-legend span { color:#5c5348; }.public-dashboard-bus { border-color:#e7e0d3; background:#f5f2eb; }.public-dashboard-bus-head { color:#8c6423; }.public-dashboard-bus-head small,.public-dashboard-aisle { color:#8d8479; }.public-dashboard-seat-rows { border-color:#e7e0d3; background:#fff; }.public-dashboard-seat { color:#fff; }.public-dashboard-allocation { color:#8c6423; }.public-dashboard-loading,.public-dashboard-empty { color:#5c5348; border-color:#dccba9; background:#fff; }.public-dashboard-empty strong { color:#154c48; }.public-dashboard-empty span,.public-dashboard-footer { color:#7a7168; }.public-dashboard-footer::before { background:#c0862c; }
-.ts-focus-configure-cta button.ts-wa-inline:active { transform:scale(.94); }
-@media (min-width:760px) { .ts-focus-detail-hero { height:170px; }.ts-focus-detail-main { max-width:760px; padding-inline:24px; }.ts-focus-configure.embedded main { display:block; }.ts-focus-configure.embedded .ts-focus-configure-cta { position:fixed; max-width:680px; justify-self:auto; width:auto; }.ts-focus-trip-summary-copy h1 { font-size:26px; } }
+.public-dashboard,.public-dashboard button { --font-app:'DGShamael-Regular',system-ui,sans-serif; --font-display:'DGShamael-Regular',system-ui,sans-serif; font-family:var(--font-app); }.public-dashboard { color:#1b1712; background:#faf8f4; }.public-dashboard-header { border-color:#e7e0d3; }.public-dashboard h1 { color:#14110E; }.public-dashboard-kicker,.public-dashboard-header p em { color:#c0862c; }.public-dashboard-header p { color:#766D63; }.public-dashboard-week-nav button { color:#5c5348; border-color:#e7e0d3; background:#fff; }.public-dashboard-week-nav button:hover,.public-dashboard-week-nav .is-current { color:#1b1712; border-color:#c0862c; background:#e7c271; }
+.public-dashboard-metrics article { border-color:#e7e0d3; background:#fff; box-shadow:0 5px 15px rgba(45,35,20,.035); }.public-dashboard-metrics article>span { color:#c0862c; background:#f7eedc; }.public-dashboard-metrics small { color:#766D63; }.public-dashboard-metrics strong { color:#14110E; }.public-dashboard-trips,.public-dashboard-focus { border-color:#e7e0d3; background:#fff; box-shadow:0 7px 20px rgba(45,35,20,.035); }.public-dashboard-section-title { border-color:#eee7da; }.public-dashboard-section-title span,.public-dashboard-focus-head>div>span { color:#c0862c; }.public-dashboard-section-title h2,.public-dashboard-focus-head h2 { color:#14110E; }.public-dashboard-section-title small,.public-dashboard-trip-copy small,.public-dashboard-trip-stats small,.public-dashboard-focus-head p { color:#766D63; }.public-dashboard-trip { color:#1b1712; border-color:#eee7da; }.public-dashboard-trip:hover,.public-dashboard-trip.is-selected { background:#f7eedc; }.public-dashboard-trip.is-selected { box-shadow:inset -3px 0 #c0862c; }.public-dashboard-trip-number { color:#C0862C; border-color:#d8bd89; }.public-dashboard-trip-copy strong { color:#2a2119; }.public-dashboard-progress { background:#eee9e0; }.public-dashboard-progress i { background:#1f6f6b; }.public-dashboard-trip-stats b { color:#C0862C; }
+.public-dashboard-focus-head p i { background:#c0862c; }.public-dashboard-remaining { border-color:#e4c889; background:#f7eedc; }.public-dashboard-remaining small,.public-dashboard-remaining span { color:#6c614f; }.public-dashboard-remaining strong { color:#8A5C16; }.public-dashboard-legend span { color:#5c5348; }.public-dashboard-bus { border-color:#e7e0d3; background:#f5f2eb; }.public-dashboard-bus-head { color:#8A5C16; }.public-dashboard-bus-head small,.public-dashboard-aisle { color:#8d8479; }.public-dashboard-seat-rows { border-color:#e7e0d3; background:#fff; }.public-dashboard-seat { color:#fff; }.public-dashboard-allocation { color:#8A5C16; }.public-dashboard-loading,.public-dashboard-empty { color:#5c5348; border-color:#dccba9; background:#fff; }.public-dashboard-empty strong { color:#14110E; }.public-dashboard-empty span,.public-dashboard-footer { color:#766D63; }.public-dashboard-footer::before { background:#c0862c; }
 
 /* ── شبكة الباقات وقائمتها ──
    عمودان على الجوال (الشبكة وحدها)، وأربعة أعمدة أو قائمة أفقية على
@@ -393,28 +1862,6 @@
 
 /* Mobile: Show marketing copy by default */
 
-/* رأس الجوال عملي وقصير؛ الهوية لا تحتاج كتلة مستقلة قبل الباقات. */
-
-.ts-mobile-explore-actions .ts-mobile-auth { 
-  display:inline-flex; 
-  align-items:center; 
-  gap:5px; 
-  height:38px; 
-  padding-inline:12px; 
-  border:1.5px solid rgba(232,212,168,.4);
-  border-radius:12px; 
-  background:linear-gradient(135deg, #fff 0%, rgba(255,250,240,.95) 100%);
-  color:#5C421B; 
-  font-family:var(--font-app); 
-  font-size:12px; 
-  font-weight:600; 
-  cursor:pointer;
-  transition: all 0.2s ease;
-}
-.ts-mobile-explore-actions .ts-mobile-auth:active {
-  background: #F8F3EB;
-  box-shadow: 0 2px 8px rgba(180,137,63,.15);
-}
 
 @media (max-width: 1023px) {
 
@@ -431,7 +1878,7 @@
      ولا يختفي داخل الكتلة بعد تصفّح الصور. */
   
   .ts-mobile-custom-header { display:flex; align-items:center; justify-content:space-between; min-height:62px; margin:-16px -16px 0; padding-inline:16px; border-bottom:1px solid #F0EADD; background:#fff; }
-  .ts-mobile-listing-back { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#5C421B; font-family:var(--font-app); font-size:14px; font-weight:700; cursor:pointer; }
+  .ts-mobile-listing-back { display:inline-flex; align-items:center; gap:6px; min-height:42px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:999px; background:#fff; color:#1B1712; font-family:var(--font-app); font-size:14px; font-weight:700; cursor:pointer; }
 }
 
 /* الديسكتوب ليس نسخة مكبّرة من الهاتف: إطار ثابت، تنقّل علوي، وشبكة مقارنة. */
@@ -452,7 +1899,7 @@
   font-size:12px;
   font-weight:700;
 }
-.ts-trip-range-value { direction:ltr; color:#9E7129; font-size:11px; white-space:nowrap; }
+.ts-trip-range-value { direction:ltr; color:#9E7129; font-size:12px; white-space:nowrap; }
 .ts-trip-range-month {
   display:grid;
   grid-template-columns:40px 1fr 40px;
@@ -460,7 +1907,7 @@
   max-width:620px;
   margin:0 auto 8px;
 }
-.ts-trip-range-month strong { color:#5C421B; font-size:17px; text-align:center; }
+.ts-trip-range-month strong { color:#1B1712; font-size:17px; text-align:center; }
 .ts-trip-range-month button {
   display:grid;
   width:36px;
@@ -469,7 +1916,7 @@
   border:0;
   border-radius:999px;
   background:transparent;
-  color:#6D4B20;
+  color:#5C5348;
   cursor:pointer;
 }
 .ts-trip-range-month button:hover { background:#F7ECD7; }
@@ -483,7 +1930,7 @@
 .ts-trip-range-weekday {
   min-height:24px;
   color:#806B49;
-  font-size:10px;
+  font-size:12px;
   font-weight:700;
   text-align:center;
 }
@@ -499,15 +1946,15 @@
   font-weight:600;
   cursor:pointer;
 }
-.ts-trip-range-day:hover:not(:disabled) { border-color:#C49138; background:#FFF; }
+.ts-trip-range-day:hover:not(:disabled) { border-color:#C0862C; background:#FFF; }
 .ts-trip-range-day:disabled { color:#C8BFAE; cursor:not-allowed; }
-.ts-trip-range-day.is-between { border-radius:4px; background:#F7ECD7; color:#6D4B20; }
-.ts-trip-range-day.is-edge { border-color:#C49138; background:#FFF; color:#A46F17; }
+.ts-trip-range-day.is-between { border-radius:4px; background:#F7ECD7; color:#5C5348; }
+.ts-trip-range-day.is-edge { border-color:#C0862C; background:#FFF; color:#A46F17; }
 @media (max-width: 480px) {
   .ts-trip-range-calendar { padding:12px 8px; }
-  .ts-trip-range-heading { padding-inline:4px; font-size:11px; }
+  .ts-trip-range-heading { padding-inline:4px; font-size:12px; }
   .ts-trip-range-value { display:none; }
-  .ts-trip-range-weekday { font-size:9px; }
+  .ts-trip-range-weekday { font-size:12px; }
   .ts-trip-range-empty, .ts-trip-range-day { height:36px; }
 }
 
@@ -517,19 +1964,19 @@
   .ts-mobile-appbar { display:none !important; }
   .ts-desktop-nav { display:block; height:76px; background:rgba(255,255,255,.96); border-bottom:1px solid #EDE4D6; position:sticky; top:0; z-index:40; backdrop-filter:blur(12px); }
   .ts-desktop-nav-inner { height:100%; max-width:1360px; padding-inline:40px; margin-inline:auto; display:flex; align-items:center; justify-content:space-between; gap:36px; }
-  .ts-brand { display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; cursor:pointer; color:#3F2A18; text-align:start; }
+  .ts-brand { display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; cursor:pointer; color:#1B1712; text-align:start; }
   .ts-brand span { display:flex; flex-direction:column; gap:1px; }
   .ts-brand b { font-family:var(--font-display); font-size:18px; font-weight:700; }
-  .ts-brand small { color:#8B7D70; font-size:10px; font-weight:500; }
+  .ts-brand small { color:#766D63; font-size:12px; font-weight:500; }
   .ts-desktop-nav nav { display:flex; align-self:stretch; align-items:center; gap:12px; }
-  .ts-desktop-nav nav button { height:100%; padding-inline:19px; background:none; border:0; border-bottom:2px solid transparent; color:#5C421B; cursor:pointer; font-size:14px; font-weight:600; }
-  .ts-desktop-nav nav button.active { border-color:#B7893F; color:#8C6423; }
+  .ts-desktop-nav nav button { height:100%; padding-inline:19px; background:none; border:0; border-bottom:2px solid transparent; color:#1B1712; cursor:pointer; font-size:14px; font-weight:600; }
+  .ts-desktop-nav nav button.active { border-color:#C0862C; color:#8A5C16; }
   .ts-desktop-nav-actions { display:flex; align-items:center; gap:8px; }
-  .ts-desktop-nav-actions button { min-height:38px; display:inline-flex; align-items:center; gap:6px; padding-inline:13px; border:1px solid #E6DFCF; border-radius:10px; background:#fff; color:#5C421B; cursor:pointer; font-size:13px; font-weight:600; }
+  .ts-desktop-nav-actions button { min-height:38px; display:inline-flex; align-items:center; gap:6px; padding-inline:13px; border:1px solid #E6DFCF; border-radius:10px; background:#fff; color:#1B1712; cursor:pointer; font-size:13px; font-weight:600; }
   .ts-desktop-nav-actions .account { background:#FBF9F5; }
-  .ts-desktop-nav-actions .ts-currency { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:10px; background:#FBF9F5; color:#5C421B; font-size:13px; font-weight:600; cursor:default; }
-  .ts-desktop-nav-actions button.primary { background:#8C6423; border-color:#8C6423; color:#fff; }
-  .ts-desktop-nav-actions button.on { background:#F8F1E4; border-color:#B7893F; color:#8C6423; }
+  .ts-desktop-nav-actions .ts-currency { display:inline-flex; align-items:center; gap:6px; min-height:38px; padding-inline:12px; border:1px solid #E6DFCF; border-radius:10px; background:#FBF9F5; color:#1B1712; font-size:13px; font-weight:600; cursor:default; }
+  .ts-desktop-nav-actions button.primary { background:#8A5C16; border-color:#8A5C16; color:#fff; }
+  .ts-desktop-nav-actions button.on { background:#F8F1E4; border-color:#C0862C; color:#8A5C16; }
 
   /* لا رأس ترويجي على الديسكتوب: صفحة النتائج تبدأ بالنتائج — الهيدر
      ثم شريط الأدوات ثم الباقات، بلا لافتةٍ تدفع أول صفٍّ خارج الشاشة. */
@@ -608,10 +2055,10 @@
 
 .ts-done-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:11px 13px; border:1px solid #E9E3D6; border-radius:12px; background:#F6F4EF; }
 .ts-done-check { display:grid; place-items:center; flex-shrink:0; width:20px; height:20px; border-radius:999px; background:#1E7A44; color:#fff; }
-.ts-done-icon { display:flex; flex-shrink:0; color:#8B7D70; }
+.ts-done-icon { display:flex; flex-shrink:0; color:#766D63; }
 .ts-done-label { color:#625B4D; font-size:12.5px; }
-.ts-done-value { color:#5C421B; font-size:13.5px; font-weight:600; }
-.ts-done-edit { margin-inline-start:auto; padding:4px 6px; border:none; background:none; color:#8C6423; cursor:pointer; font-family:var(--font-app); font-size:12.5px; font-weight:700; text-decoration:underline; }
+.ts-done-value { color:#1B1712; font-size:13.5px; font-weight:600; }
+.ts-done-edit { margin-inline-start:auto; padding:4px 6px; border:none; background:none; color:#8A5C16; cursor:pointer; font-family:var(--font-app); font-size:12.5px; font-weight:700; text-decoration:underline; }
 
 /* ما يظهر على الديسكتوب وحده — والعكس مضمون بلا صنف: العنصر بلا الصنف
    يظهر في العرضين. */
@@ -756,13 +2203,13 @@
    والارتفاع يتبع محتواه (max-content) فلا يبقى فراغٌ أبيض تحت ثلاثة
    خيارات قصيرة. */
 .ts-sheet-overlay--center { align-items:center; padding:20px; }
-.ts-sheet--center { width:100%; max-height:min(80dvh,620px); border-radius:22px; box-shadow:0 24px 60px -18px rgba(40,26,8,.45); }
+.ts-sheet--center { width:100%; max-height:min(80dvh,620px); border-radius:22px; box-shadow:0 24px 60px -18px rgba(20,17,14,.45); }
 
 @media (min-width:640px) {
   /* نافذةٌ في الوسط بعرضٍ محدود. الورقة الممتدة على شاشةٍ واسعة تضع
      خياراً واحداً في وسط شريطٍ فارغٍ عرضه متر. */
   .ts-sheet-overlay { align-items:center; padding:28px; }
-  .ts-sheet { width:min(100%,520px); max-height:min(84vh,680px); border-radius:22px; box-shadow:0 30px 70px -20px rgba(40,26,8,.45); }
+  .ts-sheet { width:min(100%,520px); max-height:min(84vh,680px); border-radius:22px; box-shadow:0 30px 70px -20px rgba(20,17,14,.45); }
   .ts-sheet--tall { height:min(84vh,680px); max-height:min(84vh,680px); }
   /* المعرض يحتاج عرضاً: صورةٌ في ٥٢٠ بكسل تُلبَّد بحوافّ سوداء. */
   .ts-sheet--wide { width:min(100%,880px); }
@@ -773,11 +2220,27 @@
    خلف طرفيه. */
 .ts-dep-search-bar { position:sticky; top:0; z-index:2; margin:0 -24px 6px; padding:2px 24px 10px; background:#fff; }
 .ts-dep-search { display:flex; align-items:center; gap:9px; min-height:48px; padding:0 13px; border:1px solid #E6DFCF; border-radius:14px; background:#FBF9F5; transition:border-color .15s ease,box-shadow .15s ease; }
-.ts-dep-search:focus-within { border-color:#B7893F; background:#fff; box-shadow:0 0 0 3px rgba(183,137,63,.16); }
+.ts-dep-search:focus-within { border-color:#C0862C; background:#fff; box-shadow:0 0 0 3px rgba(183,137,63,.16); }
 .ts-dep-search > svg { flex:0 0 auto; color:#A69D8E; }
-.ts-dep-search:focus-within > svg { color:#B7893F; }
-.ts-dep-search input { min-width:0; flex:1; padding:0; color:#5C421B; border:0; background:transparent; outline:none; font-family:var(--font-app); font-size:16px; }
+.ts-dep-search:focus-within > svg { color:#C0862C; }
+.ts-dep-search input { min-width:0; flex:1; padding:0; color:#1B1712; border:0; background:transparent; outline:none; font-family:var(--font-app); font-size:16px; }
 .ts-dep-search input::placeholder { color:#A69D8E; }
 .ts-dep-search button { display:grid; flex:0 0 auto; place-items:center; width:26px; height:26px; color:#625B4D; border:0; border-radius:999px; background:#EFEAE0; cursor:pointer; }
-.ts-dep-search button:hover { color:#5C421B; background:#E6DFCF; }
+.ts-dep-search button:hover { color:#1B1712; background:#E6DFCF; }
 .ts-sheet-open .ts-wa-fab { display:none; }
+
+/* ═══ الزرّ الرئيسي والورقة — حالات لا يعرفها التنسيق المضمَّن ═══ */
+.ts-cta { transition: background-color .15s ease, transform .12s ease, box-shadow .15s ease; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 1px 2px rgba(138,92,22,.28); -webkit-tap-highlight-color: transparent; }
+.ts-cta:not(:disabled):hover { filter: brightness(.96); }
+.ts-cta:not(:disabled):active { transform: scale(.985); filter: brightness(.92); }
+.ts-cta:disabled { box-shadow: none; }
+.ts-cta:focus-visible, .ts-customer-app :is(button,a,[role="button"],summary):focus-visible { outline: 2px solid #C0862C; outline-offset: 2px; }
+.ts-customer-app :is(input,textarea,select):focus-visible { outline: none; border-color: #C0862C !important; box-shadow: 0 0 0 3px rgba(192,134,44,.28); }
+.ts-customer-app ::selection { background: rgba(192,134,44,.26); }
+.ts-customer-app { font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+.ts-sheet-grip { display:block; flex-shrink:0; width:38px; height:4px; margin:8px auto 0; border-radius:999px; background:#D5CCBB; }
+.ts-sheet--center .ts-sheet-grip { display:none; }
+.ts-sheet-close, .ts-sheet-head-pad { width:40px !important; }
+.ts-sheet-close { height:40px !important; }
+.ts-sheet-close:hover { background:#F4F1EA; }
+@media (min-width:640px) { .ts-sheet-grip { display:none; } }

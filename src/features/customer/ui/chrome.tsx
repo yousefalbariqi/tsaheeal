@@ -9,8 +9,8 @@
    بإخراجهما إلى هنا صار النوع ثابتاً، فيُحدَّث الشريطان بدل أن يُركَّبا. */
 import { memo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Globe, ChevronLeft, Check, Search, Heart, UserRound } from "lucide-react";
-import { B } from "@/lib/theme";
+import { Globe, ChevronLeft, Check, Search, Ticket, UserRound } from "lucide-react";
+import { B, ELEV } from "@/lib/theme";
 import { TasaheelMark } from "@/components/TasaheelMark";
 import { LANGS, cityLabel, type Lang } from "../i18n";
 import type { Screen } from "../routing";
@@ -27,21 +27,31 @@ export function AppBar({ title, onBack, dir, lang, onLang, t }: {
   t: (k: string) => string;
 }) {
   const [langOpen, setLangOpen] = useState(false);
+  /* السطح أسود الكسوة، فكل ما عليه عاجيّ (B.onInk) لا أبيض صريح، وأزراره
+     44px. والحشوة العلوية تحترم نتوء الشاشة: الشريط لاصقٌ بأعلاها. */
+  const ghost={background:"rgba(244,239,228,.12)",border:"none",color:B.onInk} as const;
   return (
-    <div className="ts-mobile-appbar sticky top-0 z-30 flex items-center gap-3 px-4 py-3" style={{background:G.deep,color:"#fff"}}>
+    <div className="ts-mobile-appbar sticky top-0 z-30 flex items-center gap-3"
+      style={{background:G.deep,color:B.onInk,paddingInline:16,paddingBottom:8,
+        paddingTop:"calc(8px + env(safe-area-inset-top, 0px))"}}>
       {onBack
-        ? <button onClick={onBack} className="p-1.5 rounded-lg cursor-pointer" style={{background:"rgba(255,255,255,.1)",border:"none",color:"#fff"}}><ChevronLeft size={18} style={{transform:dir==="rtl"?"scaleX(-1)":"none"}}/></button>
+        ? <button type="button" onClick={onBack} aria-label={t("back")}
+            className="flex items-center justify-center rounded-xl cursor-pointer flex-shrink-0"
+            style={{...ghost,width:44,height:44}}><ChevronLeft size={20} style={{transform:dir==="rtl"?"scaleX(-1)":"none"}}/></button>
         : <TasaheelMark size={40}/>}
-      <div className="flex-1 font-extrabold" style={{fontFamily:"var(--font-app)",fontSize:15}}>{title||t("brand")}</div>
-      <div className="relative">
-        <button onClick={()=>setLangOpen(v=>!v)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-bold" style={{background:"rgba(255,255,255,.12)",border:"none",color:"#fff"}}><Globe size={14}/>{LANGS.find(l=>l.code===lang)?.label}</button>
+      <div className="flex-1 truncate" style={{fontFamily:"var(--font-app)",fontSize:17,fontWeight:600,color:B.onInk}}>{title||t("brand")}</div>
+      <div className="relative flex-shrink-0">
+        <button type="button" onClick={()=>setLangOpen(v=>!v)} aria-label={t("language")} aria-expanded={langOpen}
+          className="flex items-center gap-1.5 rounded-xl cursor-pointer"
+          style={{...ghost,height:44,paddingInline:12,fontFamily:"var(--font-app)",fontSize:14}}><Globe size={16}/>{LANGS.find(l=>l.code===lang)?.label}</button>
         <AnimatePresence>
           {langOpen&&(
-            <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}}
-              className="absolute left-0 mt-1 rounded-xl overflow-hidden z-40" style={{background:"#fff",border:`1px solid ${B.border}`,minWidth:130,boxShadow:"0 12px 30px -8px rgba(0,0,0,.3)"}}>
+            <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:.16,ease:"easeOut"}}
+              className="absolute mt-1 rounded-xl overflow-hidden z-40" style={{insetInlineEnd:0,background:"#fff",border:`1px solid ${B.border}`,minWidth:150,boxShadow:ELEV[3]}}>
               {LANGS.map(l=>(
-                <button key={l.code} onClick={()=>{onLang(l.code);setLangOpen(false);}} className="flex items-center justify-between gap-2 w-full px-3 py-2.5 text-sm cursor-pointer text-right"
-                  style={{background:lang===l.code?B.bg:"#fff",border:"none",color:B.black,fontWeight:lang===l.code?700:500}}>{l.label}{lang===l.code&&<Check size={14} style={{color:G.green}}/>}</button>
+                <button type="button" key={l.code} onClick={()=>{onLang(l.code);setLangOpen(false);}} className="flex items-center justify-between gap-2 w-full cursor-pointer"
+                  style={{minHeight:44,paddingInline:14,textAlign:"start",fontFamily:"var(--font-app)",fontSize:15,
+                    background:lang===l.code?B.fill:"#fff",border:"none",color:B.black,fontWeight:lang===l.code?600:400}}>{l.label}{lang===l.code&&<Check size={16} style={{color:C.greenDeep}}/>}</button>
               ))}
             </motion.div>
           )}
@@ -66,25 +76,28 @@ export const BottomBar = memo(function BottomBar({ screen, home, onNav, t }: {
 }) {
   const tabs: readonly (readonly [Screen, typeof Search, string])[] = [
     [home, Search, t("explore")],
-    ["track", Heart, t("myBookings")],
+    ["track", Ticket, t("myBookings")],
     ["profile", UserRound, t("profile")],
   ];
+  /* النشط بالذهبي العميق لا ذهبي الشعار: نصّ 12px بذهبي الشعار على
+     الأبيض ٣٫١:١ ولا يُقرأ. ويُعلَّم بشرطةٍ فوقه فلا يحمل اللونُ وحده المعنى. */
   return (
-    <div className="ts-mobile-bottom-bar sticky bottom-0 z-30 grid grid-cols-3"
-      style={{background:C.white,borderTop:`1px solid ${C.line}`,paddingBlock:8,
-              paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))"}}>
+    <nav className="ts-mobile-bottom-bar sticky bottom-0 z-30 grid grid-cols-3" 
+      style={{background:C.white,borderTop:`1px solid ${C.line}`,
+              paddingBottom:"env(safe-area-inset-bottom, 0px)"}}>
       {tabs.map(([sc,Icon,lbl])=>{
         const on=screen===sc;
         return (
-          <button key={sc} onClick={()=>onNav(sc)}
-            className="flex flex-col items-center gap-1 cursor-pointer"
-            style={{background:"none",border:"none",paddingBlock:4,color:on?C.green:C.ink2}}>
-            <Icon size={21} strokeWidth={on?2.2:1.7} fill={on&&sc==="track"?C.green:"none"}/>
-            <span style={{fontSize:11,fontWeight:on?600:400}}>{lbl}</span>
+          <button type="button" key={sc} onClick={()=>onNav(sc)} aria-current={on?"page":undefined}
+            className="relative flex flex-col items-center justify-center cursor-pointer"
+            style={{background:"none",border:"none",minHeight:58,gap:3,fontFamily:"var(--font-app)",color:on?C.greenDeep:C.ink2}}>
+            {on&&<span aria-hidden style={{position:"absolute",top:0,width:28,height:2.5,borderRadius:2,background:C.gold}}/>}
+            <Icon size={22} strokeWidth={on?2.1:1.7}/>
+            <span style={{fontSize:12,lineHeight:1.3,fontWeight:on?600:400}}>{lbl}</span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 });
 
@@ -124,10 +137,10 @@ export function DesktopNav({ screen, home, onNav, lang, setLang, t, cities, city
       <div className="ts-desktop-nav-actions">
         {/* العملة تُقال ولا تُبدَّل: الأسعار بالريال وحده، ومُنتقي عملاتٍ
             بلا أسعار تحويل يعِد بما لا يقع. */}
-        <span className="ts-currency" title={t("pricesInSar")}>SAR · {t("currency")}</span>
+        <span className="ts-currency" title={t("pricesInSar")}>{t("currency")}</span>
         <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}><Globe size={15}/>{lang === "ar" ? "العربية" : "English"}</button>
         {signedIn ? <>
-          <button className={screen === "track" ? "on" : ""} onClick={() => onNav("track")}><Heart size={15}/>{t("myBookings")}</button>
+          <button className={screen === "track" ? "on" : ""} onClick={() => onNav("track")}><Ticket size={15}/>{t("myBookings")}</button>
           <button className="account" onClick={() => onNav("profile")}><UserRound size={15}/>{t("profile")}</button>
         </> : <>
           <button onClick={onSignup}>{t("signup")}</button>
