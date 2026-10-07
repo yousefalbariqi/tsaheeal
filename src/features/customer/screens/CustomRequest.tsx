@@ -52,11 +52,11 @@ const AR = {
   roundTrip: "ذهاب وعودة", roundTripNote: "اختر موعدين مناسبين لك",
   bus: "باص", busNote: "اختر من الرحلات القائمة",
   flight: "طيران", flightNote: "طلب تسعير من الفريق",
-  s2BusTitle: "اختر موعد الذهاب", s2FlightTitle: "اطلب رحلة طيران",
+  s2BusTitle: "اختر موعد الذهاب", s2BusOneTitle: "اختر موعد الرحلة", s2FlightTitle: "اطلب رحلة طيران",
   s2BusRound: "اختر رحلة الذهاب فقط؛ العودة وتوقيتها تُؤخذ تلقائياً من نفس الباقة.",
   s2BusOne: "هذه مواعيد فعلية؛ التوفر النهائي يؤكده الفريق قبل الدفع.",
   s2Flight: "حدّد رغبتك فقط، ثم يتواصل معك الفريق بعد مراجعة خيارات الطيران.",
-  outbound: "موعد الذهاب", pickDayThenTime: "اختر اليوم ثم الوقت",
+  outbound: "موعد الذهاب", requestedTrip: "موعد الرحلة المطلوب", pickDayThenTime: "اختر اليوم ثم الوقت",
   prevWeek: "الأسبوع السابق", nextWeek: "الأسبوع القادم",
   tripsCount: "{n} رحلة", noTripsDay: "لا رحلات", seatsLeft: "متبقي {n}",
   times: "الأوقات المتاحة",
@@ -102,11 +102,11 @@ const EN: typeof AR = {
   roundTrip: "Round trip", roundTripNote: "Pick two dates that suit you",
   bus: "Bus", busNote: "Choose from scheduled trips",
   flight: "Flight", flightNote: "Ask the team for a quote",
-  s2BusTitle: "Choose your departure", s2FlightTitle: "Request a flight",
+  s2BusTitle: "Choose your departure", s2BusOneTitle: "Choose the requested trip", s2FlightTitle: "Request a flight",
   s2BusRound: "Pick the outbound trip only; the return and its time come from the same package.",
   s2BusOne: "These are real departures; the team confirms final availability before payment.",
   s2Flight: "Tell us what you want, and the team will contact you after reviewing flight options.",
-  outbound: "Departure", pickDayThenTime: "Pick a day, then a time",
+  outbound: "Departure", requestedTrip: "Requested trip", pickDayThenTime: "Pick a day, then a time",
   prevWeek: "Previous week", nextWeek: "Next week",
   tripsCount: "{n} trips", noTripsDay: "No trips", seatsLeft: "{n} left",
   times: "Available times",
@@ -543,7 +543,7 @@ export function CustomRequestScreen({ lang, dir, onDone, onBack }: {
 
   const valid = stepValid();
   const title = step === 1 ? x.s1Title
-    : step === 2 ? (mode === "bus" ? x.s2BusTitle : x.s2FlightTitle)
+    : step === 2 ? (mode === "bus" ? (kind === "one_way" ? x.s2BusOneTitle : x.s2BusTitle) : x.s2FlightTitle)
     : step === 3 ? x.s3Title : x.s4Title;
   const subtitle = step === 1 ? x.s1Sub
     : step === 2 ? (mode === "bus" ? (kind === "round_trip" ? x.s2BusRound : x.s2BusOne) : x.s2Flight)
@@ -588,7 +588,7 @@ export function CustomRequestScreen({ lang, dir, onDone, onBack }: {
           loadingTrips ? <ScheduleSkeleton />
           : availableTrips.length ? (
             <>
-              <TripSchedule label={x.outbound} trips={availableTrips} value={outboundTripId}
+              <TripSchedule label={kind === "one_way" ? x.requestedTrip : x.outbound} trips={availableTrips} value={outboundTripId}
                 onChange={setOutboundTripId} x={x} f={f} dir={dir} />
               {kind === "round_trip" && outTrip && <IncludedReturn trip={outTrip} x={x} f={f} />}
             </>

@@ -158,6 +158,7 @@ export interface CustomReqPayload {
   destination: string; roomType: string; hotelLevel: string; tripNotes: string;
   name: string; phone: string; city: string; notes: string;
   journeyKind?: "one_way"|"round_trip"; travelMode?: "bus"|"flight";
+  oneWayDirection?: "outbound"|"return";
   outboundTripId?: string; returnTripId?: string;
   hotelRequested?: boolean; hotelNights?: number; hotelNearHaram?: boolean;
 }

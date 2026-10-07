@@ -47,6 +47,36 @@ async function call(fn: string, args: Record<string, unknown>): Promise<OpResult
 export const acceptBooking = (id: string, seats: number[]) =>
   call("accept_booking", { p_id: id, p_seats: seats });
 
+/** اتجاه مقعد الطلب المخصّص داخل الباقة نفسها. */
+export type TravelDirection = "outbound" | "return";
+export interface DirectionalSeat {
+  seatNo: number;
+  /** custom_request فقط عندما يكون المقعد محجوزاً بطلب مخصّص. */
+  requestId?: string;
+}
+
+/** كروكي اتجاهٍ واحد للموظف. لا يعيد أسماء ركاب أو أرقام جوالات. */
+export async function customRequestDirectionSeats(tripId: string, direction: TravelDirection): Promise<{
+  seats: DirectionalSeat[]; error: string | null; unsupported?: boolean;
+}> {
+  const r = await call("custom_request_direction_seats", { p_trip_id: tripId, p_direction: direction });
+  if (r.unsupported || r.error) return { seats: [], error: r.error, unsupported: r.unsupported };
+  const rows = Array.isArray(r.data) ? r.data : [];
+  return {
+    seats: rows.map((row: any) => ({
+      seatNo: Number(row.seat_no),
+      requestId: row.request_id ?? undefined,
+    })).filter((row: DirectionalSeat) => Number.isInteger(row.seatNo) && row.seatNo > 0),
+    error: null,
+  };
+}
+
+/** يقفل مقاعد طلبٍ مخصص في اتجاه واحد، داخل معاملة قاعدة البيانات. */
+export const assignCustomRequestSeats = (requestId: string, tripId: string, direction: TravelDirection, seats: number[]) =>
+  call("assign_custom_request_seats", {
+    p_request_id: requestId, p_trip_id: tripId, p_direction: direction, p_seats: seats,
+  });
+
 /** رفض بسببٍ داخلي ورسالةٍ للعميل — إلزاميان. */
 export const rejectBooking = (id: string, reason: string, message: string) =>
   call("reject_booking", { p_id: id, p_reason: reason, p_message: message });

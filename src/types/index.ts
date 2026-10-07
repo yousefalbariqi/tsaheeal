@@ -338,6 +338,8 @@ export interface CustomRequest {
   closeReason?:CustomCloseReason;
   /** تفاصيل طلب التنسيق؛ لا تحجز مقعداً قبل مراجعة الموظف. */
   journeyKind?:"one_way"|"round_trip";
+  /** يحدده الموظف عند قفل مقاعد طلب الاتجاه الواحد. */
+  oneWayDirection?:"outbound"|"return";
   travelMode?:"bus"|"flight";
   outboundTripId?:string;
   returnTripId?:string;

@@ -306,6 +306,7 @@ const customReqFrom = (r: any): CustomRequest => ({
   assignedTo: r.assigned_to ?? undefined, assignedAt: r.assigned_at ?? undefined, dueAt: r.due_at ?? undefined,
   closeReason: r.close_reason ?? undefined,
   journeyKind: r.journey_kind ?? undefined, travelMode: r.travel_mode ?? undefined,
+  oneWayDirection: r.one_way_direction ?? undefined,
   outboundTripId: r.outbound_trip_id ?? undefined, returnTripId: r.return_trip_id ?? undefined,
   hotelRequested: r.hotel_requested ?? undefined, hotelNights: r.hotel_nights ?? undefined,
   hotelNearHaram: r.hotel_near_haram ?? undefined,

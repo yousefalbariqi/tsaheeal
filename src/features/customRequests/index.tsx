@@ -1,13 +1,13 @@
-/* الطلبات المخصّصة — الباقة التي يصمّمها العميل ويجهّزها الفريق يدوياً.
-   ليست حجزاً: لا مقاعد ولا غرف. الشاشة تعرض الطلب كاملاً وتتيح نقل حالته
-   والتواصل عبر واتساب مباشرة برسالة تحمل تفاصيل طلبه. */
+/* الطلبات المخصّصة — يرسل العميل رغبته أولاً، ثم يصمّم الفريق العرض.
+   لا تُحجز مقاعد عند الإرسال؛ لكن الموظف يستطيع قفل مقاعد الباص لاحقاً
+   لكل اتجاه مستقل. */
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Sparkles, ArrowRight, ChevronLeft, SearchX } from "lucide-react";
 import { B } from "@/lib/theme";
 import { useDebounced } from "@/lib/useDebounced";
 import { EntityGate, EmptyState } from "@/components/States";
-import { CUSTOM_CLOSE_REASONS, type CustomRequest, type CustomReqStatus, type CustomCloseReason } from "@/types";
+import { CUSTOM_CLOSE_REASONS, type CustomRequest, type CustomReqStatus, type CustomCloseReason, type Trip } from "@/types";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -24,11 +24,16 @@ import { toast } from "sonner";
 import { useStore } from "@/store/useStore";
 import { Pager, usePaged } from "@/components/Pager";
 import { Button, FilterChips, Note, type ChipOption } from "@/components/ui";
+import { BusSeatGrid } from "@/components/BusSeatGrid";
+import { busCountOf } from "@/lib/buses";
+import { assignCustomRequestSeats, customRequestDirectionSeats, type TravelDirection } from "@/features/bookings/ops";
 
 /* ترتيب الحالات في المسار. الصياغة واللون من المعجم (lib/status) — كانت هنا
    خريطةٌ محلية تقول «تحوّل إلى حجز» والمعجم يقول «محوّل إلى طلب». */
 const STATUSES: CustomReqStatus[] = ["new", "contacted", "quoted", "converted", "executing", "completed", "closed"];
 const label = (s: CustomReqStatus) => statusLabel(s, "request");
+
+const directionLabel = (direction: TravelDirection) => direction === "outbound" ? "الذهاب" : "العودة";
 
 function waMessage(r: CustomRequest) {
   return [
@@ -41,6 +46,107 @@ function waMessage(r: CustomRequest) {
     "",
     "نودّ تأكيد التفاصيل لتجهيز العرض المناسب.",
   ].join("\n");
+}
+
+/* مقعد الطلب المخصص لا يمر بكروكي الحجز العادي: ذاك يحجز الاتجاهين
+   بحكم تعريفه. هذه البطاقة تسأل القاعدة عن اتجاه واحد، وتعيد لها الاختيار
+   في معاملة واحدة حتى لا يسبق موظفٌ زميله إلى المقعد نفسه. */
+function DirectionSeatPicker({ req }: { req: CustomRequest }) {
+  const { canWrite } = useRole();
+  const trips = useStore(s => s.trips);
+  const setRequests = useStore(s => s.setCustomRequests);
+  const [direction, setDirection] = useState<TravelDirection>(req.oneWayDirection ?? "outbound");
+  const [occupied, setOccupied] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const directions: TravelDirection[] = ["outbound", "return"];
+  const targetTripId = direction === "return" ? (req.returnTripId || req.outboundTripId) : req.outboundTripId;
+  const trip = trips.find(t => t.id === targetTripId) as Trip | undefined;
+  const tripDate = direction === "return" ? trip?.returnDate : trip?.departureDate;
+  const tripTime = direction === "return" ? trip?.returnTime : trip?.departureTime;
+  const need = Math.max(1, req.persons || 1);
+
+  const reload = async () => {
+    if (!targetTripId) { setLoading(false); setOccupied(new Set()); setSelected([]); return; }
+    setLoading(true); setLoadError(null);
+    const result = await customRequestDirectionSeats(targetTripId, direction);
+    if (result.unsupported) {
+      setLoadError("قاعدة البيانات لم تُحدَّث لمسار المقاعد حسب الاتجاه بعد.");
+      setOccupied(new Set()); setSelected([]); setLoading(false); return;
+    }
+    if (result.error) { setLoadError(result.error); setLoading(false); return; }
+    const mine = result.seats.filter(s => s.requestId === req.id).map(s => s.seatNo);
+    setSelected(mine);
+    setOccupied(new Set(result.seats.filter(s => s.requestId !== req.id).map(s => s.seatNo)));
+    setLoading(false);
+  };
+
+  useEffect(() => { void reload(); }, [targetTripId, direction, req.id]);
+
+  const toggle = (seat: number) => {
+    if (occupied.has(seat) || saving) return;
+    setSelected(prev => prev.includes(seat)
+      ? prev.filter(x => x !== seat)
+      : prev.length >= need ? prev : [...prev, seat]);
+  };
+
+  const save = async () => {
+    if (!targetTripId || selected.length !== need || saving) return;
+    setSaving(true);
+    const result = await assignCustomRequestSeats(req.id, targetTripId, direction, selected);
+    setSaving(false);
+    if (result.unsupported) { toast.error("حدّث قاعدة البيانات أولاً لتفعيل حجز الاتجاهات."); return; }
+    if (result.error) { toast.error(result.error); await reload(); return; }
+    if (req.journeyKind !== "round_trip") {
+      setRequests(prev => prev.map(x => x.id === req.id ? { ...x, oneWayDirection: direction } : x));
+    }
+    await reload();
+    toast.success(`حُفظت مقاعد ${directionLabel(direction)} للطلب.`);
+  };
+
+  if (req.travelMode !== "bus") return null;
+  return (
+    <section className="ui-card mt-4">
+      <div className="ui-card-head flex-wrap gap-3">
+        <div>
+          <h3 className="ui-card-title">مقاعد النقل حسب الاتجاه</h3>
+          <p className="ui-hint" style={{ margin: "4px 0 0" }}>الباقة العادية تشغل المقعد في الاتجاهين؛ هذا الطلب وحده يمكن تخصيصه لاتجاه مستقل.</p>
+        </div>
+        <div className="ui-seg" role="tablist" aria-label="اتجاه المقعد">
+          {directions.map(value => <button key={value} type="button" role="tab" aria-selected={direction === value}
+            className={`ui-seg-item${direction === value ? " is-on" : ""}`} onClick={() => setDirection(value)}>
+            {directionLabel(value)}
+          </button>)}
+        </div>
+      </div>
+      <div className="p-5">
+        {!trip ? (
+          <Note tone="warn">لم تُحدَّد رحلة {directionLabel(direction)} لهذا الطلب بعد. اخترها من تفاصيل الطلب قبل تخصيص المقاعد.</Note>
+        ) : loading ? (
+          <div className="ui-hint">جارٍ تحميل كروكي {directionLabel(direction)}…</div>
+        ) : loadError ? (
+          <Note tone="danger">{loadError}</Note>
+        ) : <>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <b style={{ color: B.black }}>رحلة {directionLabel(direction)}</b>
+              <span className="ui-hint" style={{ marginInlineStart: 8 }}>{tripDate || "—"} · {tripTime || "—"}</span>
+            </div>
+            <span className="ui-hint">اختر {need} {need === 1 ? "مقعد" : "مقاعد"} للطلب</span>
+          </div>
+          <BusSeatGrid capacity={trip.seats} buses={busCountOf(trip)} occupied={occupied} selected={selected}
+            need={need} onToggle={toggle} />
+          <div className="flex items-center justify-between gap-3 flex-wrap mt-5">
+            <span className="ui-hint">يُحرَّر التحفّظ تلقائياً عند إغلاق الطلب.</span>
+            <Button disabled={!canWrite("customRequests") || saving || selected.length !== need}
+              onClick={() => void save()}>{saving ? "جارٍ الحفظ…" : `حفظ مقاعد ${directionLabel(direction)}`}</Button>
+          </div>
+        </>}
+      </div>
+    </section>
+  );
 }
 
 /* ════════ تفاصيل طلب واحد ════════ */
@@ -129,7 +235,7 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
         <div className="p-5 grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
           {kv("تاريخ الذهاب", fmtDate(req.departDate))}
           {req.journeyKind === "round_trip" && kv("تاريخ العودة", fmtDate(req.returnDate))}
-          {req.journeyKind && kv("شكل الرحلة", req.journeyKind === "round_trip" ? "ذهاب وعودة" : "اتجاه واحد")}
+          {req.journeyKind && kv("شكل الرحلة", req.journeyKind === "round_trip" ? "ذهاب وعودة" : req.oneWayDirection ? `${directionLabel(req.oneWayDirection)} فقط` : "اتجاه واحد — يحدده الموظف")}
           {req.travelMode && kv("وسيلة السفر", req.travelMode === "bus" ? "باص" : "طيران — طلب تسعير")}
           {req.outboundTripId && kv("رحلة الذهاب المطلوبة", req.outboundTripId)}
           {req.returnTripId && kv("رحلة العودة المطلوبة", req.returnTripId)}
@@ -143,6 +249,8 @@ function Detail({ req, onBack }: { req: CustomRequest; onBack: () => void }) {
           {req.notes && kv("ملاحظات إضافية", req.notes, true)}
         </div>
       </section>
+
+      {req.travelMode === "bus" && <DirectionSeatPicker req={req} />}
 
       {/* الطلب التجريبي الذي يكتب «يرجى الحذف» كان بلا أداة حذف ولا
           أرشفة — والدالّتان في القاعدة منذ ترحيل ٢٠٢٦٠٩٠٦. */}
